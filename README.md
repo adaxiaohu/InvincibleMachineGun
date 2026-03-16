@@ -12,6 +12,7 @@ A personal addon for the Meteor client that adds various entertainment modules. 
 很多没用的功能，做出来玩的，和没做完的构想。  
 很多模块都是中文的，方便我自己用。原版 meteor 不支持中文渲染，需要用 meteor 中文插件，或者别的办法显示中文。  
 基本是从 meteor 的那个模板插件开始开发的，有些模板的内容还没改，懒得改了。
+一个演示视频，展示了部分功能https://www.bilibili.com/video/BV1vKw7zFEov/
 
 以下功能列表是 AI 生成的，仅供参考，具体功能、有啥作用，以源码实际为主。
 
