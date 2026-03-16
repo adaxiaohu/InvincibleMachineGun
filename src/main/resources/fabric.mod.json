@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "id": "invincible_machine_gun",
+  "version": "${version}",
+  "name": "Invincible Machine Gun",
+  "description": "没敌机关枪",
+  "authors": [
+    "codigohasta"
+  ],
+  "contact": {
+    "sources": "https://github.com/MeteorDevelopment/meteor-addon-template"
+  },
+  "icon": "assets/template/icon.png",
+  "environment": "client",
+  "entrypoints": {
+    "meteor": [
+      "com.codigohasta.addon.AddonTemplate"
+    ]
+  },
+  "mixins": [
+  "addon-template.mixins.json"
+  ],
+  "custom": {
+    "meteor-client:color": "225,25,25",
+    "modmenu": {
+      "parent": {
+        "id": "meteor-client"
+      }
+    }
+  },
+  "depends": {
+    "java": ">=21",
+    "minecraft": ["${mc_version}"],
+    "meteor-client": "*"
+  }
+}
