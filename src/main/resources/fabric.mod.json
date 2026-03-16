@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "id": "invincible-machine-gun",
+  "version": "${version}",
+  "name": "Invincible Machine Gun 没敌机关枪",
+  "description": "Having various practical functions for Meteor Client 添加多种实用功能.",
+  "authors": [
+    "CodigoHasta"
+  ],
+  "contact": {
+    "sources": "n0"
+  },
+  "icon": "assets/template/icon.png",
+  "environment": "client",
+  "entrypoints": {
+    "meteor": [
+      "com.codigohasta.addon.AddonTemplate"
+    ]
+  },
+  "mixins": [
+    "silent-aura.mixins.json"
+  ],
+  "custom": {
+    "meteor-client:color": "225,25,25",
+    "modmenu": {
+      "parent": {
+        "id": "meteor-client"
+      }
+    }
+  },
+  "depends": {
+    "java": ">=21",
+    "minecraft": ["${mc_version}", "1.21.9"],
+    "meteor-client": "*"
+  }
+}

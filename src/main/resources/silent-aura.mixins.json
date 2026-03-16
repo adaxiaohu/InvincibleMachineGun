@@ -1,0 +1,18 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.codigohasta.addon.mixins",
+  "compatibilityLevel": "JAVA_21",
+  "refmap": "silent-aura.refmap.json",
+  "mixin": [],
+  "client": [
+    "MixinClientPlayerEntity",
+    "MixinAbstractBlockState",
+    "GameRendererMixin",
+    "MixinInGameOverlayRenderer",
+   "MixinArmorFeatureRenderer"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
