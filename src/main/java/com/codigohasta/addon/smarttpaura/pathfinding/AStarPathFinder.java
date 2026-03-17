@@ -1,21 +1,23 @@
 package com.codigohasta.addon.smarttpaura.pathfinding;
 
+import net.minecraft.block.BlockState;
 import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.Direction;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.World;
 
 import java.util.*;
 
+/**
+ * 终极复刻：1.8.9 LiquidBounce 核心寻路算法 (mumyHackAura)
+ * 采用 6向正交 + VClip探测 + 贪心射线拉直 (Greedy Simplify)
+ * 附加：严格两格高 (2-Blocks-High) 防卡墙检测
+ */
 public class AStarPathFinder {
     private final World world;
     private final CollisionHelper collisionHelper;
     private boolean airPath = true;
     private static final int MAX_ITERATIONS = 15000;
-
-    // [核心设定] 移动代价权重
-    private static final double COST_AIR = 1.0;     // 空气是甜美的
-    private static final double COST_GROUND = 2.5;  // 地面是熔岩 (加重惩罚迫使起飞)
-    private static final double COST_VCLIP = 0.8;   // 垂直飞行是最高效的
 
     public AStarPathFinder(World world) {
         this.world = world;
@@ -24,16 +26,21 @@ public class AStarPathFinder {
 
     public void setAirPath(boolean b) { this.airPath = b; }
 
+    // 兼容方法重载
     public List<Vec3d> findPath(Vec3d start, Vec3d target) {
-        Map<NodeKey, Node> allNodes = new HashMap<>(); 
+        return findPath(start, target, 9.0);
+    }
+
+    public List<Vec3d> findPath(Vec3d start, Vec3d target, double maxStep) {
+        BlockPos startBP = BlockPos.ofFloored(start);
+        BlockPos targetBP = BlockPos.ofFloored(target);
+
+        Map<BlockPos, Node> allNodes = new HashMap<>();
         PriorityQueue<Node> openSet = new PriorityQueue<>(Comparator.comparingDouble(n -> n.f));
 
-        // 强制居中对齐，使用胖子判定的中心点
-        Vec3d startCentered = new Vec3d(start.x, start.y, start.z);
-        Node startNode = new Node(startCentered, null, 0, startCentered.distanceTo(target));
-        
+        Node startNode = new Node(startBP, null, 0, getHeuristic(startBP, targetBP));
         openSet.add(startNode);
-        allNodes.put(new NodeKey(startCentered), startNode);
+        allNodes.put(startBP, startNode);
 
         Node best = startNode;
         int iterations = 0;
@@ -42,163 +49,165 @@ public class AStarPathFinder {
             Node curr = openSet.poll();
 
             // 终点判定
-            if (curr.pos.distanceTo(target) < 1.0) {
-                if (collisionHelper.canSweep(curr.pos, target)) {
-                    best = new Node(target, curr, 0, 0);
+            if (curr.pos.isWithinDistance(targetBP, 1.5)) {
+                if (collisionHelper.canSweep(toVec3d(curr.pos), target)) {
+                    best = new Node(targetBP, curr, 0, 0);
                     break;
                 }
             }
-            if (curr.pos.distanceTo(target) < best.pos.distanceTo(target)) best = curr;
 
-            for (Vec3d neighborPos : getNeighbors(curr.pos)) {
-                // 计算基础距离
-                double dist = curr.pos.distanceTo(neighborPos);
+            // 启发式保存最近点
+            if (curr.pos.getSquaredDistance(targetBP) < best.pos.getSquaredDistance(targetBP)) {
+                best = curr;
+            }
+
+            // 六向正交寻路 & VClip 探测
+            for (BlockPos neighbor : getNeighbors(curr.pos)) {
                 
-                // [核心设定] 动态代价计算
-                double penalty = getCostPenalty(curr.pos, neighborPos);
-                double moveCost = dist * penalty;
+                // [核心修改]：使用严格的“两格高”检测，拒绝钻入 1.8 格的极限缝隙
+                if (!isTwoBlocksHighSafe(neighbor)) continue;
 
-                double newG = curr.g + moveCost;
-                NodeKey nKey = new NodeKey(neighborPos);
-                
-                Node existing = allNodes.get(nKey);
-                if (existing != null && existing.g <= newG) continue;
-                if (!collisionHelper.canSweep(curr.pos, neighborPos)) continue;
+                double cost = curr.g + Math.sqrt(curr.pos.getSquaredDistance(neighbor));
 
-                Node newNode = new Node(neighborPos, curr, newG, newG + neighborPos.distanceTo(target));
-                allNodes.put(nKey, newNode);
+                Node existing = allNodes.get(neighbor);
+                if (existing != null && existing.g <= cost) continue;
+
+                Node newNode = new Node(neighbor, curr, cost, cost + getHeuristic(neighbor, targetBP));
+                allNodes.put(neighbor, newNode);
                 openSet.add(newNode);
             }
         }
-        return buildPath(best);
-    }
-
-    /**
-     * 判断移动类型并返回代价倍率
-     */
-    private double getCostPenalty(Vec3d from, Vec3d to) {
-        // 垂直移动：奖励
-        if (Math.abs(from.x - to.x) < 0.1 && Math.abs(from.z - to.z) < 0.1) {
-            return COST_VCLIP;
-        }
         
-        // 检查脚下是否有方块
-        boolean fromGround = isSolidGround(from);
-        boolean toGround = isSolidGround(to);
-
-        // 如果两点都在空中，或者是在空中平移 -> 便宜
-        if (!fromGround && !toGround) return COST_AIR;
-
-        // 只要沾了地 -> 贵
-        return COST_GROUND;
+        return buildPath(best, start, target, maxStep);
     }
 
-    private boolean isSolidGround(Vec3d p) {
-        // 检查脚下 0.1 米是否有碰撞
-        return !collisionHelper.isSafe(p.add(0, -0.1, 0)); 
-    }
+    private List<BlockPos> getNeighbors(BlockPos p) {
+        List<BlockPos> res = new ArrayList<>();
 
-    private List<Vec3d> getNeighbors(Vec3d currentPos) {
-        List<Vec3d> res = new ArrayList<>();
-        BlockPos centerBP = BlockPos.ofFloored(currentPos);
+        // 六向正交
+        res.add(p.add(1, 0, 0));
+        res.add(p.add(-1, 0, 0));
+        res.add(p.add(0, 0, 1));
+        res.add(p.add(0, 0, -1));
+        res.add(p.up());
+        res.add(p.down());
 
-        // 1. 平面移动
-        for (int x = -1; x <= 1; x++) {
-            for (int z = -1; z <= 1; z++) {
-                if (x == 0 && z == 0) continue;
-                BlockPos targetBase = centerBP.add(x, 0, z);
-
-                // 严格对角线检查
-                if (x != 0 && z != 0) {
-                    if (!collisionHelper.isStrictDiagonalSafe(centerBP, targetBase)) continue;
-                }
-
-                Vec3d validFloor = findValidGround(currentPos, targetBase);
-                if (validFloor != null) res.add(validFloor);
-            }
-        }
-
-        // 2. 垂直飞行 (V-Clip)
+        // V-Clip 穿墙机制
         if (airPath) {
-            Vec3d up = currentPos.add(0, 1.0, 0);
-            Vec3d down = currentPos.add(0, -1.0, 0);
-            if (collisionHelper.isSafe(up)) res.add(up);
-            if (collisionHelper.isSafe(down)) res.add(down);
+            for (int i = 2; i <= 10; i++) {
+                BlockPos up = p.up(i);
+                if (isTwoBlocksHighSafe(up)) { // [核心修改]
+                    res.add(up); 
+                    break;
+                }
+            }
+            for (int i = 2; i <= 10; i++) {
+                BlockPos down = p.down(i);
+                if (isTwoBlocksHighSafe(down)) { // [核心修改]
+                    res.add(down);
+                    break;
+                }
+            }
         }
         return res;
     }
 
-    private Vec3d findValidGround(Vec3d currentPos, BlockPos targetXZ) {
-        int[] yOffsets = {0, 1, -1};
-        for (int yOffset : yOffsets) {
-            BlockPos targetBlock = targetXZ.up(yOffset);
-            double floorHeight = collisionHelper.getFloorHeight(targetBlock);
+    /**
+     * [绝对两格高防卡墙检测]
+     * 完美复刻 LB 的 isPassable(y) && isPassable(y+1) 并适配 1.21.4 的 VoxelShape
+     */
+    private boolean isTwoBlocksHighSafe(BlockPos pos) {
+        Vec3d exactPos = toVec3d(pos);
+        
+        // 1. 基础的胖子碰撞箱检查 (确保脚下、周围不蹭墙)
+        if (!collisionHelper.isSafe(exactPos)) return false;
+        
+        // 2. 严格两格高检测：检查头顶上方的方块 (pos.up())
+        BlockPos headPos = pos.up();
+        BlockState headState = world.getBlockState(headPos);
+        
+        // 如果头顶这格不是完全空的空气
+        if (!headState.getCollisionShape(world, headPos).isEmpty()) {
+            // 获取头顶方块向下的最低延伸点 (比如上半砖的底部是 0.5)
+            double headBlockMinY = headPos.getY() + headState.getCollisionShape(world, headPos).getMin(Direction.Axis.Y);
             
-            // 强制 +0.5 居中
-            double destX = targetBlock.getX() + 0.5;
-            double destY = targetBlock.getY() + floorHeight;
-            double destZ = targetBlock.getZ() + 0.5;
-            
-            Vec3d candidate = new Vec3d(destX, destY, destZ);
-
-            // 胖子安全检查
-            if (!collisionHelper.isSafe(candidate)) continue;
-
-            // 高度差检查
-            double heightDiff = destY - currentPos.y;
-            if (heightDiff > 1.25 || heightDiff < -2.0) continue;
-
-            if (collisionHelper.canRaycast(currentPos, candidate)) {
-                return candidate;
+            // 玩家脚底到头顶方块最低点的净空高度，必须 >= 1.95 格（留出绝对防回弹余量）
+            // 如果只有 1.8 格（刚好塞进玩家），瞬移时必定被发包检测判定卡墙
+            if (headBlockMinY - exactPos.y < 1.95) {
+                return false;
             }
         }
-        return null;
+        
+        return true;
     }
 
-    private List<Vec3d> buildPath(Node node) {
+    private double getHeuristic(BlockPos a, BlockPos b) {
+        double dx = Math.abs(a.getX() - b.getX());
+        double dy = Math.abs(a.getY() - b.getY());
+        double dz = Math.abs(a.getZ() - b.getZ());
+        return Math.sqrt(dx * dx + dy * dy + dz * dz) + dx + dy + dz;
+    }
+
+    private Vec3d toVec3d(BlockPos bp) {
+        double floorHeight = collisionHelper.getFloorHeight(bp);
+        return new Vec3d(bp.getX() + 0.5, bp.getY() + floorHeight, bp.getZ() + 0.5);
+    }
+
+    private List<Vec3d> buildPath(Node node, Vec3d realStart, Vec3d realTarget, double maxStep) {
         if (node == null) return new ArrayList<>();
-        List<Vec3d> path = new ArrayList<>();
+
+        List<BlockPos> blockPath = new ArrayList<>();
         while (node != null) {
-            path.add(node.pos);
+            blockPath.add(node.pos);
             node = node.parent;
         }
-        Collections.reverse(path);
-        return simplify(path);
+        Collections.reverse(blockPath);
+
+        List<Vec3d> vecPath = new ArrayList<>();
+        vecPath.add(realStart); 
+        for (int i = 1; i < blockPath.size() - 1; i++) {
+            vecPath.add(toVec3d(blockPath.get(i)));
+        }
+        vecPath.add(realTarget); 
+
+        return simplify(vecPath, maxStep);
     }
 
-    private List<Vec3d> simplify(List<Vec3d> path) {
+    private List<Vec3d> simplify(List<Vec3d> path, double maxStep) {
         if (path.size() <= 2) return path;
+
         List<Vec3d> simple = new ArrayList<>();
-        simple.add(path.get(0));
-        Vec3d last = path.get(0);
-        for (int i = 1; i < path.size() - 1; i++) {
-            Vec3d next = path.get(i + 1);
-            if (!collisionHelper.canSweep(last, next)) {
-                simple.add(path.get(i));
-                last = path.get(i);
+        Vec3d lastPos = path.get(0);
+        simple.add(lastPos);
+
+        for (int i = 1; i < path.size(); i++) {
+            Vec3d current = path.get(i);
+            
+            if (i < path.size() - 1) {
+                Vec3d next = path.get(i + 1);
+                double distance = lastPos.distanceTo(next);
+                
+                if (distance > maxStep || !collisionHelper.canSweep(lastPos, next)) {
+                    simple.add(current);
+                    lastPos = current;
+                }
             }
         }
+        
         simple.add(path.get(path.size() - 1));
         return simple;
     }
 
     private static class Node {
-        Vec3d pos; Node parent; double g, f;
-        Node(Vec3d p, Node pr, double g, double f) { this.pos = p; this.parent = pr; this.g = g; this.f = f; }
-    }
-    private static class NodeKey {
-        private final int x, yKey, z;
-        public NodeKey(Vec3d v) {
-            this.x = (int) Math.floor(v.x);
-            this.yKey = (int) Math.round(v.y * 4); // Y轴精度保留
-            this.z = (int) Math.floor(v.z);
+        BlockPos pos;
+        Node parent;
+        double g, f;
+
+        Node(BlockPos p, Node pr, double g, double f) {
+            this.pos = p;
+            this.parent = pr;
+            this.g = g;
+            this.f = f;
         }
-        @Override public boolean equals(Object o) {
-            if (this == o) return true;
-            if (o == null || getClass() != o.getClass()) return false;
-            NodeKey k = (NodeKey) o;
-            return x == k.x && yKey == k.yKey && z == k.z;
-        }
-        @Override public int hashCode() { return Objects.hash(x, yKey, z); }
     }
 }
