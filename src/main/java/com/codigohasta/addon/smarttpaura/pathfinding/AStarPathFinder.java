@@ -8,11 +8,6 @@ import net.minecraft.world.World;
 
 import java.util.*;
 
-/**
- * 终极复刻：1.8.9 LiquidBounce 核心寻路算法 (mumyHackAura)
- * 采用 6向正交 + VClip探测 + 贪心射线拉直 (Greedy Simplify)
- * 附加：严格两格高 (2-Blocks-High) 防卡墙检测
- */
 public class AStarPathFinder {
     private final World world;
     private final CollisionHelper collisionHelper;
@@ -113,8 +108,7 @@ public class AStarPathFinder {
     }
 
     /**
-     * [绝对两格高防卡墙检测]
-     * 完美复刻 LB 的 isPassable(y) && isPassable(y+1) 并适配 1.21.4 的 VoxelShape
+  
      */
     private boolean isTwoBlocksHighSafe(BlockPos pos) {
         Vec3d exactPos = toVec3d(pos);
