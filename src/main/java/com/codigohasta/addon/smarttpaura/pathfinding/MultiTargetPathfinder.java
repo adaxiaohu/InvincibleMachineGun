@@ -23,7 +23,8 @@ public class MultiTargetPathfinder {
         for (LivingEntity target : targets) {
             if (!isValidTarget(target)) continue;
             
-            List<Vec3d> path = pathFinder.findPath(startPos, target.getPos());
+            
+    List<Vec3d> path = pathFinder.findPath(startPos, target.getPos(), 0.5);
             
             if (path != null && !path.isEmpty()) {
                 double score = 1000 - path.size() * 10;

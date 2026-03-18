@@ -72,7 +72,7 @@ public class TeleportNotebot extends Module {
     private List<Vec3d> lastPacketsPath = new ArrayList<>();
 
     public TeleportNotebot() {
-        super(AddonTemplate.CATEGORY, "TeleportNotebot", "如来神掌：深度集成 A* 与人体盒渲染");
+        super(AddonTemplate.CATEGORY, "TeleportNotebot", "没做完的功能，做不出烂尾了。");
     }
 
     @Override
@@ -135,7 +135,7 @@ public class TeleportNotebot extends Module {
         Vec3d targetVec = Vec3d.ofCenter(targetPos);
 
         pathFinder.setAirPath(airPath.get());
-        List<Vec3d> simplified = pathFinder.findPath(start, targetVec);
+        List<Vec3d> simplified = pathFinder.findPath(start, targetVec, 0.5);
         if (simplified == null || simplified.isEmpty()) return;
 
         lastRawPath = new ArrayList<>(simplified);
