@@ -56,9 +56,6 @@ public class SmartTPAuraCore {
         return targetPos;
     }
 
-    /**
-     * 模式 A: 针对实体的攻击寻路 (包含起飞逻辑)
-     */
     public void updatePathfinding(Vec3d start, Entity target) {
         if (isCalculating.get()) return;
         
@@ -79,6 +76,7 @@ public class SmartTPAuraCore {
                 break;
             }
         }
+
 
         final Vec3d actualStart = aStarStart;
         final List<Vec3d> prefix = new ArrayList<>(takeoffPath);

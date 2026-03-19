@@ -1,5 +1,6 @@
 plugins {
     alias(libs.plugins.fabric.loom)
+    
 }
 
 base {
