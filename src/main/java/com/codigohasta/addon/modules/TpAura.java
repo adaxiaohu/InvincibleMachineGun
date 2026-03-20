@@ -1,6 +1,5 @@
 package com.codigohasta.addon.modules;
 
-import com.codigohasta.addon.modules.TpAura.AttackMode;
 
 import com.codigohasta.addon.AddonTemplate;
 import meteordevelopment.meteorclient.mixininterface.IPlayerMoveC2SPacket;
