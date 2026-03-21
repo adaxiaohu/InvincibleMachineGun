@@ -47,6 +47,7 @@ A personal addon for the Meteor client that adds various entertainment modules. 
 - AutoRespawn - 自动重生
 - PearlPhase - 末影珍珠穿墙
 - ODMGear - ODM 装备移动
+- ElytraFly-  甲飞鞘翅
 
 ### 挖掘类模块 (Mining)
 - ScaffoldPlus - 脚手架增强版
