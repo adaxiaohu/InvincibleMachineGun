@@ -10,7 +10,10 @@
     "MixinAbstractBlockState",
     "GameRendererMixin",
     "MixinInGameOverlayRenderer",
-   "MixinArmorFeatureRenderer"
+   "MixinArmorFeatureRenderer",
+   "MixinDeathScreen",
+    "EntityMixin",
+    "MixinCamera"
   ],
   "injectors": {
     "defaultRequire": 1

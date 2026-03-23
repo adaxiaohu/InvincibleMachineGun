@@ -87,6 +87,7 @@ import com.codigohasta.addon.modules.ChatPrefixCustom;
 import com.codigohasta.addon.modules.KnockbackDirection;
 import com.codigohasta.addon.modules.AutoKouZi;
 import com.codigohasta.addon.modules.CustomArmor;
+import com.codigohasta.addon.modules.Follower;
 
 
 
@@ -109,8 +110,8 @@ public class AddonTemplate extends MeteorAddon {
     public static final Logger LOG = LogUtils.getLogger();
     
     // --- 关键修复：Items.MACE -> Items.MACE.getDefaultStack() ---
-    public static final Category CATEGORY = new Category("MacePVP", Items.MACE.getDefaultStack());
-    public static final HudGroup HUD_GROUP = new HudGroup("MacePVP");
+    public static final Category CATEGORY = new Category("IMG", Items.MACE.getDefaultStack());
+    public static final HudGroup HUD_GROUP = new HudGroup("IMG");
 
     @Override
     public void onInitialize() {
@@ -202,6 +203,7 @@ public class AddonTemplate extends MeteorAddon {
         Modules.get().add(new KnockbackDirection());
         Modules.get().add(new AutoKouZi());
         Modules.get().add(new CustomArmor());
+        Modules.get().add(new Follower());
 
 
 
