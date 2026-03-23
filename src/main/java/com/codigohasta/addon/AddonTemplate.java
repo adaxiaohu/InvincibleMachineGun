@@ -17,15 +17,15 @@ import org.slf4j.Logger;
 
 public class AddonTemplate extends MeteorAddon {
     public static final Logger LOG = LogUtils.getLogger();
-    // 根据你的要求，分类名为 MacePVP
-    public static final Category CATEGORY = new Category("MacePVP");
-    public static final HudGroup HUD_GROUP = new HudGroup("MacePVP");
+    
+    public static final Category CATEGORY = new Category("IMG");
+    public static final HudGroup HUD_GROUP = new HudGroup("IMG");
 
     @Override
     public void onInitialize() {
-        LOG.info("Initializing MacePVP Addon");
+        LOG.info("Initializing IMG Addon");
 
-        // Modules - 注册所有 58 个模块
+        // Modules 
         Modules modules = Modules.get();
 
         modules.add(new AdvancedCriticals());
@@ -98,6 +98,8 @@ public class AddonTemplate extends MeteorAddon {
         
          modules.add(new MacroAnchor()); 
          modules.add(new ElytraFly());
+         modules.add(new Follower());
+         
 
         // Commands
         Commands.add(new CommandExample());

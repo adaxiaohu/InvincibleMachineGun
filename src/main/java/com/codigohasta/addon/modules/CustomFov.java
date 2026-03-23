@@ -34,7 +34,7 @@ public class CustomFov extends Module {
     );
 
     public CustomFov() {
-        // 使用你主类里定义的 CATEGORY (MacePVP)
+        
         super(AddonTemplate.CATEGORY, "custom-fov", "允许独立调整视角和手持物品视角。");
     }
 }

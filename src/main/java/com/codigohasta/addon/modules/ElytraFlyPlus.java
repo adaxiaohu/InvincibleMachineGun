@@ -12,7 +12,7 @@ import net.minecraft.util.math.Vec3d;
 
 public class ElytraFlyPlus extends Module {
     public ElytraFlyPlus() {
-        // 使用你的 MacePVP 分类
+        
         super(AddonTemplate.CATEGORY, "elytra-fly-plus", "抄袭的blackout的平飞");
     }
 

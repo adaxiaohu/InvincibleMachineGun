@@ -11,7 +11,11 @@
     "InventoryAccessor",
     "MixinInGameOverlayRenderer",
     "MixinBreakIndicators",
-    "MinecraftClientAccessor" 
+    "MinecraftClientAccessor",
+    "MixinDeathScreen",
+    "EntityMixin",
+    "MixinCamera"
+
   ],
   "injectors": {
     "defaultRequire": 1
