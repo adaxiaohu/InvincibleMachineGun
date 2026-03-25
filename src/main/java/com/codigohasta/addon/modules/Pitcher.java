@@ -1,3 +1,4 @@
+//最开始抄袭了wurst，然后又抄袭了Trouser-Streak的ProjectileLauncher
 package com.codigohasta.addon.modules;
 
 import com.codigohasta.addon.AddonTemplate;
@@ -24,17 +25,63 @@ import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.RaycastContext;
 
+import meteordevelopment.meteorclient.mixininterface.IPlayerMoveC2SPacket;
+import net.minecraft.item.Items;
+import net.minecraft.network.packet.Packet;
+import net.minecraft.network.packet.c2s.play.PlayerInteractItemC2SPacket;
+import net.minecraft.util.Hand;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
-public class ArrowDmg extends Module {
+public class Pitcher extends Module {
     private final SettingGroup sgGeneral = settings.getDefaultGroup();
+    private final SettingGroup sgTP = settings.createGroup("超远TP设置(copy in Trouser-Streak");
+    public enum Mode { Vanilla, Paper }
+    public enum TPMode { Reverse, Forward }
     private final SettingGroup sgAuto = settings.createGroup("连射");
      private final SettingGroup sgTotem = settings.createGroup("图腾绕过");
     private final SettingGroup sgAim = settings.createGroup("自瞄");
     private final SettingGroup sgRender = settings.createGroup("渲染");
+
+    private final Setting<Mode> mode = sgGeneral.add(new EnumSetting.Builder<Mode>()
+        .name("兼容模式")
+        .description("Vanilla = 22格, Paper = 最高149格")
+        .defaultValue(Mode.Paper)
+        .build()
+    );
+
+    private final Setting<TPMode> tpmode = sgGeneral.add(new EnumSetting.Builder<TPMode>()
+        .name("TP方向")
+        .description("向后加速伤害更高，向前投掷距离更远")
+        .defaultValue(TPMode.Reverse)
+        .build()
+    );
+
+    private final Setting<List<net.minecraft.item.Item>> projectileItems = sgGeneral.add(new ItemListSetting.Builder()
+        .name("适用物品")
+        .defaultValue(Items.BOW, Items.TRIDENT, Items.ENDER_PEARL, Items.SPLASH_POTION, Items.EXPERIENCE_BOTTLE, Items.SNOWBALL)
+        .build()
+    );
+
+    private final Setting<Double> paperDistance = sgTP.add(new DoubleSetting.Builder()
+        .name("Paper最大距离")
+        .defaultValue(149.0)
+        .sliderMax(169.0)
+        .visible(() -> mode.get() == Mode.Paper)
+        .build()
+    );
+
+    private final Setting<Integer> paperPackets = sgTP.add(new IntSetting.Builder()
+        .name("Paper堆叠包数")
+        .defaultValue(15)
+        .min(1)
+        .sliderMax(20)
+        .visible(() -> mode.get() == Mode.Paper)
+        .build()
+    );
 
     // ================= 基础高伤与环境检测设置 =================
     private final Setting<Double> strength = sgGeneral.add(new DoubleSetting.Builder()
@@ -200,10 +247,12 @@ public class ArrowDmg extends Module {
     private boolean forcedPressed = false;
     private Entity currentTarget = null; 
     private boolean isSecondShot = false;
+  private int totemStep = 0; // 0: 空闲, 1: 正在蓄力第二箭
     private int bypassTimer = -1;
+  
 
-    public ArrowDmg() {
-        super(AddonTemplate.CATEGORY, "没敌机关枪", "32k弓，或者叫arrowDMG。使自己射出的弓箭，伤害变高，原理来自wurst。使得在1.21以上得到实现。");
+    public Pitcher() {
+        super(AddonTemplate.CATEGORY, "大力投手", "大力投手，可以把自己后退或者前进距离，来丢东西。可以把没影珍珠丢出15000格。来自trouser-streak，被我抄袭并且做了修改。没那么好用，比较混乱，娱乐功能");
     }
 
     @Override
@@ -212,40 +261,49 @@ public class ArrowDmg extends Module {
             mc.options.useKey.setPressed(false);
             forcedPressed = false;
         }
-        currentTarget = null;
-        isSecondShot = false;
+        totemStep = 0;
         bypassTimer = -1;
+        isShooting = false;
     }
 
-    @EventHandler
+   @EventHandler
     private void onTick(TickEvent.Pre event) {
-        // --- 图腾绕过 ---
-        if (totemBypass.get() && bypassTimer > 0) {
-            mc.options.useKey.setPressed(true); // 强行按住右键，极速蓄力第二箭
-            bypassTimer--;
-            
-            // 倒计时结束，瞬间松开发射第二箭
-            if (bypassTimer == 0) {
-                if (mc.player.isUsingItem() && isValidItem(mc.player.getActiveItem())) {
-                    mc.interactionManager.stopUsingItem(mc.player); 
-                } else {
-                    isSecondShot = false; // 如果手里切成了别的物品，直接取消第二箭
-                }
-                mc.options.useKey.setPressed(false);
-            }
-            return; // 双发扳机倒计时期间，阻断下方的普通连射逻辑，防止冲突
-        }
-
         if (mc.player == null || mc.world == null) return;
 
-        boolean validMainHand = isValidItem(mc.player.getMainHandStack());
-        boolean validOffHand = isValidItem(mc.player.getOffHandStack());
-        boolean hasValidItem = validMainHand || validOffHand;
+        // 识别当前哪只手拿着远程武器
+        boolean validMain = isValidItem(mc.player.getMainHandStack());
+        boolean validOff = isValidItem(mc.player.getOffHandStack());
+        boolean hasValidItem = validMain || validOff;
+        Hand hand = validMain ? Hand.MAIN_HAND : Hand.OFF_HAND;
 
-        currentTarget = null; 
+        // --- 图腾双发状态机修复 ---
+        if (totemBypass.get() && totemStep == 1) {
+            // 倒计时刚开始：强制触发右键拉弓动作
+            if (bypassTimer == bypassDelay.get()) {
+                mc.interactionManager.interactItem(mc.player, hand);
+            }
 
-        // 1. 自瞄逻辑
+            if (bypassTimer > 0) {
+                // 蓄力期间：强制锁定右键按下状态
+                mc.options.useKey.setPressed(true);
+                bypassTimer--;
+            } 
+            else if (bypassTimer == 0) {
+                // 倒计时结束：执行射击
+                // 修复：移除 mc.player.isUsingItem() 判断，防止因为延迟导致的失效
+                mc.interactionManager.stopUsingItem(mc.player);
+                
+                // 关键修复：强制松开按键并重置状态机，防止死循环拉弓
+                mc.options.useKey.setPressed(false);
+                totemStep = 0; 
+                bypassTimer = -1;
+            }
+            return; // 补刀期间跳过其他逻辑
+        }
+
+        // --- 2. 自瞄逻辑 ---
         if (aimbot.get() && hasValidItem) {
+            currentTarget = null; // 重置当前目标
             boolean isPressingRightClick = mc.options.useKey.isPressed() || forcedPressed;
 
             if (!aimOnlyWhenHoldingRightClick.get() || isPressingRightClick) {
@@ -256,10 +314,7 @@ public class ArrowDmg extends Module {
                     if (entity == mc.player) continue;
                     if (!(entity instanceof LivingEntity living) || living.isDead() || living.getHealth() <= 0) continue;
                     if (!entities.get().contains(entity.getType())) continue;
-
-                    if (entity instanceof PlayerEntity player) {
-                        if (player.isCreative() || player.isSpectator() || Friends.get().isFriend(player)) continue;
-                    }
+                    if (entity instanceof PlayerEntity player && (player.isCreative() || player.isSpectator() || Friends.get().isFriend(player))) continue;
 
                     double dist = mc.player.distanceTo(entity);
                     if (dist > aimRange.get()) continue;
@@ -267,12 +322,8 @@ public class ArrowDmg extends Module {
 
                     double score = 0;
                     switch (priority.get()) {
-                        case Distance:
-                            score = dist;
-                            break;
-                        case Health:
-                            score = living.getHealth();
-                            break;
+                        case Distance: score = dist; break;
+                        case Health: score = living.getHealth(); break;
                         case Angle:
                             Vec3d targetPos = entity.getBoundingBox().getCenter();
                             double dX = targetPos.x - mc.player.getX();
@@ -296,20 +347,24 @@ public class ArrowDmg extends Module {
                     double dX = targetPos.x - mc.player.getX();
                     double dY = targetPos.y - mc.player.getEyeY();
                     double dZ = targetPos.z - mc.player.getZ();
-
                     double distXZ = Math.sqrt(dX * dX + dZ * dZ);
-                    float yaw = (float) Math.toDegrees(Math.atan2(dZ, dX)) - 90.0F;
-                    float pitch = (float) -Math.toDegrees(Math.atan2(dY, distXZ));
-
-                    pitch = MathHelper.clamp(pitch, -90.0F, 90.0F);
-                    mc.player.setYaw(yaw);
-                    mc.player.setPitch(pitch);
+                    mc.player.setYaw((float) Math.toDegrees(Math.atan2(dZ, dX)) - 90.0F);
+                    mc.player.setPitch((float) -Math.toDegrees(Math.atan2(dY, distXZ)));
                 }
             }
         }
 
-        // --- 连射逻辑 ---
+        // --- 3. 连射控制 ---
+        if (totemStep == 0) {
+            handleNormalAutoShoot(hasValidItem);
+        }
+    }
+
+    private void handleNormalAutoShoot(boolean hasValidItem) {
+        if (!autoShoot.get() || !hasValidItem) return;
+
         ItemStack activeStack = mc.player.getActiveItem();
+        // 进食/喝药保护 (1.21.11 字符串安全判断)
         if (mc.player.isUsingItem() && !isValidItem(activeStack)) {
             if (forcedPressed) {
                 mc.options.useKey.setPressed(false);
@@ -318,14 +373,7 @@ public class ArrowDmg extends Module {
             return;
         }
 
-        if (!autoShoot.get() || !hasValidItem) {
-            if (forcedPressed) {
-                mc.options.useKey.setPressed(false);
-                forcedPressed = false;
-            }
-            return;
-        }
-
+        // 第一箭拉弓逻辑
         if (!onlyWhenHoldingRightClick.get() && !mc.player.isUsingItem()) {
             mc.options.useKey.setPressed(true);
             forcedPressed = true;
@@ -340,64 +388,114 @@ public class ArrowDmg extends Module {
 
     @EventHandler
     private void onSendPacket(PacketEvent.Send event) {
-        if (isShooting) return;
-        if (event.packet instanceof PlayerActionC2SPacket packet) {
-            if (packet.getAction() == PlayerActionC2SPacket.Action.RELEASE_USE_ITEM) {
-                if (mc.player != null && (isValidItem(mc.player.getMainHandStack()) || isValidItem(mc.player.getOffHandStack()))) {
-                    event.cancel();
-                    processShoot(packet);
-                }
+        if (isShooting || mc.player == null) return;
+
+        // 拦截弓箭释放包
+        if (event.packet instanceof PlayerActionC2SPacket p && p.getAction() == PlayerActionC2SPacket.Action.RELEASE_USE_ITEM) {
+            if (isValidProjectile(mc.player.getActiveItem())) {
+                event.cancel();
+                processShoot(event.packet);
+            }
+        }
+        // 拦截珍珠/药水等右键瞬发包
+        else if (event.packet instanceof PlayerInteractItemC2SPacket p) {
+            ItemStack stack = (p.getHand() == Hand.MAIN_HAND) ? mc.player.getMainHandStack() : mc.player.getOffHandStack();
+            if (isValidProjectile(stack)) {
+                event.cancel();
+                processShoot(event.packet);
             }
         }
     }
 
-    private void processShoot(PlayerActionC2SPacket releasePacket) {
-        if (mc.player == null || mc.world == null || mc.getNetworkHandler() == null) return;
+    private void processShoot(net.minecraft.network.packet.Packet<?> originalPacket) {
+        
+        if (mc.player == null || mc.getNetworkHandler() == null) return;
 
         isShooting = true;
+        
+        // 判定力量：如果状态机是 1，说明这一下是补刀，用高伤
+        double currentStr = (totemStep == 1) ? bypassStrength.get() : strength.get();
+        // 1. 发送冲刺包（Wurst 高伤触发器）
         mc.getNetworkHandler().sendPacket(new ClientCommandC2SPacket(mc.player, ClientCommandC2SPacket.Mode.START_SPRINTING));
 
+        // 2. 获取基础坐标与方向 (1.21.11 安全坐标)
         double x = mc.player.getX(), y = mc.player.getY(), z = mc.player.getZ();
-        double currentStrength = (isSecondShot && totemBypass.get()) ? bypassStrength.get() : strength.get();
-        double adjustedStrength = (currentStrength / 10.0) * Math.sqrt(500.0);
-        Vec3d lookVec = mc.player.getRotationVector().multiply(adjustedStrength);
+        Vec3d startPos = new Vec3d(x, y, z);
+        Vec3d lookVec = mc.player.getRotationVector();
 
-        Vec3d spoofOffset = new Vec3d(-lookVec.x, vertical.get() ? -lookVec.y : 0, -lookVec.z);
+        // 3. 计算当前箭矢力量 (如果是第二箭则用破图腾力量)
+        currentStr = (isSecondShot && totemBypass.get()) ? bypassStrength.get() : strength.get();
+        // 如果开启了 Paper 模式，力量距离上限自动解锁至 149
+        double maxDist = mode.get() == Mode.Vanilla ? 21.9 : paperDistance.get();
+        double adjustedStrength = (currentStr / 10.0) * Math.sqrt(500.0);
+        
+        // 限制力量不超出当前模式的最大 TP 距离
+        adjustedStrength = Math.min(adjustedStrength, maxDist);
 
+        // 4. 计算位移方向 (根据 TP 模式决定向后还是向前)
+        Vec3d dir = (tpmode.get() == TPMode.Reverse) ? lookVec.multiply(-1) : lookVec;
+        Vec3d spoofOffset = new Vec3d(dir.x * adjustedStrength, (vertical.get() ? dir.y * adjustedStrength : 0), dir.z * adjustedStrength);
+
+        // 5. 自动空间检测 (Smart Strength)
         if (smartStrength.get()) {
-            double safeDist = getSafeSpoofDistance(new Vec3d(x, y, z), spoofOffset);
+            double safeDist = getSafeSpoofDistance(startPos, spoofOffset);
             double adjustedDist = Math.max(0.01, safeDist - 0.5);
             if (adjustedDist < spoofOffset.length()) {
                 spoofOffset = spoofOffset.normalize().multiply(adjustedDist);
             }
         }
 
-        double targetX = x + spoofOffset.x, targetY = y + spoofOffset.y, targetZ = z + spoofOffset.z;
+        // 目标 TP 点
+        Vec3d targetPos = startPos.add(spoofOffset);
 
-        for (int i = 0; i < 4; i++) sendPos(x, y, z, true);
-        sendPos(targetX, targetY, targetZ, false);
-        sendPos(x, y, z, false);
+        // 6. [核心绕过] 堆叠包预热 (Paper 模式发送 15+ 个包填充缓冲区)
+        int spam = mode.get() == Mode.Vanilla ? 4 : paperPackets.get();
+        for (int i = 0; i < spam; i++) {
+            // 规则：1.21.11 必须包含 horizontalCollision
+            mc.player.networkHandler.sendPacket(new PlayerMoveC2SPacket.OnGroundOnly(true, mc.player.horizontalCollision));
+        }
 
-        mc.getNetworkHandler().sendPacket(releasePacket);
+        // 7. [核心绕过] 瞬间位移序列
+        // A. 飞到目标点
+        sendMovePacket(targetPos);
 
+        // B. 如果是向前 TP，则在远处发包（珍珠瞬移逻辑）；如果是向后 TP，则先回传
+        if (tpmode.get() == TPMode.Forward) {
+            mc.getNetworkHandler().sendPacket(originalPacket);
+        }
+
+        // C. 飞回起点
+        sendMovePacket(startPos);
+
+        // D. 如果是向后 TP（经典 32k 弓逻辑），则在回传后立刻发包，利用瞬间动量差
+        if (tpmode.get() == TPMode.Reverse) {
+            mc.getNetworkHandler().sendPacket(originalPacket);
+        }
+
+        // 8. [核心同步] 发送极小偏移包刷位置同步，防止被 Paper 判定为 Invalid Teleport 拉回
+        // 在 y 轴增加 0.001 并随机水平偏移 0.05
+        Vec3d syncPos = startPos.add((Math.random() - 0.5) * 0.05, 0.001, (Math.random() - 0.5) * 0.05);
+        sendMovePacket(syncPos);
+        mc.player.setPosition(syncPos.x, syncPos.y, syncPos.z);
+
+        // 9. [防摔/防拉回] 垂直偏移补丁
         if (vertical.get() && useOffset.get() && spoofOffset.y > 0) {
-            sendPos(x, y + 0.01, z, false);
+            sendMovePacket(startPos.add(0, 0.01, 0));
         }
 
         isShooting = false;
 
-        // --- 状态切换逻辑 ---
+        // 10. 破图腾状态切换逻辑
         if (totemBypass.get()) {
-            if (!isSecondShot) {
-                // 第一箭刚射完，马上标记为第二箭并启动倒计时
-                isSecondShot = true;
-                bypassTimer = bypassDelay.get();
+            // 如果刚刚完成的是正常射击（第一箭）
+            if (totemStep == 0) {
+                totemStep = 1;
+                bypassTimer = bypassDelay.get(); 
             } else {
-                // 第二箭也射完了，恢复为平时的第一箭状态
-                isSecondShot = false;
+                // 如果刚刚完成的是补刀箭（第二箭），重置回到空闲
+                totemStep = 0;
+                bypassTimer = -1;
             }
-        } else {
-            isSecondShot = false;
         }
     }
 
@@ -556,4 +654,21 @@ public class ArrowDmg extends Module {
         String name = stack.getItem().toString();
         return name.contains("bow") || (yeetTridents.get() && name.contains("trident"));
     }
+    // 1.21.11 专用发包：必须带 horizontalCollision 参数，且使用 meteor$ 前缀
+    private void sendMovePacket(Vec3d pos) {
+        if (mc.getNetworkHandler() == null) return;
+        PlayerMoveC2SPacket packet = new PlayerMoveC2SPacket.PositionAndOnGround(
+            pos.x, pos.y, pos.z, false, mc.player.horizontalCollision
+        );
+        // 标记此包由模块发出，防止被自己的 AntiHunger 或 NoFall 拦截
+        ((IPlayerMoveC2SPacket) packet).meteor$setTag(1337);
+        mc.player.networkHandler.sendPacket(packet);
+    }
+
+    private boolean isValidProjectile(ItemStack stack) {
+        if (stack == null || stack.isEmpty()) return false;
+        // 使用 ItemListSetting 的包含判定，避开 instanceof 坑
+        return projectileItems.get().contains(stack.getItem());
+    }
+
 }
