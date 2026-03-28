@@ -102,6 +102,9 @@ public class AddonTemplate extends MeteorAddon {
          modules.add(new Testfly());
          modules.add(new ArrowDmg());
          modules.add(new Pitcher());
+         modules.add(new VillagerTrader());
+         modules.add(new IMGWorldStats());
+
          
 
         // Commands

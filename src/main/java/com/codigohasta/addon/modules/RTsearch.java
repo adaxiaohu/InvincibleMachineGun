@@ -3,6 +3,8 @@ package com.codigohasta.addon.modules;
 import net.minecraft.util.math.Vec3d;
 
 import com.codigohasta.addon.AddonTemplate;
+import com.codigohasta.addon.modules.RTsearch.RTPMode;
+
 import meteordevelopment.meteorclient.events.packets.PacketEvent;
 import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;
@@ -162,11 +164,19 @@ public class RTsearch extends Module {
         .build()
     );
 
-    private final Setting<String> distance = sgCoordinates.add(new StringSetting.Builder()
+     private final Setting<String> distance = sgCoordinates.add(new StringSetting.Builder()
         .name("distance")
         .description("Distance to get within (supports k/m, e.g., 10k = 10000, 1.5m = 1500000).")
         .defaultValue("1000")
         .visible(() -> rtpMode.get() == RTPMode.COORDINATES)
+        .build()
+    );
+
+    // 2. 这是你新加的 rtpCommand 设置（必须作为独立的一个设置，放在 distance 的下面）
+    private final Setting<String> rtpCommand = sgGeneral.add(new StringSetting.Builder()
+        .name("rtp-command")
+        .description("The command to send for teleporting (without slash). 例如: rt, rtp, wild")
+        .defaultValue("rt")
         .build()
     );
 
@@ -321,7 +331,7 @@ public class RTsearch extends Module {
 
             if (webhookEnabled.get()) {
                 sendWebhook("Target Reached!",
-                    String.format("Got to %d, %d using /rt\\nDistance: %.1f/%d blocks\\nAttempts: %d",
+                    String.format("Got to %d, %d using /\" + rtpCommand.get() + \"\\\\nDistance: %.1f/%d blocks\\nAttempts: %d",
                         targetX.get(), targetZ.get(),
                         currentDistance, targetDistanceBlocks, rtpAttempts),
                     0x00FF00);
@@ -465,13 +475,18 @@ public class RTsearch extends Module {
         if (mc.player == null) return;
 
         isRtping = true;
-        // info("Sending /rt..."); // 日志太多可以注释掉
+
+        // 获取用户设置的指令，并自动去除可能多打的斜杠
+        String cmd = rtpCommand.get().trim();
+        if (cmd.startsWith("/")) {
+            cmd = cmd.substring(1);
+        }
 
         // 优先使用指令包发送
         if (mc.getNetworkHandler() != null) {
-            mc.getNetworkHandler().sendChatCommand("rt");
+            mc.getNetworkHandler().sendChatCommand(cmd);
         } else {
-            ChatUtils.sendPlayerMsg("/rt");
+            ChatUtils.sendPlayerMsg("/" + cmd);
         }
 
         if (rtpMode.get() == RTPMode.COORDINATES) {
