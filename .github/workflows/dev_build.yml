@@ -28,5 +28,5 @@ jobs:
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: artifact
-          path: /build/libs/*.jar
+          name: InvincibleMachineGun-dev.jar
+          path: build/libs/*.jar
