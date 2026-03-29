@@ -4,7 +4,6 @@ import com.codigohasta.addon.AddonTemplate;
 import com.codigohasta.addon.mixin.InventoryAccessor;
 import com.codigohasta.addon.utils.RotationManager;
 import com.codigohasta.addon.utils.player.MoveUtils;
-import com.codigohasta.addon.utils.rotation.MovementFix;
 import com.codigohasta.addon.utils.rotation.Priority;
 import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;
@@ -177,7 +176,7 @@ public class Testfly extends Module {
         RotationManager.INSTANCE.setRotations(
             new Vector2f(MathHelper.wrapDegrees(yaw), MathHelper.clamp(pitch, -90.0f, 90.0f)), 
             rotationSpeed.get(), 
-            MovementFix.OFF, 
+            false, 
             Priority.Highest
         );
     }
