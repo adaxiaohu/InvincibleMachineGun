@@ -8,13 +8,11 @@ import meteordevelopment.orbit.EventHandler;
 import meteordevelopment.orbit.EventPriority;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.util.math.MathHelper;
-import net.minecraft.util.math.Vec3d;
 import org.joml.Vector2f;
 
 import java.util.function.Function;
 
 // 注意：请确保这些类在对应的路径下已创建，或者你根据实际路径修改 Import
-import com.codigohasta.addon.utils.rotation.MovementFix;
 import com.codigohasta.addon.utils.rotation.Priority;
 import com.codigohasta.addon.utils.rotation.RotationUtils;
 import com.codigohasta.addon.utils.player.MoveUtils;
@@ -35,7 +33,7 @@ public class RotationManager {
     private boolean active;
     private boolean smoothed;
     private double rotationSpeed;
-    private MovementFix correctMovement;
+    private boolean correctMovement;
     private Function<Vector2f, Boolean> raycast;
     private float randomAngle;
 
@@ -46,15 +44,15 @@ public class RotationManager {
         MeteorClient.EVENT_BUS.subscribe(this);
     }
 
-    public void setRotations(final Vector2f rotations, final double rotationSpeed, final MovementFix correctMovement) {
+    public void setRotations(final Vector2f rotations, final double rotationSpeed, final boolean correctMovement) {
         setRotations(rotations, rotationSpeed, correctMovement, null, Priority.Lowest);
     }
 
-    public void setRotations(final Vector2f rotations, final double rotationSpeed, final MovementFix correctMovement, Priority priority) {
+    public void setRotations(final Vector2f rotations, final double rotationSpeed, final boolean correctMovement, Priority priority) {
         setRotations(rotations, rotationSpeed, correctMovement, null, priority);
     }
 
-    public void setRotations(final Vector2f rotations, final double rotationSpeed, final MovementFix correctMovement, final Function<Vector2f, Boolean> raycast, Priority priority) {
+    public void setRotations(final Vector2f rotations, final double rotationSpeed, final boolean correctMovement, final Function<Vector2f, Boolean> raycast, Priority priority) {
         if (rotations == null || Double.isNaN(rotations.x) || Double.isNaN(rotations.y) || Double.isInfinite(rotations.x) || Double.isInfinite(rotations.y)) {
             return;
         }
@@ -167,7 +165,7 @@ public class RotationManager {
     @EventHandler
     private void onMovementInput(MovementInputEvent event) {
         // 运动修正逻辑，确保在旋转状态下 WASD 依然指向正确的物理方向
-        if (active && correctMovement == MovementFix.ON && rotations != null) {
+        if (active && correctMovement && rotations != null) {
             MoveUtils.fixMovement(event, rotations.x);
         }
     }
