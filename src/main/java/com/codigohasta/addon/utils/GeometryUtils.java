@@ -1,4 +1,4 @@
-package com.codigohasta.addon.smarttpaura.utils;
+package com.codigohasta.addon.utils;
 
 import net.minecraft.util.math.Vec3d;
 
