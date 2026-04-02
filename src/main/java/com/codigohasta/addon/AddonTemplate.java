@@ -99,11 +99,26 @@ public class AddonTemplate extends MeteorAddon {
          modules.add(new MacroAnchor()); 
          modules.add(new ElytraFly());
          modules.add(new Follower());
-         modules.add(new Testfly());
          modules.add(new ArrowDmg());
          modules.add(new Pitcher());
          modules.add(new VillagerTrader());
          modules.add(new IMGWorldStats());
+         modules.add(new XTpaura());
+         modules.add(new EntityTags());
+         modules.add(new TpBowAura());
+         modules.add(new TpMachineGun());
+         modules.add(new AutoLibrarian());
+         modules.add(new SpearKill()); 
+         modules.add(new AntiLag());
+         modules.add(new SprintStatusModule());
+         
+
+
+
+        
+        
+         
+
 
          
 
