@@ -8,11 +8,15 @@ public class CamUtils {
     public static final ArrayList<Module> inUse = new ArrayList<>();
     public static float yaw = 0.0F;
     public static float pitch = 0.0F;
+    
+    // 【修复】增加 lastYaw 和 prevPitch 字段以匹配 EntityMixin
     public static float prevYaw = 0.0F;
+    public static float lastYaw = 0.0F; 
     public static float prevPitch = 0.0F;
 
     public static void changeLookDirection(double deltaX, double deltaY) {
         prevYaw = yaw;
+        lastYaw = yaw; // 保持同步
         prevPitch = pitch;
         yaw = (float) ((double) yaw + deltaX);
         pitch = (float) ((double) pitch + deltaY);

@@ -16,7 +16,8 @@
     "EntityMixin",
     "ClientPlayerEntityMixin",
     "MixinCamera"
-
+    
+    
   ],
   "injectors": {
     "defaultRequire": 1

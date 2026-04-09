@@ -2,22 +2,35 @@ package com.codigohasta.addon;
 
 import com.codigohasta.addon.commands.CommandExample;
 import com.codigohasta.addon.hud.HudExample;
+import com.codigohasta.addon.hud.TargetHud;
 // 导入所有模块
 import com.codigohasta.addon.modules.*;
 import com.mojang.logging.LogUtils;
 
+import meteordevelopment.meteorclient.MeteorClient;
 import meteordevelopment.meteorclient.addons.GithubRepo;
 import meteordevelopment.meteorclient.addons.MeteorAddon;
 import meteordevelopment.meteorclient.commands.Commands;
+import meteordevelopment.meteorclient.events.game.GameJoinedEvent;
+import meteordevelopment.meteorclient.events.game.GameLeftEvent;
 import meteordevelopment.meteorclient.systems.hud.Hud;
 import meteordevelopment.meteorclient.systems.hud.HudGroup;
 import meteordevelopment.meteorclient.systems.modules.Category;
 import meteordevelopment.meteorclient.systems.modules.Modules;
+import meteordevelopment.meteorclient.utils.player.ChatUtils;
+import meteordevelopment.meteorclient.utils.render.color.Color;
+import meteordevelopment.orbit.EventHandler;
+import net.minecraft.text.MutableText;
+import net.minecraft.text.Style;
+import net.minecraft.text.Text;
+import net.minecraft.text.TextColor;
 import org.slf4j.Logger;
 
 public class AddonTemplate extends MeteorAddon {
     public static final Logger LOG = LogUtils.getLogger();
-    
+
+    private boolean sentWelcome = false;
+
     public static final Category CATEGORY = new Category("IMG");
     public static final HudGroup HUD_GROUP = new HudGroup("IMG");
 
@@ -111,22 +124,18 @@ public class AddonTemplate extends MeteorAddon {
          modules.add(new SpearKill()); 
          modules.add(new AntiLag());
          modules.add(new SprintStatusModule());
-         
-
-
-
-        
-        
-         
-
-
-         
+         modules.add(new Backtrack());
+         modules.add(new PortalGodMode());
 
         // Commands
         Commands.add(new CommandExample());
 
         // HUD
         Hud.get().register(HudExample.INFO);
+        Hud.get().register(TargetHud.INFO);
+
+        // 注册事件总线以接收 GameJoinEvent
+        MeteorClient.EVENT_BUS.subscribe(this);
     }
 
     @Override
@@ -142,6 +151,37 @@ public class AddonTemplate extends MeteorAddon {
 
     @Override
     public GithubRepo getRepo() {
-        return new GithubRepo("MeteorDevelopment", "meteor-addon-template");
+        return new GithubRepo("adaxiaohu", "InvincibleMachineGun");
+    }
+
+    @EventHandler
+    private void onGameJoin(GameJoinedEvent event) {
+        if (sentWelcome) return;
+
+        ChatUtils.forceNextPrefixClass(getClass());
+        ChatUtils.sendMsg(createGradientText("成功装载没敌机关枪！b站Ada小虎：本插件开源免费。"));
+
+        sentWelcome = true;
+    }
+
+    @EventHandler
+    private void onGameLeave(GameLeftEvent event) {
+   
+        sentWelcome = false;
+    }
+
+    private Text createGradientText(String text) {
+        Color startColor = new Color(0, 255, 255); // 青色
+        Color endColor = new Color(255, 0, 255);   // 品红色
+        MutableText result = Text.empty();
+        for (int i = 0; i < text.length(); i++) {
+            float f = (float) i / (float) text.length();
+            int r = (int) (startColor.r + (endColor.r - startColor.r) * f);
+            int g = (int) (startColor.g + (endColor.g - startColor.g) * f);
+            int b = (int) (startColor.b + (endColor.b - startColor.b) * f);
+            Color stepColor = new Color(r, g, b, 255);
+            result.append(Text.literal(String.valueOf(text.charAt(i))).setStyle(Style.EMPTY.withColor(TextColor.fromRgb(stepColor.getPacked()))));
+        }
+        return result;
     }
 }

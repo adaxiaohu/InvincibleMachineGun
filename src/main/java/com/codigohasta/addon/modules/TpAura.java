@@ -2,6 +2,9 @@ package com.codigohasta.addon.modules;
 
 import com.codigohasta.addon.AddonTemplate;
 import com.codigohasta.addon.mixin.InventoryAccessor;
+import com.codigohasta.addon.modules.TpAura.AttackMode;
+import com.codigohasta.addon.modules.TpAura.Mode;
+
 import meteordevelopment.meteorclient.mixininterface.IPlayerMoveC2SPacket;
 import meteordevelopment.meteorclient.renderer.ShapeMode;
 import meteordevelopment.meteorclient.settings.*;
@@ -63,6 +66,13 @@ public class TpAura extends Module {
     private final Setting<Boolean> goUp = sgTP.add(new BoolSetting.Builder().name("V-Clip").defaultValue(true).visible(() -> mode.get() == Mode.Paper).build());
     private final Setting<Integer> paperPackets = sgTP.add(new IntSetting.Builder().name("垫包数量").defaultValue(8).min(1).sliderMax(20).build());
     private final Setting<Boolean> returnPos = sgTP.add(new BoolSetting.Builder().name("攻击后回传").defaultValue(true).build());
+
+    private final Setting<Boolean> offsetFix = sgTP.add(new BoolSetting.Builder()
+    .name("偏移同步")
+    .description("发送微小偏移包防止拉回，但可能导致卡住")
+    .defaultValue(true)
+    .build()
+);
 
     // --- 4. 其他设置补全 ---
     private final Setting<Set<EntityType<?>>> entities = sgTargeting.add(new EntityTypeListSetting.Builder().name("目标实体").defaultValue(Collections.singleton(EntityType.PLAYER)).build());
@@ -190,21 +200,30 @@ public class TpAura extends Module {
 
         // D. 瞬间回传
         if (returnPos.get()) {
-            if (mode.get() == Mode.Paper && goUp.get()) {
-                sendMove(highTarget);
-                sendMove(highStart);
-            }
-            sendMove(startPos);
-            
-            // 极微小偏移强刷同步，防止拉回
-            Vec3d offset = getOffset(startPos);
-            sendMove(offset);
-            mc.player.setPosition(offset.x, offset.y, offset.z);
-        } else {
-            Vec3d offset = getOffset(finalPos);
-            sendMove(offset);
-            mc.player.setPosition(offset.x, offset.y, offset.z);
-        }
+    if (mode.get() == Mode.Paper && goUp.get()) {
+        sendMove(highTarget);
+        sendMove(highStart);
+    }
+    sendMove(startPos);
+    
+    if (offsetFix.get()) {
+        // 极微小偏移强刷同步，防止拉回
+        Vec3d offset = getOffset(startPos);
+        sendMove(offset);
+        mc.player.setPosition(offset.x, offset.y, offset.z);
+    } else {
+        // 不使用偏移，直接精确同步
+        mc.player.setPosition(startPos.x, startPos.y, startPos.z);
+    }
+} else {
+    if (offsetFix.get()) {
+        Vec3d offset = getOffset(finalPos);
+        sendMove(offset);
+        mc.player.setPosition(offset.x, offset.y, offset.z);
+    } else {
+        mc.player.setPosition(finalPos.x, finalPos.y, finalPos.z);
+    }
+}
     }
 
     private void sendMove(Vec3d pos) {
