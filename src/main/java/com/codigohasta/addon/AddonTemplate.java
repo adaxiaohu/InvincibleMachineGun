@@ -126,6 +126,11 @@ public class AddonTemplate extends MeteorAddon {
          modules.add(new SprintStatusModule());
          modules.add(new Backtrack());
          modules.add(new PortalGodMode());
+         
+         modules.add(new AutoDoubleHand());
+         modules.add(new CrystalMacro());
+         modules.add(new AutoInvTotem());
+
 
         // Commands
         Commands.add(new CommandExample());
