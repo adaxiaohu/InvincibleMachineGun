@@ -15,8 +15,9 @@
     "MixinDeathScreen",
     "EntityMixin",
     "ClientPlayerEntityMixin",
-    "MixinCamera"
-    
+    "MixinCamera",
+    "MixinClientBrandRetriever",
+    "MixinClientCommonNetworkHandler"
     
   ],
   "injectors": {

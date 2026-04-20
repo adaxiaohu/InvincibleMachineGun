@@ -5,6 +5,7 @@ import com.codigohasta.addon.hud.HudExample;
 import com.codigohasta.addon.hud.TargetHud;
 // 导入所有模块
 import com.codigohasta.addon.modules.*;
+
 import com.mojang.logging.LogUtils;
 
 import meteordevelopment.meteorclient.MeteorClient;
@@ -126,10 +127,12 @@ public class AddonTemplate extends MeteorAddon {
          modules.add(new SprintStatusModule());
          modules.add(new Backtrack());
          modules.add(new PortalGodMode());
+        
          
          modules.add(new AutoDoubleHand());
          modules.add(new CrystalMacro());
          modules.add(new AutoInvTotem());
+         modules.add(new SonarBypass());
 
 
         // Commands

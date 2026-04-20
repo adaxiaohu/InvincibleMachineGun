@@ -17,6 +17,8 @@ import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityType;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.entity.passive.TameableEntity;
+import meteordevelopment.meteorclient.systems.friends.Friends;
 import net.minecraft.network.packet.c2s.play.HandSwingC2SPacket;
 import net.minecraft.network.packet.c2s.play.PlayerInteractEntityC2SPacket;
 import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket;
@@ -129,6 +131,27 @@ public class XTpaura extends Module {
         .name("目标优先级")
         .description("选择目标的优先级排序方式。")
         .defaultValue(SortPriority.LowestDistance)
+        .build()
+    );
+
+    private final Setting<Boolean> ignoreFriends = sgGeneral.add(new BoolSetting.Builder()
+        .name("忽略好友")
+        .description("忽略好友列表中的玩家。")
+        .defaultValue(false)
+        .build()
+    );
+
+    private final Setting<Boolean> ignoreNamed = sgGeneral.add(new BoolSetting.Builder()
+        .name("忽略命名实体")
+        .description("忽略带有自定义名称的实体。")
+        .defaultValue(false)
+        .build()
+    );
+
+    private final Setting<Boolean> ignoreTamed = sgGeneral.add(new BoolSetting.Builder()
+        .name("忽略驯服实体")
+        .description("忽略被驯服的生物。")
+        .defaultValue(false)
         .build()
     );
 
@@ -256,7 +279,10 @@ private void onRender3D(Render3DEvent event) {
         if (mc.player.distanceTo(entity) > range.get()) return false;
         if (entity instanceof PlayerEntity p) {
             if (p.isCreative() || p.isSpectator()) return false;
+            if (ignoreFriends.get() && Friends.get().isFriend(p)) return false;
         }
+        if (ignoreNamed.get() && entity.hasCustomName()) return false;
+        if (ignoreTamed.get() && entity instanceof TameableEntity && ((TameableEntity) entity).isTamed()) return false;
         return true;
     }
 

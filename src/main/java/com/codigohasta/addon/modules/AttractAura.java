@@ -62,6 +62,7 @@ public class AttractAura extends Module {
     );
 
     // --- 目标过滤 ---
+    private final Setting<Boolean> ignoreFriends = sgFilters.add(new BoolSetting.Builder().name("忽略好友").defaultValue(true).build());
     private final Setting<Boolean> followSurvival = sgFilters.add(new BoolSetting.Builder().name("生存模式").defaultValue(true).build());
     private final Setting<Boolean> followAdventure = sgFilters.add(new BoolSetting.Builder().name("冒险模式").defaultValue(true).build());
     private final Setting<Boolean> followCreative = sgFilters.add(new BoolSetting.Builder().name("创造模式").defaultValue(false).build());
@@ -83,7 +84,7 @@ public class AttractAura extends Module {
     private boolean isTargetValid(PlayerEntity player) {
         if (player == null || player == mc.player || !player.isAlive()) return false;
         if (mode.get() != Mode.锁定 && mc.player.distanceTo(player) > range.get() + 30) return false;
-        if (!Friends.get().shouldAttack(player)) return false;
+        if (ignoreFriends.get() && !Friends.get().shouldAttack(player)) return false;
         
         if (mc.getNetworkHandler() == null) return false;
         PlayerListEntry entry = mc.getNetworkHandler().getPlayerListEntry(player.getUuid());

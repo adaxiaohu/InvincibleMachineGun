@@ -25,6 +25,8 @@ import net.minecraft.block.Blocks;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityType;
 import net.minecraft.entity.LivingEntity;
+import net.minecraft.entity.ai.TargetPredicate;
+import net.minecraft.entity.passive.TameableEntity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.*;
 import net.minecraft.network.packet.c2s.play.*;
@@ -76,7 +78,12 @@ public class TpAura extends Module {
 
     // --- 4. 其他设置补全 ---
     private final Setting<Set<EntityType<?>>> entities = sgTargeting.add(new EntityTypeListSetting.Builder().name("目标实体").defaultValue(Collections.singleton(EntityType.PLAYER)).build());
-    private final Setting<Boolean> ignoreNamed = sgTargeting.add(new BoolSetting.Builder().name("忽略命名实体").defaultValue(true).build());
+    
+    // 条件开关设置
+    private final Setting<Boolean> ignoreFriends = sgTargeting.add(new BoolSetting.Builder().name("忽略好友").defaultValue(false).description("开启后不将好友设为攻击目标").build());
+    private final Setting<Boolean> ignoreNamed = sgTargeting.add(new BoolSetting.Builder().name("忽略命名").defaultValue(true).description("开启后不将命名实体设为攻击目标").build());
+    private final Setting<Boolean> ignoreTamed = sgTargeting.add(new BoolSetting.Builder().name("忽略驯服").defaultValue(false).description("开启后不将驯服的生物设为攻击目标").build());
+    
     public enum ListMode { Whitelist, Blacklist, Off }
     private final Setting<ListMode> listMode = sgWhitelist.add(new EnumSetting.Builder<ListMode>().name("名单模式").defaultValue(ListMode.Off).build());
     private final Setting<String> playerList = sgWhitelist.add(new StringSetting.Builder().name("玩家列表").defaultValue("").build());
@@ -283,6 +290,22 @@ public class TpAura extends Module {
         if (!(entity instanceof LivingEntity) || !entity.isAlive() || entity == mc.player) return false;
         if (!entities.get().contains(entity.getType())) return false;
         if (mc.player.distanceTo(entity) > maxRange.get()) return false;
+        
+        // 条件开关过滤
+        if (ignoreFriends.get() && entity instanceof PlayerEntity p && Friends.get().isFriend(p)) {
+            return false; // 忽略好友
+        }
+        if (ignoreNamed.get() && entity.hasCustomName()) {
+            return false; // 忽略命名实体
+        }
+        if (ignoreTamed.get()) {
+            // 检查实体是否被驯服（适用于狼、猫等可驯服生物）
+            if (entity instanceof TameableEntity tameable && tameable.isTamed()) {
+                return false; // 忽略驯服的生物
+            }
+        }
+        
+        // 玩家特殊处理
         if (entity instanceof PlayerEntity p) {
             if (p.isCreative() || p.isSpectator()) return false;
             if (!Friends.get().shouldAttack(p)) return false;
@@ -291,7 +314,8 @@ public class TpAura extends Module {
             if (listMode.get() == ListMode.Whitelist && !list.contains(name)) return false;
             if (listMode.get() == ListMode.Blacklist && list.contains(name)) return false;
         }
-        return !ignoreNamed.get() || !entity.hasCustomName();
+        
+        return true;
     }
 
     @Override

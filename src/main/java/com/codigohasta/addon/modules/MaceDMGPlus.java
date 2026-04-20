@@ -152,6 +152,13 @@ public class MaceDMGPlus extends Module {
         .build()
     );
 
+    private final Setting<Boolean> ignoreFriends = sgTargeting.add(new BoolSetting.Builder()
+        .name("忽略好友")
+        .description("开启后不将好友设为攻击目标")
+        .defaultValue(false)
+        .build()
+    );
+
     // --- Whitelist/Blacklist (名单设置) ---
     public enum ListMode {
         Whitelist, // 白名单
@@ -409,6 +416,10 @@ public class MaceDMGPlus extends Module {
         if (entity instanceof PlayerEntity p) {
             if (!players.get()) return false;
             if (p.isCreative()) return false;
+            
+            // 忽略好友检查
+            if (ignoreFriends.get() && Friends.get().isFriend(p)) return false;
+            
             if (!Friends.get().shouldAttack(p)) return false;
 
             // 名单检查逻辑
