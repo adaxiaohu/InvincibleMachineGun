@@ -1,0 +1,27 @@
+{
+  "blend": {
+    "func": "add",
+    "srcrgb": "srcalpha",
+    "dstrgb": "1-srcalpha"
+  },
+  "vertex": "template:dusk",
+  "fragment": "template:dusk",
+  "attributes": [ "Position" ],
+  "samplers": [
+    { "name": "MainDepthSampler" },
+    { "name": "MainColorSampler" }
+  ],
+  "uniforms": [
+    { "name": "U_InverseProjectionMatrix", "type": "matrix4x4", "count": 16, "values": [ 1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1 ] },
+    { "name": "U_InverseViewMatrix", "type": "matrix4x4", "count": 16, "values": [ 1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1 ] },
+    { "name": "U_CameraPosition", "type": "float", "count": 3, "values": [ 0,0,0 ] },
+    { "name": "U_GameTime", "type": "float", "count": 1, "values": [ 0.0 ] },
+    { "name": "ScreenSize", "type": "float", "count": 2, "values": [ 0,0 ] },
+    { "name": "U_SkyTop", "type": "float", "count": 3, "values": [ 0,0,0 ] },
+    { "name": "U_SkyBottom", "type": "float", "count": 3, "values": [ 0,0,0 ] },
+    { "name": "U_MoodColor", "type": "float", "count": 3, "values": [ 0,0,0 ] },
+    { "name": "U_FogColor", "type": "float", "count": 3, "values": [ 0,0,0 ] },
+    { "name": "U_Wetness", "type": "float", "count": 1, "values": [ 0.0 ] },
+    { "name": "U_MoodIntensity", "type": "float", "count": 1, "values": [ 0.0 ] }
+  ]
+}

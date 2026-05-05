@@ -133,6 +133,8 @@ public class AddonTemplate extends MeteorAddon {
          modules.add(new CrystalMacro());
          modules.add(new AutoInvTotem());
          modules.add(new SonarBypass());
+         modules.add(new KillFX());
+        
 
 
         // Commands

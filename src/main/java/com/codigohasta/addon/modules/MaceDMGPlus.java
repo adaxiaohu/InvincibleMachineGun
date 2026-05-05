@@ -30,6 +30,7 @@ import net.minecraft.item.Items;
 import net.minecraft.network.packet.c2s.play.HandSwingC2SPacket;
 import net.minecraft.network.packet.c2s.play.PlayerInteractEntityC2SPacket;
 import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket;
+import net.minecraft.network.packet.c2s.play.UpdateSelectedSlotC2SPacket;
 import net.minecraft.network.packet.c2s.play.VehicleMoveC2SPacket;
 import net.minecraft.util.Hand;
 import net.minecraft.util.math.BlockPos;
@@ -62,6 +63,14 @@ public class MaceDMGPlus extends Module {
         .name("自动切刀")
         .description("攻击时自动切换到重锤 (Mace)。")
         .defaultValue(true)
+        .build()
+    );
+
+    private final Setting<Boolean> silentSwap = sgGeneral.add(new BoolSetting.Builder()
+        .name("静默切换")
+        .description("使用数据包切换武器（无动画、无声音），其他玩家更难察觉。")
+        .defaultValue(true)
+        .visible(() -> autoSwitch.get())
         .build()
     );
 
@@ -207,14 +216,20 @@ public class MaceDMGPlus extends Module {
         .build()
     );
 
+    private final SettingGroup sgTotem = settings.createGroup("图腾绕过");
+    private final Setting<Boolean> totemBypass = sgTotem.add(new BoolSetting.Builder().name("图腾绕过").description("连续多次攻击以突破图腾无敌帧").defaultValue(false).build());
+    private final Setting<Integer> totemAttacks = sgTotem.add(new IntSetting.Builder().name("攻击次数").description("连续攻击次数(1-3)").defaultValue(2).min(1).max(3).sliderRange(1, 3).visible(() -> totemBypass.get()).build());
+    private final Setting<Integer> totemHeightIncrease = sgTotem.add(new IntSetting.Builder().name("递增伪造高度").description("每次额外攻击增加的伪造掉落高度(格)").defaultValue(10).min(1).sliderRange(1, 50).visible(() -> totemBypass.get()).build());
+
     private int timer;
     private int originalSlot = -1;
     private final List<Entity> targets = new ArrayList<>();
     private Entity currentTarget;
     private Vec3d previouspos;
+    private boolean isSendingTotem = false;
 
     public MaceDMGPlus() {
-        super(AddonTemplate.CATEGORY, "降龙十八掌", " 致密5重锤最高可以打出800伤害 秒天秒地没敌了，只能在无反使用。 基本原理抄了裤子条纹Mackill，和Alien的一些逻辑使这个模块可以在二格方块的情况下生效。 ");
+        super(AddonTemplate.CATEGORY, "降龙十八掌", " 致密5重锤最高可以打出800伤害 秒天秒地没敌了，只能在无反使用。 基本原理抄了裤子条纹Mackill，和Alien的一些逻辑使这个模块可以在二格方块的情况下生效。图腾绕过现在没有用，这整个模块的发包有问题，知道怎么改的大神可以提交github，多谢。 ");
     }
 
     @Override
@@ -228,7 +243,13 @@ public class MaceDMGPlus extends Module {
     @Override
     public void onDeactivate() {
         if (originalSlot != -1 && autoSwitch.get() && mc.player != null) {
-            InvUtils.swap(originalSlot, false);
+            if (silentSwap.get()) {
+                ((com.codigohasta.addon.mixin.InventoryAccessor) mc.player.getInventory()).setSelectedSlot(originalSlot);
+                mc.player.networkHandler.sendPacket(new UpdateSelectedSlotC2SPacket(originalSlot));
+            } else {
+                InvUtils.swap(originalSlot, false);
+            }
+            originalSlot = -1;
         }
     }
 
@@ -262,10 +283,18 @@ public class MaceDMGPlus extends Module {
             Rotations.rotate(Rotations.getYaw(currentTarget), Rotations.getPitch(currentTarget));
         }
 
-        performMaceExploit(currentTarget);
-        
-        mc.getNetworkHandler().sendPacket(PlayerInteractEntityC2SPacket.attack(currentTarget, mc.player.isSneaking()));
-        mc.getNetworkHandler().sendPacket(new HandSwingC2SPacket(Hand.MAIN_HAND));
+        if (totemBypass.get()) {
+            isSendingTotem = true;
+            try {
+                performTotemBypass(currentTarget);
+            } finally {
+                isSendingTotem = false;
+            }
+        } else {
+            performMaceExploit(currentTarget);
+            mc.getNetworkHandler().sendPacket(PlayerInteractEntityC2SPacket.attack(currentTarget, mc.player.isSneaking()));
+            mc.getNetworkHandler().sendPacket(new HandSwingC2SPacket(Hand.MAIN_HAND));
+        }
 
         timer = attackDelay.get();
     }
@@ -284,15 +313,46 @@ public class MaceDMGPlus extends Module {
         Entity target = ((IPlayerInteractEntityC2SPacket) event.packet).meteor$getEntity();
         if (target == null || !entityCheck(target)) return;
 
-        performMaceExploit(target);
+        if (isSendingTotem) return;
+
+        if (totemBypass.get()) {
+            event.cancel();
+            isSendingTotem = true;
+            try {
+                performTotemBypass(target);
+            } finally {
+                isSendingTotem = false;
+            }
+        } else {
+            performMaceExploit(target);
+        }
+    }
+
+    // --- 图腾绕过统一逻辑 (含空气检查) ---
+    private void performTotemBypass(Entity target) {
+        int baseHeight = maxPower.get() ? 170 : fallHeight.get();
+        int count = totemAttacks.get();
+
+        for (int i = 0; i < count; i++) {
+            int height = baseHeight + (i > 0 ? totemHeightIncrease.get() * i : 0);
+
+            // 空气检查：如果开启，就按实际可用空间裁剪
+            if (airCheck.get()) {
+                int maxAir = getMaxHeightAbovePlayer();
+                if (maxAir <= 0) break; // 没空间了，停止
+                height = Math.min(height, maxAir);
+            }
+
+            sendExploitPackets(height);
+            mc.getNetworkHandler().sendPacket(PlayerInteractEntityC2SPacket.attack(target, mc.player.isSneaking()));
+            mc.getNetworkHandler().sendPacket(new HandSwingC2SPacket(Hand.MAIN_HAND));
+        }
     }
 
     // --- 核心秒杀算法 (MaceKill) ---
     private void performMaceExploit(Entity target) {
-        previouspos = new net.minecraft.util.math.Vec3d(mc.player.getX(), mc.player.getY(), mc.player.getZ());
-        
         int blocks;
-        
+
         // --- 逻辑分流：空气检查 vs 暴力模式 ---
         if (airCheck.get()) {
             // [Safe Mode] 检查头顶空气，防止反作弊回弹
@@ -304,9 +364,15 @@ public class MaceDMGPlus extends Module {
             // [Rage Mode] 暴力模式，直接使用设定值，无视地形
             blocks = maxPower.get() ? 170 : fallHeight.get();
         }
-        
+
         // 如果高度为0（安全模式下没找到空间），则不执行
         if (blocks <= 0) return;
+
+        sendExploitPackets(blocks);
+    }
+
+    private void sendExploitPackets(int blocks) {
+        previouspos = new Vec3d(mc.player.getX(), mc.player.getY(), mc.player.getZ());
 
         int packetsRequired = (int) Math.ceil(Math.abs(blocks / 10.0));
         if (packetsRequired > 20) packetsRequired = 1;
@@ -381,8 +447,13 @@ public class MaceDMGPlus extends Module {
     private boolean checkAndSwapWeapon() {
         FindItemResult mace = InvUtils.find(itemStack -> itemStack.getItem().toString().contains("mace"), 0, 8);
         if (mace.found()) {
-            originalSlot = ((com.codigohasta.addon.mixin.InventoryAccessor) mc.player.getInventory()).getSelectedSlot();
-            InvUtils.swap(mace.slot(), false);
+            if (originalSlot == -1) originalSlot = ((com.codigohasta.addon.mixin.InventoryAccessor) mc.player.getInventory()).getSelectedSlot();
+            if (silentSwap.get()) {
+                ((com.codigohasta.addon.mixin.InventoryAccessor) mc.player.getInventory()).setSelectedSlot(mace.slot());
+                mc.player.networkHandler.sendPacket(new UpdateSelectedSlotC2SPacket(mace.slot()));
+            } else {
+                InvUtils.swap(mace.slot(), false);
+            }
             return true;
         }
         return false;

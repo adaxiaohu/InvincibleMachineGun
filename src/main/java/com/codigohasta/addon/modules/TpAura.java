@@ -60,6 +60,13 @@ public class TpAura extends Module {
     private final Setting<Boolean> autoSwitch = sgGeneral.add(new BoolSetting.Builder().name("自动切武器").defaultValue(true).build());
     private final Setting<Boolean> requireMace = sgGeneral.add(new BoolSetting.Builder().name("仅手持重锤").defaultValue(false).build());
     private final Setting<Boolean> swingHand = sgGeneral.add(new BoolSetting.Builder().name("挥手").defaultValue(true).build());
+    private final Setting<Boolean> silentSwap = sgGeneral.add(new BoolSetting.Builder()
+        .name("静默切换")
+        .description("使用数据包切换武器（无动画、无声音），其他玩家更难察觉。切换时会在客户端显示武器图标。")
+        .defaultValue(true)
+        .visible(() -> autoSwitch.get())
+        .build()
+    );
 
     // --- 3. TP Settings ---
     public enum Mode { Vanilla, Paper }
@@ -91,14 +98,20 @@ public class TpAura extends Module {
     private final Setting<SettingColor> pathColor = sgRender.add(new ColorSetting.Builder().name("轨迹颜色").defaultValue(new SettingColor(255, 0, 0, 100)).build());
     private final Setting<SettingColor> targetColor = sgRender.add(new ColorSetting.Builder().name("目标颜色").defaultValue(new SettingColor(255, 0, 0, 200)).build());
 
+    private final SettingGroup sgTotem = settings.createGroup("图腾绕过");
+    private final Setting<Boolean> totemBypass = sgTotem.add(new BoolSetting.Builder().name("图腾绕过").description("连续多次攻击以突破图腾无敌帧，仅Paper模式有效").defaultValue(false).build());
+    private final Setting<Integer> totemAttacks = sgTotem.add(new IntSetting.Builder().name("攻击次数").description("连续攻击次数(1-3)").defaultValue(2).min(1).max(3).sliderRange(1, 3).visible(() -> totemBypass.get()).build());
+    private final Setting<Integer> totemHeightIncrease = sgTotem.add(new IntSetting.Builder().name("递增高度").description("每次额外攻击增加的下落高度").defaultValue(9).min(1).sliderRange(1, 100).visible(() -> totemBypass.get()).build());
+
     private final List<Entity> targets = new ArrayList<>();
     private final List<Vec3d> renderPathNodes = new ArrayList<>();
     private Entity currentTarget;
     private int originalSlot = -1;
     private int delayTimer = 0;
+    private boolean justSwapped = false;
 
     public TpAura() {
-        super(AddonTemplate.CATEGORY, "如来神掌", "从天而降的掌法哈哈。抄袭了裤子条纹的tp。娱乐功能");
+        super(AddonTemplate.CATEGORY, "如来神掌", "从天而降的掌法。抄袭了裤子条纹的tp。娱乐功能");
     }
 
     @Override
@@ -111,7 +124,12 @@ public class TpAura extends Module {
     @Override
     public void onDeactivate() {
         if (originalSlot != -1 && autoSwitch.get() && mc.player != null) {
-            ((InventoryAccessor) mc.player.getInventory()).setSelectedSlot(originalSlot);
+            if (silentSwap.get()) {
+                ((InventoryAccessor) mc.player.getInventory()).setSelectedSlot(originalSlot);
+                mc.player.networkHandler.sendPacket(new UpdateSelectedSlotC2SPacket(originalSlot));
+            } else {
+                ((InventoryAccessor) mc.player.getInventory()).setSelectedSlot(originalSlot);
+            }
             originalSlot = -1;
         }
     }
@@ -133,19 +151,27 @@ public class TpAura extends Module {
                 
                 if (weapon.found()) {
                     if (originalSlot == -1) originalSlot = ((InventoryAccessor) mc.player.getInventory()).getSelectedSlot();
-                    InvUtils.swap(weapon.slot(), false);
-                    return; // 重要：切完刀立刻停止这一刻，防止0蓄力打击
+                    if (silentSwap.get()) {
+                        ((InventoryAccessor) mc.player.getInventory()).setSelectedSlot(weapon.slot());
+                        mc.player.networkHandler.sendPacket(new UpdateSelectedSlotC2SPacket(weapon.slot()));
+                    } else {
+                        InvUtils.swap(weapon.slot(), false);
+                    }
+                    justSwapped = true;
+                    // 不再 return — 让代码继续执行到攻击阶段
+                } else {
+                    return; // 没找到武器，放弃这一 tick
                 }
             }
         }
 
-        // 2. 蓄力检查（解决1.7伤害的核心）
-        if (attackMode.get() == AttackMode.Smart) {
-            // 1.21中，0.0f 或 0.5f 都可以获取进度，如果总是不打，试着微调这个值
+        // 2. 蓄力检查 — 如果刚切了武器则跳过，直接攻击
+        if (attackMode.get() == AttackMode.Smart && !justSwapped) {
             if (mc.player.getAttackCooldownProgress(0.5f) < cooldownThreshold.get()) {
-                return; // 蓄力没满，继续等待
+                return;
             }
         }
+        justSwapped = false;
 
         // 3. 额外延迟处理
         if (delayTimer > 0) {
@@ -194,43 +220,70 @@ public class TpAura extends Module {
             mc.player.networkHandler.sendPacket(new PlayerMoveC2SPacket.OnGroundOnly(false, mc.player.horizontalCollision));
         }
 
-        // B. 瞬间移动序列
-        if (mode.get() == Mode.Paper && goUp.get()) {
-            sendMove(highStart);
-            sendMove(highTarget);
+        boolean totemMode = totemBypass.get() && mode.get() == Mode.Paper;
+
+        // B. 攻击阶段
+        if (totemMode) {
+            // 图腾绕过：多次递增高度攻击以突破无敌帧
+            int attackCount = totemAttacks.get();
+            int currentHeight = (int) reach;
+
+            for (int i = 0; i < attackCount; i++) {
+                int blocks = (i == 0) ? (int) reach : currentHeight;
+
+                if (mc.world != null) {
+                    int worldTop = mc.world.getTopYInclusive() - 1;
+                    if (finalPos.y + blocks > worldTop) {
+                        blocks = (int) (worldTop - finalPos.y);
+                        if (blocks < 1) break;
+                    }
+                }
+
+                Vec3d progressiveAbove = finalPos.add(0, blocks, 0);
+                if (goUp.get()) sendMove(progressiveAbove);
+                sendMove(finalPos);
+
+                if (swingHand.get()) mc.player.swingHand(Hand.MAIN_HAND);
+                mc.player.networkHandler.sendPacket(PlayerInteractEntityC2SPacket.attack(target, mc.player.isSneaking()));
+
+                currentHeight += totemHeightIncrease.get();
+            }
+        } else {
+            // 原版单次攻击
+            if (mode.get() == Mode.Paper && goUp.get()) {
+                sendMove(highStart);
+                sendMove(highTarget);
+            }
+            sendMove(finalPos);
+
+            if (swingHand.get()) mc.player.swingHand(Hand.MAIN_HAND);
+            mc.player.networkHandler.sendPacket(PlayerInteractEntityC2SPacket.attack(target, mc.player.isSneaking()));
         }
-        sendMove(finalPos);
 
-        // C. 攻击
-        if (swingHand.get()) mc.player.swingHand(Hand.MAIN_HAND);
-        mc.player.networkHandler.sendPacket(PlayerInteractEntityC2SPacket.attack(target, mc.player.isSneaking()));
-
-        // D. 瞬间回传
+        // C. 瞬间回传
         if (returnPos.get()) {
-    if (mode.get() == Mode.Paper && goUp.get()) {
-        sendMove(highTarget);
-        sendMove(highStart);
-    }
-    sendMove(startPos);
-    
-    if (offsetFix.get()) {
-        // 极微小偏移强刷同步，防止拉回
-        Vec3d offset = getOffset(startPos);
-        sendMove(offset);
-        mc.player.setPosition(offset.x, offset.y, offset.z);
-    } else {
-        // 不使用偏移，直接精确同步
-        mc.player.setPosition(startPos.x, startPos.y, startPos.z);
-    }
-} else {
-    if (offsetFix.get()) {
-        Vec3d offset = getOffset(finalPos);
-        sendMove(offset);
-        mc.player.setPosition(offset.x, offset.y, offset.z);
-    } else {
-        mc.player.setPosition(finalPos.x, finalPos.y, finalPos.z);
-    }
-}
+            if (mode.get() == Mode.Paper && goUp.get() && !totemMode) {
+                sendMove(highTarget);
+                sendMove(highStart);
+            }
+            sendMove(startPos);
+
+            if (offsetFix.get()) {
+                Vec3d offset = getOffset(startPos);
+                sendMove(offset);
+                mc.player.setPosition(offset.x, offset.y, offset.z);
+            } else {
+                mc.player.setPosition(startPos.x, startPos.y, startPos.z);
+            }
+        } else {
+            if (offsetFix.get()) {
+                Vec3d offset = getOffset(finalPos);
+                sendMove(offset);
+                mc.player.setPosition(offset.x, offset.y, offset.z);
+            } else {
+                mc.player.setPosition(finalPos.x, finalPos.y, finalPos.z);
+            }
+        }
     }
 
     private void sendMove(Vec3d pos) {
