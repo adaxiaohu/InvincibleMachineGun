@@ -24,7 +24,8 @@ public class AutoTPAccept extends Module {
 
     public enum Action {
         Accept("接受"),
-        Deny("拒绝");
+        Deny("拒绝"),
+        Custom("自定义");
 
         private final String title;
         Action(String title) { this.title = title; }
@@ -62,6 +63,23 @@ public class AutoTPAccept extends Module {
         .build()
     );
 
+    // 警告：模块会无条件执行自定义指令，请勿填入危险命令（如 /stop, /kill）
+    private final Setting<List<String>> customKeywords = sgGeneral.add(new StringListSetting.Builder()
+        .name("自定义检测关键词")
+        .description("自定义模式下检测的关键词列表，与下方指令一一对应。")
+        .defaultValue()
+        .visible(() -> action.get() == Action.Custom)
+        .build()
+    );
+
+    private final Setting<List<String>> customCommands = sgGeneral.add(new StringListSetting.Builder()
+        .name("自定义执行指令")
+        .description("自定义模式下执行的指令列表，与上方关键词一一对应。检测到关键词[n]则执行指令[n]。")
+        .defaultValue()
+        .visible(() -> action.get() == Action.Custom)
+        .build()
+    );
+
     // --- 调试设置 ---
     private final Setting<Boolean> debug = sgDebug.add(new BoolSetting.Builder()
         .name("开启调试")
@@ -87,46 +105,61 @@ public class AutoTPAccept extends Module {
                 info("[Debug-收到] " + rawMessage);
             }
 
-            // 1. 关键词初筛
-            boolean hasKeyword = false;
-            for (String k : keywords.get()) {
-                if (rawMessage.contains(k)) {
-                    hasKeyword = true;
-                    break;
-                }
-            }
-
-            if (!hasKeyword) return;
-
-            if (debug.get()) info("[Debug] 关键词匹配成功！开始寻找指令...");
-
-            // 2. 挖掘所有指令
-            List<String> foundCommands = new ArrayList<>();
-            collectCommands(textComponent, foundCommands);
-
-            if (foundCommands.isEmpty()) {
-                if (debug.get()) warning("[Debug] 消息里没找到任何可点击的指令！可能是JSON结构太深。");
-                return;
-            }
-
-            if (debug.get()) info("[Debug] 找到的所有指令: " + foundCommands);
-
-            // 3. 筛选正确的指令 (接受/拒绝)
+            // 1. 关键词初筛 & 指令选择
             String targetCommand = null;
-            for (String cmd : foundCommands) {
-                // 转换为小写方便比较
-                String lower = cmd.toLowerCase();
-                
-                boolean isAccept = lower.contains("accept") || lower.contains("yes") || lower.contains("confirm");
-                boolean isDeny = lower.contains("deny") || lower.contains("no") || lower.contains("cancel") || lower.contains("reject");
 
-                if (action.get() == Action.Accept && isAccept) {
-                    targetCommand = cmd;
-                    break;
+            if (action.get() == Action.Custom) {
+                // ---- 自定义模式：关键词 ↔ 指令配对 ----
+                List<String> customKwds = customKeywords.get();
+                List<String> customCmds = customCommands.get();
+                int minSize = Math.min(customKwds.size(), customCmds.size());
+                for (int i = 0; i < minSize; i++) {
+                    if (rawMessage.contains(customKwds.get(i))) {
+                        targetCommand = customCmds.get(i);
+                        if (debug.get()) info("[Debug] 自定义模式匹配：\"" + customKwds.get(i) + "\" → \"" + targetCommand + "\"");
+                        break;
+                    }
                 }
-                if (action.get() == Action.Deny && isDeny) {
-                    targetCommand = cmd;
-                    break;
+                if (targetCommand == null) return;
+            } else {
+                // ---- 接受/拒绝模式（原有逻辑） ----
+                boolean hasKeyword = false;
+                for (String k : keywords.get()) {
+                    if (rawMessage.contains(k)) {
+                        hasKeyword = true;
+                        break;
+                    }
+                }
+                if (!hasKeyword) return;
+
+                if (debug.get()) info("[Debug] 关键词匹配成功！开始寻找指令...");
+
+                // 2. 挖掘所有指令
+                List<String> foundCommands = new ArrayList<>();
+                collectCommands(textComponent, foundCommands);
+
+                if (foundCommands.isEmpty()) {
+                    if (debug.get()) warning("[Debug] 消息里没找到任何可点击的指令！可能是JSON结构太深。");
+                    return;
+                }
+
+                if (debug.get()) info("[Debug] 找到的所有指令: " + foundCommands);
+
+                // 3. 筛选正确的指令 (接受/拒绝)
+                for (String cmd : foundCommands) {
+                    String lower = cmd.toLowerCase();
+
+                    boolean isAccept = lower.contains("accept") || lower.contains("yes") || lower.contains("confirm");
+                    boolean isDeny = lower.contains("deny") || lower.contains("no") || lower.contains("cancel") || lower.contains("reject");
+
+                    if (action.get() == Action.Accept && isAccept) {
+                        targetCommand = cmd;
+                        break;
+                    }
+                    if (action.get() == Action.Deny && isDeny) {
+                        targetCommand = cmd;
+                        break;
+                    }
                 }
             }
 
@@ -162,7 +195,11 @@ public class AutoTPAccept extends Module {
                     ChatUtils.sendPlayerMsg(finalCmd);
                 }
                 
-                info((action.get() == Action.Accept ? "已接受" : "已拒绝") + " TPA请求。");
+                if (action.get() == Action.Custom) {
+                    info("已执行自定义指令：" + targetCommand);
+                } else {
+                    info((action.get() == Action.Accept ? "已接受" : "已拒绝") + " TPA请求。");
+                }
             } else {
                 if (debug.get()) warning("[Debug] 找到了点击事件，但没有符合模式(" + action.get() + ")的指令。");
             }

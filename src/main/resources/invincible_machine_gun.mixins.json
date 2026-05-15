@@ -3,6 +3,7 @@
   "minVersion": "0.8",
   "package": "com.codigohasta.addon.mixin",
   "compatibilityLevel": "JAVA_21",
+  "refmap": "invincible-machine-gun-refmap.json",
   "mixin": [],
   "client": [
     "MixinClientPlayerEntity",
@@ -17,8 +18,20 @@
     "ClientPlayerEntityMixin",
     "MixinCamera",
     "MixinClientBrandRetriever",
-    "MixinClientCommonNetworkHandler"
-    
+    "MixinClientCommonNetworkHandler",
+    "MixinAbstractBlockState",
+    "MixinClientPlayerEntitySprint",
+    "MixinLivingEntitySprint",
+    "LivingEntityAccessor",
+    "MixinIMGEndCrystalRenderer",
+    "MixinIMGEndCrystalEntityModel",
+    "MixinIMGPlayerEntityRenderer",
+    "MixinIMGHeldItemRenderer",
+    "MixinIMGItemRenderer",
+    "MixinScreenOverlay",
+    "MixinIMGTotemParticle",
+    "ParticleVelocityAccessor",
+    "BillboardParticleInvoker"
   ],
   "injectors": {
     "defaultRequire": 1

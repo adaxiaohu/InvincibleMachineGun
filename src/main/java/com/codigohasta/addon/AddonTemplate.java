@@ -5,6 +5,7 @@ import com.codigohasta.addon.hud.HudExample;
 import com.codigohasta.addon.hud.TargetHud;
 // 导入所有模块
 import com.codigohasta.addon.modules.*;
+import com.codigohasta.addon.utils.alien.AlienBreakManager;
 
 import com.mojang.logging.LogUtils;
 
@@ -108,6 +109,7 @@ public class AddonTemplate extends MeteorAddon {
         modules.add(new adaAutoHotbar());
         modules.add(new ODMGear());
         modules.add(new AdaPacketMine());
+        modules.add(new AlienV4PacketMine());
         modules.add(new SchematicPro());
         
          modules.add(new MacroAnchor()); 
@@ -134,8 +136,20 @@ public class AddonTemplate extends MeteorAddon {
          modules.add(new AutoInvTotem());
          modules.add(new SonarBypass());
          modules.add(new KillFX());
-        
+         modules.add(new AlienSprint());
+         modules.add(new CameraClip());
+         modules.add(new MotionCamera());
+         modules.add(new Panic());
+         modules.add(new Trajectories());
+         modules.add(new IMGChams());
+         modules.add(new IMGPopChams());
+         modules.add(new IMGTips());
+         modules.add(new IMGTotemParticle());
+         modules.add(new IMGFakePlayer());
 
+         // BreakESP module - 挖掘显示 (必须放在AlienBreakManager初始化之前)
+         modules.add(new BreakESP());
+         new AlienBreakManager();
 
         // Commands
         Commands.add(new CommandExample());

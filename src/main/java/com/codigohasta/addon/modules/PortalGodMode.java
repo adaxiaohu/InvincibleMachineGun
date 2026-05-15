@@ -17,7 +17,7 @@ public class PortalGodMode extends Module {
     private final List<TeleportConfirmC2SPacket> packets = new ArrayList<>();
 
     public PortalGodMode() {
-        super(AddonTemplate.CATEGORY, "portal-god-mode", "穿越地狱门后进入没敌状态，不会受到任何物理伤害，但是无法靠走的移动，可以用没影珍珠，紫颂果进行移动。");
+        super(AddonTemplate.CATEGORY, "没敌", "穿越地狱门后进入没敌状态，不会受到任何物理伤害，但是无法靠走的移动，可以用没影珍珠，紫颂果进行移动。");
     }
 
     @Override

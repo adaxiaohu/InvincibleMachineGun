@@ -48,9 +48,12 @@ dependencies {
     modCompileOnly("meteordevelopment:baritone:1.21.11-SNAPSHOT")
 
     modCompileOnly(fileTree("libs") { include("*.jar") })
-     
+}
 
-    
+loom {
+    mixin {
+        useLegacyMixinAp = true
+    }
 }
 
 tasks {
