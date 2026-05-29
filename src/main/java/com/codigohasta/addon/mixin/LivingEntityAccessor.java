@@ -14,4 +14,7 @@ public interface LivingEntityAccessor {
 
     @Accessor("lastLeaningPitch")
     void setLastLeaningPitch(float value);
+
+    @Accessor("jumpingCooldown")
+    void setJumpingCooldown(int value);
 }

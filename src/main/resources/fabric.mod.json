@@ -12,6 +12,7 @@
   },
   "icon": "assets/template/icon.png",
   "environment": "client",
+  "accessWidener": "invincible-machine-gun.accesswidener",
   "entrypoints": {
     "meteor": [
       "com.codigohasta.addon.AddonTemplate"

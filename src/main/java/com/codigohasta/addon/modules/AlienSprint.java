@@ -103,7 +103,7 @@ public class AlienSprint extends Module {
     @EventHandler
     public void onTick(TickEvent.Pre event) {
         if (mc.player == null || mc.world == null) return;
-        if (mc.player.getPose().name().equals("FALL_FLYING")) return;
+        if (mc.player.getPose().name().equals("GLIDING")) return;
 
         AlienRotationUtil.shouldRotate = false;
 

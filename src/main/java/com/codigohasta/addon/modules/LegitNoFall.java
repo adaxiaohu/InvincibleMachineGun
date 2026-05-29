@@ -23,35 +23,17 @@ import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.RaycastContext;
 import net.minecraft.world.World;
 
-import java.lang.reflect.Field;
 import java.util.function.Predicate;
 
 public class LegitNoFall extends Module {
 
-    private static Field selectedSlotField;
-    static {
-        try {
-            selectedSlotField = net.minecraft.entity.player.PlayerInventory.class.getDeclaredField("selectedSlot");
-            selectedSlotField.setAccessible(true);
-        } catch (NoSuchFieldException e) {
-            e.printStackTrace();
-        }
-    }
     private int getSelectedSlot() {
-        try {
-            if (mc.player == null) return 0;
-            return selectedSlotField.getInt(mc.player.getInventory());
-        } catch (Exception e) {
-            return 0;
-        }
+        if (mc.player == null) return 0;
+        return mc.player.getInventory().getSelectedSlot();
     }
     private void setSelectedSlot(int slot) {
-        try {
-            if (mc.player == null) return;
-            selectedSlotField.setInt(mc.player.getInventory(), slot);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
+        if (mc.player == null) return;
+        mc.player.getInventory().setSelectedSlot(slot);
     }
 
     private final SettingGroup sgGeneral = this.settings.getDefaultGroup();

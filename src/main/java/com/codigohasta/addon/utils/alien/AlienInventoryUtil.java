@@ -20,6 +20,7 @@ public class AlienInventoryUtil {
    private static final MinecraftClient mc = MinecraftClient.getInstance();
 
    public static void switchToSlot(int slot) {
+      if (slot < 0 || slot > 8) return;
       ((InventoryAccessor) mc.player.getInventory()).setSelectedSlot(slot);
       mc.getNetworkHandler().sendPacket(new UpdateSelectedSlotC2SPacket(slot));
    }

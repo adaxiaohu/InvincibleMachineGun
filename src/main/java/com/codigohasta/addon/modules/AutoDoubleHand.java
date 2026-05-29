@@ -28,7 +28,7 @@ public class AutoDoubleHand extends Module {
     private int delayTimer = 0;
 
     public AutoDoubleHand() {
-        super(AddonTemplate.CATEGORY, "Legit自动双持", "爆图腾后切至快捷栏图腾");
+        super(AddonTemplate.CATEGORY, "自动双持", "合法风味模块。爆图腾后切至快捷栏图腾");
     }
 
     @Override

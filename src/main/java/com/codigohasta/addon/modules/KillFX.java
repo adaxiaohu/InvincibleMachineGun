@@ -395,7 +395,9 @@ public class KillFX extends Module {
             attackedTargets.entrySet().removeIf(entry -> now - entry.getValue() > threshold);
         }
 
-        for (Entity entity : mc.world.getEntities()) {
+        List<Entity> entities = new ArrayList<>();
+        mc.world.getEntities().forEach(entities::add);
+        for (Entity entity : entities) {
             if (entity instanceof LivingEntity living && entity != mc.player) {
                 if (living.getHealth() <= 0.0f || living.isDead()) {
                     

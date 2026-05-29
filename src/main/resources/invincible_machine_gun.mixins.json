@@ -23,6 +23,7 @@
     "MixinClientPlayerEntitySprint",
     "MixinLivingEntitySprint",
     "LivingEntityAccessor",
+    "MixinLivingEntity",
     "MixinIMGEndCrystalRenderer",
     "MixinIMGEndCrystalEntityModel",
     "MixinIMGPlayerEntityRenderer",
@@ -31,7 +32,19 @@
     "MixinScreenOverlay",
     "MixinIMGTotemParticle",
     "ParticleVelocityAccessor",
-    "BillboardParticleInvoker"
+    "BillboardParticleInvoker",
+    "MixinAmbienceFogRenderer",
+    "MixinAmbienceSkyRendering",
+    "MixinAmbienceLightmapTextureManager",
+    "MixinAmbienceAbstractBlockState",
+    "MixinAmbienceWorld",
+    "MixinAmbienceCloudRenderer",
+    "MixinBMWClientPlayerEntity",
+    "MixinBMWLivingEntity",
+    "IVec3d",
+    "MixinKeyboardInput",
+    "MixinFireworkRocketEntity",
+    "MixinPlayerEntity"
   ],
   "injectors": {
     "defaultRequire": 1

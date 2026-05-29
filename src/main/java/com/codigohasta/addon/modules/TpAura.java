@@ -4,6 +4,7 @@ import com.codigohasta.addon.AddonTemplate;
 import com.codigohasta.addon.mixin.InventoryAccessor;
 import com.codigohasta.addon.modules.TpAura.AttackMode;
 import com.codigohasta.addon.modules.TpAura.Mode;
+import com.codigohasta.addon.utils.leaveshack.InventoryUtil;
 
 import meteordevelopment.meteorclient.mixininterface.IPlayerMoveC2SPacket;
 import meteordevelopment.meteorclient.renderer.ShapeMode;
@@ -30,6 +31,7 @@ import net.minecraft.entity.passive.TameableEntity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.*;
 import net.minecraft.network.packet.c2s.play.*;
+import net.minecraft.screen.slot.SlotActionType;
 import net.minecraft.util.Hand;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Box;
@@ -107,8 +109,9 @@ public class TpAura extends Module {
     private final List<Vec3d> renderPathNodes = new ArrayList<>();
     private Entity currentTarget;
     private int originalSlot = -1;
+    private int silentSwapSlot = -1;
+    private int silentSwapPrevSlot = -1;
     private int delayTimer = 0;
-    private boolean justSwapped = false;
 
     public TpAura() {
         super(AddonTemplate.CATEGORY, "如来神掌", "从天而降的掌法。抄袭了裤子条纹的tp。娱乐功能");
@@ -117,65 +120,98 @@ public class TpAura extends Module {
     @Override
     public void onActivate() {
         originalSlot = -1;
+        silentSwapSlot = -1;
+        silentSwapPrevSlot = -1;
         delayTimer = 0;
         renderPathNodes.clear();
     }
 
     @Override
     public void onDeactivate() {
-        if (originalSlot != -1 && autoSwitch.get() && mc.player != null) {
-            if (silentSwap.get()) {
-                ((InventoryAccessor) mc.player.getInventory()).setSelectedSlot(originalSlot);
-                mc.player.networkHandler.sendPacket(new UpdateSelectedSlotC2SPacket(originalSlot));
-            } else {
-                ((InventoryAccessor) mc.player.getInventory()).setSelectedSlot(originalSlot);
-            }
+        if (silentSwapSlot != -1 && mc.player != null) {
+            swapBackWeapon();
+        }
+        if (originalSlot != -1 && autoSwitch.get() && !silentSwap.get() && mc.player != null) {
+            ((InventoryAccessor) mc.player.getInventory()).setSelectedSlot(originalSlot);
             originalSlot = -1;
         }
+    }
+
+    private int findWeaponInventorySlot() {
+        for (int i = 0; i < 45; i++) {
+            String name = mc.player.getInventory().getStack(i).getItem().toString().toLowerCase();
+            if (name.contains("sword") || name.contains("mace") || name.contains("axe")) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private boolean checkAndSwapWeapon() {
+        String itemMain = mc.player.getMainHandStack().getItem().toString().toLowerCase();
+        boolean isWeapon = itemMain.contains("sword") || itemMain.contains("mace") || itemMain.contains("axe");
+        if (isWeapon && !(requireMace.get() && !itemMain.contains("mace"))) return true;
+
+        if (silentSwap.get()) {
+            int slot = findWeaponInventorySlot();
+            if (slot != -1) {
+                silentSwapSlot = slot;
+                silentSwapPrevSlot = ((InventoryAccessor) mc.player.getInventory()).getSelectedSlot();
+                if (slot >= 36) {
+                    InventoryUtil.switchToSlot(slot - 36);
+                } else {
+                    mc.interactionManager.clickSlot(mc.player.currentScreenHandler.syncId, slot, 0, SlotActionType.SWAP, mc.player);
+                    InventoryUtil.switchToSlot(0);
+                }
+                return true;
+            }
+        } else {
+            FindItemResult weapon = InvUtils.find(s -> {
+                String name = s.getItem().toString().toLowerCase();
+                return name.contains("sword") || name.contains("mace") || name.contains("axe");
+            }, 0, 8);
+            if (weapon.found()) {
+                if (originalSlot == -1) originalSlot = ((InventoryAccessor) mc.player.getInventory()).getSelectedSlot();
+                InvUtils.swap(weapon.slot(), false);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void swapBackWeapon() {
+        if (silentSwapSlot == -1) return;
+        if (silentSwapSlot >= 36) {
+            InventoryUtil.switchToSlot(silentSwapPrevSlot);
+        } else {
+            mc.interactionManager.clickSlot(mc.player.currentScreenHandler.syncId, silentSwapSlot, 0, SlotActionType.SWAP, mc.player);
+            InventoryUtil.switchToSlot(silentSwapPrevSlot);
+            mc.player.networkHandler.sendPacket(new CloseHandledScreenC2SPacket(mc.player.currentScreenHandler.syncId));
+        }
+        silentSwapSlot = -1;
+        silentSwapPrevSlot = -1;
     }
 
     @EventHandler
     private void onTick(TickEvent.Pre event) {
         if (mc.player == null || mc.world == null) return;
 
-        // 1. 武器判断与自动切换（使用字符串比对，彻底避开符号找不到的问题）
+        // 1. 武器切换
         if (autoSwitch.get()) {
-            String itemMain = mc.player.getMainHandStack().getItem().toString().toLowerCase();
-            boolean isWeapon = itemMain.contains("sword") || itemMain.contains("mace") || itemMain.contains("axe");
-
-            if (!isWeapon || (requireMace.get() && !itemMain.contains("mace"))) {
-                FindItemResult weapon = InvUtils.find(s -> {
-                    String name = s.getItem().toString().toLowerCase();
-                    return name.contains("sword") || name.contains("mace") || name.contains("axe");
-                }, 0, 8);
-                
-                if (weapon.found()) {
-                    if (originalSlot == -1) originalSlot = ((InventoryAccessor) mc.player.getInventory()).getSelectedSlot();
-                    if (silentSwap.get()) {
-                        ((InventoryAccessor) mc.player.getInventory()).setSelectedSlot(weapon.slot());
-                        mc.player.networkHandler.sendPacket(new UpdateSelectedSlotC2SPacket(weapon.slot()));
-                    } else {
-                        InvUtils.swap(weapon.slot(), false);
-                    }
-                    justSwapped = true;
-                    // 不再 return — 让代码继续执行到攻击阶段
-                } else {
-                    return; // 没找到武器，放弃这一 tick
-                }
-            }
+            if (!checkAndSwapWeapon()) return;
         }
 
-        // 2. 蓄力检查 — 如果刚切了武器则跳过，直接攻击
-        if (attackMode.get() == AttackMode.Smart && !justSwapped) {
+        // 2. 蓄力检查
+        if (attackMode.get() == AttackMode.Smart) {
             if (mc.player.getAttackCooldownProgress(0.5f) < cooldownThreshold.get()) {
                 return;
             }
         }
-        justSwapped = false;
 
         // 3. 额外延迟处理
         if (delayTimer > 0) {
             delayTimer--;
+            swapBackWeapon();
             return;
         }
 
@@ -184,13 +220,15 @@ public class TpAura extends Module {
         TargetUtils.getList(targets, this::entityCheck, SortPriority.LowestDistance, 1);
         if (targets.isEmpty()) {
             currentTarget = null;
+            swapBackWeapon();
             return;
         }
         currentTarget = targets.get(0);
 
         // 5. 执行瞬移轰炸
         executeTrouserAttack(currentTarget);
-        
+        swapBackWeapon();
+
         // 6. 重置延迟计时器
         delayTimer = attackDelay.get();
     }

@@ -364,7 +364,7 @@ public class AlienV4PacketMine extends Module {
     private boolean shouldYawStep() {
         if (!yawStep.get()) return false;
         if (whenElytra.get()) return true;
-        return !mc.player.getPose().name().equals("FALL_FLYING");
+        return !mc.player.getPose().name().equals("GLIDING");
     }
 
     boolean faceVector(Vec3d directionVec) {
@@ -455,7 +455,17 @@ public class AlienV4PacketMine extends Module {
         }
 
         if (switchBack != null) {
-            switchBack.run();
+            if (AlienEntityUtil.inInventory() || hotBar.get()) {
+                switchBack.run();
+            } else {
+                // Screen changed (e.g. merchant UI opened) — can't SWAP, just send STOP_DESTROY
+                if (breakPos != null) {
+                    mc.getNetworkHandler().sendPacket(new PlayerActionC2SPacket(Action.STOP_DESTROY_BLOCK, breakPos, AlienBlockUtil.getClickSide(breakPos)));
+                }
+                breakNumber++;
+                delayTimer.reset();
+                startTime.reset();
+            }
             switchBack = null;
         }
 
@@ -604,10 +614,12 @@ public class AlienV4PacketMine extends Module {
                                                 if (shouldSwitch) {
                                                     if (hotBar.get()) {
                                                         AlienInventoryUtil.switchToSlot(old);
-                                                    } else {
+                                                    } else if (AlienEntityUtil.inInventory()) {
                                                         int fs = finalSlot < 9 ? finalSlot + 36 : finalSlot;
                                                         mc.interactionManager.clickSlot(mc.player.currentScreenHandler.syncId, fs, old, SlotActionType.SWAP, mc.player);
                                                         AlienEntityUtil.syncInventory();
+                                                    } else if (old >= 0 && old <= 8) {
+                                                        AlienInventoryUtil.switchToSlot(old);
                                                     }
                                                 }
                                             } else {
@@ -618,10 +630,12 @@ public class AlienV4PacketMine extends Module {
                                                 if (shouldSwitch) {
                                                     if (hotBar.get()) {
                                                         AlienInventoryUtil.switchToSlot(old);
-                                                    } else {
+                                                    } else if (AlienEntityUtil.inInventory()) {
                                                         int fs = finalSlot < 9 ? finalSlot + 36 : finalSlot;
                                                         mc.interactionManager.clickSlot(mc.player.currentScreenHandler.syncId, fs, old, SlotActionType.SWAP, mc.player);
                                                         AlienEntityUtil.syncInventory();
+                                                    } else if (old >= 0 && old <= 8) {
+                                                        AlienInventoryUtil.switchToSlot(old);
                                                     }
                                                 }
                                                 breakNumber++;
@@ -754,7 +768,7 @@ public class AlienV4PacketMine extends Module {
 
         if (event.packet instanceof PlayerMoveC2SPacket) {
             if (bypassGround.get()
-                && !mc.player.getPose().name().equals("FALL_FLYING")
+                && !mc.player.getPose().name().equals("GLIDING")
                 && breakPos != null
                 && !isAir(breakPos)
                 && bypassTime.get() > 0
@@ -952,8 +966,10 @@ public class AlienV4PacketMine extends Module {
 
     void doSwap(int slot, int inv) {
         if (!inventory.get()) {
+            if (slot < 0 || slot > 8) return;
             AlienInventoryUtil.switchToSlot(slot);
         } else {
+            if (inv == -1) return;
             AlienInventoryUtil.inventorySwap(inv, ((InventoryAccessor) mc.player.getInventory()).getSelectedSlot());
         }
     }
@@ -1010,7 +1026,7 @@ public class AlienV4PacketMine extends Module {
         boolean inWeb = checkWeb.get() && isInWeb(mc.player) && mc.world.getBlockState(breakPos).getBlock() == Blocks.COBWEB;
         if ((!mc.player.isOnGround() || inWeb)
             && checkGround.get()
-            && (!smart.get() || mc.player.getPose().name().equals("FALL_FLYING") || inWeb)) {
+            && (!smart.get() || mc.player.getPose().name().equals("GLIDING") || inWeb)) {
             digSpeed /= 5.0F;
         }
         return digSpeed < 0.0F ? 0.0F : digSpeed;

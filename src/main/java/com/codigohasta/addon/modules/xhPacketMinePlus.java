@@ -218,8 +218,8 @@ public class xhPacketMinePlus extends Module {
                     }
 
                     // --- Bypass Ground 核心逻辑 (修复版) ---
-                    // 修复: 使用字符串检查避免编译错误 (EntityPose.FALL_FLYING)
-                    boolean isFallFlying = mc.player.getPose().name().equals("FALL_FLYING");
+                    // 修复: 使用字符串检查避免编译错误 (EntityPose.GLIDING)
+                    boolean isFallFlying = mc.player.getPose().name().equals("GLIDING");
                     
                     if (bypassGround.get() && !isFallFlying && !data.getState().isAir()) {
                         // 发送一个位置包，标记 onGround = true

@@ -22,6 +22,10 @@ public class AlienEntityUtil {
    private static final MinecraftClient mc = MinecraftClient.getInstance();
 
    public static boolean inInventory() {
+      if (mc.player == null) return false;
+      if (!(mc.player.currentScreenHandler instanceof net.minecraft.screen.PlayerScreenHandler)) {
+         return false;
+      }
       return mc.currentScreen == null
          || mc.currentScreen instanceof GameOptionsScreen
          || mc.currentScreen instanceof OptionsScreen

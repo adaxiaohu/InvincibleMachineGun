@@ -101,6 +101,7 @@ public class AddonTemplate extends MeteorAddon {
         modules.add(new FillESP());
         modules.add(new ScaffoldPlus());
          modules.add(new LegitNoFall());
+        modules.add(new NoFallimg());
 
         modules.add(new xhPacketMinePlus());
         modules.add(new ElytraFlyPlus());
@@ -146,6 +147,23 @@ public class AddonTemplate extends MeteorAddon {
          modules.add(new IMGTips());
          modules.add(new IMGTotemParticle());
          modules.add(new IMGFakePlayer());
+         modules.add(new GlobalSetting());
+         modules.add(new PlaceRender());
+         modules.add(new AutoTorch());
+         modules.add(new AutoRefreshTrade());
+         modules.add(new AutoCrystal());
+         modules.add(new AutoAnchor());
+         modules.add(new PistonCrystal());
+         modules.add(new ScaffoldPlusLeaves());
+         modules.add(new LegitNoFallLeaves());
+         modules.add(new PrinterLeaves());
+         modules.add(new PacketMinePlus());
+         modules.add(new AutoCity());
+         modules.add(new FireworkElytraFly());
+         modules.add(new Stuck());
+         modules.add(new Ambience());
+         modules.add(new Freeze());
+         modules.add(new BMWSprint());
 
          // BreakESP module - 挖掘显示 (必须放在AlienBreakManager初始化之前)
          modules.add(new BreakESP());

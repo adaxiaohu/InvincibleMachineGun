@@ -3,6 +3,8 @@ package com.codigohasta.addon.modules;
 import net.minecraft.util.math.Vec3d;
 
 import com.codigohasta.addon.AddonTemplate;
+import com.codigohasta.addon.mixin.InventoryAccessor;
+import com.codigohasta.addon.utils.leaveshack.InventoryUtil;
 import meteordevelopment.meteorclient.events.packets.PacketEvent;
 import meteordevelopment.meteorclient.events.render.Render3DEvent;
 import meteordevelopment.meteorclient.events.world.TickEvent;
@@ -26,8 +28,9 @@ import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.passive.TameableEntity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.Items;
-
+import net.minecraft.network.packet.c2s.play.CloseHandledScreenC2SPacket;
 import net.minecraft.network.packet.c2s.play.HandSwingC2SPacket;
+import net.minecraft.screen.slot.SlotActionType;
 import net.minecraft.network.packet.c2s.play.PlayerInteractEntityC2SPacket;
 import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket;
 import net.minecraft.network.packet.c2s.play.UpdateSelectedSlotC2SPacket;
@@ -223,6 +226,8 @@ public class MaceDMGPlus extends Module {
 
     private int timer;
     private int originalSlot = -1;
+    private int silentSwapSlot = -1;
+    private int silentSwapPrevSlot = -1;
     private final List<Entity> targets = new ArrayList<>();
     private Entity currentTarget;
     private Vec3d previouspos;
@@ -236,19 +241,19 @@ public class MaceDMGPlus extends Module {
     public void onActivate() {
         timer = 0;
         originalSlot = -1;
+        silentSwapSlot = -1;
+        silentSwapPrevSlot = -1;
         targets.clear();
         currentTarget = null;
     }
 
     @Override
     public void onDeactivate() {
-        if (originalSlot != -1 && autoSwitch.get() && mc.player != null) {
-            if (silentSwap.get()) {
-                ((com.codigohasta.addon.mixin.InventoryAccessor) mc.player.getInventory()).setSelectedSlot(originalSlot);
-                mc.player.networkHandler.sendPacket(new UpdateSelectedSlotC2SPacket(originalSlot));
-            } else {
-                InvUtils.swap(originalSlot, false);
-            }
+        if (silentSwapSlot != -1 && mc.player != null) {
+            swapBackWeapon();
+        }
+        if (originalSlot != -1 && autoSwitch.get() && !silentSwap.get() && mc.player != null) {
+            InvUtils.swap(originalSlot, false);
             originalSlot = -1;
         }
     }
@@ -275,6 +280,7 @@ public class MaceDMGPlus extends Module {
 
         if (targets.isEmpty()) {
             currentTarget = null;
+            swapBackWeapon();
             return;
         }
         currentTarget = targets.get(0);
@@ -295,6 +301,7 @@ public class MaceDMGPlus extends Module {
             mc.getNetworkHandler().sendPacket(PlayerInteractEntityC2SPacket.attack(currentTarget, mc.player.isSneaking()));
             mc.getNetworkHandler().sendPacket(new HandSwingC2SPacket(Hand.MAIN_HAND));
         }
+        swapBackWeapon();
 
         timer = attackDelay.get();
     }
@@ -445,18 +452,43 @@ public class MaceDMGPlus extends Module {
     }
 
     private boolean checkAndSwapWeapon() {
-        FindItemResult mace = InvUtils.find(itemStack -> itemStack.getItem().toString().contains("mace"), 0, 8);
-        if (mace.found()) {
-            if (originalSlot == -1) originalSlot = ((com.codigohasta.addon.mixin.InventoryAccessor) mc.player.getInventory()).getSelectedSlot();
-            if (silentSwap.get()) {
-                ((com.codigohasta.addon.mixin.InventoryAccessor) mc.player.getInventory()).setSelectedSlot(mace.slot());
-                mc.player.networkHandler.sendPacket(new UpdateSelectedSlotC2SPacket(mace.slot()));
-            } else {
-                InvUtils.swap(mace.slot(), false);
+        if (mc.player.getMainHandStack().getItem().toString().contains("mace")) return true;
+
+        if (silentSwap.get()) {
+            int slot = InventoryUtil.findItemInventorySlot(Items.MACE);
+            if (slot != -1) {
+                silentSwapSlot = slot;
+                silentSwapPrevSlot = ((InventoryAccessor) mc.player.getInventory()).getSelectedSlot();
+                if (slot >= 36) {
+                    InventoryUtil.switchToSlot(slot - 36);
+                } else {
+                    mc.interactionManager.clickSlot(mc.player.currentScreenHandler.syncId, slot, 0, SlotActionType.SWAP, mc.player);
+                    InventoryUtil.switchToSlot(0);
+                }
+                return true;
             }
-            return true;
+        } else {
+            FindItemResult mace = InvUtils.find(itemStack -> itemStack.getItem().toString().contains("mace"), 0, 8);
+            if (mace.found()) {
+                if (originalSlot == -1) originalSlot = ((InventoryAccessor) mc.player.getInventory()).getSelectedSlot();
+                InvUtils.swap(mace.slot(), false);
+                return true;
+            }
         }
         return false;
+    }
+
+    private void swapBackWeapon() {
+        if (silentSwapSlot == -1) return;
+        if (silentSwapSlot >= 36) {
+            InventoryUtil.switchToSlot(silentSwapPrevSlot);
+        } else {
+            mc.interactionManager.clickSlot(mc.player.currentScreenHandler.syncId, silentSwapSlot, 0, SlotActionType.SWAP, mc.player);
+            InventoryUtil.switchToSlot(silentSwapPrevSlot);
+            mc.player.networkHandler.sendPacket(new CloseHandledScreenC2SPacket(mc.player.currentScreenHandler.syncId));
+        }
+        silentSwapSlot = -1;
+        silentSwapPrevSlot = -1;
     }
 
     private int getMaxHeightAbovePlayer() {
