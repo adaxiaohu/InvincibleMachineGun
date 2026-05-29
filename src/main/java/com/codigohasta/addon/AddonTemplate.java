@@ -164,6 +164,7 @@ public class AddonTemplate extends MeteorAddon {
          modules.add(new Ambience());
          modules.add(new Freeze());
          modules.add(new BMWSprint());
+         modules.add(new AutoVault());
 
          // BreakESP module - 挖掘显示 (必须放在AlienBreakManager初始化之前)
          modules.add(new BreakESP());

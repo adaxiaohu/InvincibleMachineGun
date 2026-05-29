@@ -51,6 +51,7 @@ dependencies {
 }
 
 loom {
+    accessWidenerPath = file("src/main/resources/invincible-machine-gun.accesswidener")
     mixin {
         useLegacyMixinAp = true
     }

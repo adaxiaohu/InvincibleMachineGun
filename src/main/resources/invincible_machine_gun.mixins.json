@@ -3,7 +3,7 @@
   "minVersion": "0.8",
   "package": "com.codigohasta.addon.mixin",
   "compatibilityLevel": "JAVA_21",
-  "refmap": "invincible-machine-gun-refmap.json",
+  "refmap": "InvincibleMachineGun1.21.11-refmap.json",
   "mixin": [],
   "client": [
     "MixinClientPlayerEntity",
