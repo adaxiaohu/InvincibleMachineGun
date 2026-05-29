@@ -25,14 +25,14 @@ A personal addon for the Meteor client that adds various entertainment modules. 
 
 ---
 
-## 1.21.11 版模块完整介绍（67 个模块）
+## 1.21.11 版模块完整介绍（85 个模块）
 
 ### 战斗类模块 (Combat)
+- TpAura - 传送攻击光环，tp 靠近目标重锤劈头
 - MaceAura - 狼牙棒自动攻击光环
 - MaceBreakerPro - 专业狼牙棒破坏者
-- MaceDMGPlus - 狼牙棒伤害增强
+- MaceDMGPlus - 狼牙棒伤害增强（静默切换）
 - CrossbowAura - 弩箭自动攻击光环
-- TpAura - 传送攻击光环
 - AttractAura - 吸引光环
 - TargetStrafe - 目标环绕攻击
 - SwordGap - 剑与金苹果自动切换
@@ -40,26 +40,36 @@ A personal addon for the Meteor client that adds various entertainment modules. 
 - AdvancedCriticals - 高级暴击系统
 - GrimCriticals - 致命暴击系统
 - AttackRangeIndicator - 攻击范围指示器
+- AutoCrystal - 自动水晶
+- PistonCrystal - 活塞水晶
+- AutoCity - 自动挖脚/踩脚底
 - HitboxESP - 实体碰撞箱显示
 - ShieldESP - 盾牌 ESP 显示
 
 ### 移动类模块 (Movement)
-- ElytraFlyPlus - 鞘翅飞行增强版
+- ElytraFly - 鞘翅飞行（alien 移植）
 - ElytraFollower - 鞘翅跟随器
 - FlightAntiKick - 飞行防踢
 - VelocityAlien - 速度控制
 - KnockbackDirection - 击退方向控制
 - LegitNoFall - 合法无摔落伤害
+- LegitNoFallLeaves - Leaves 版摔落保护
+- NoFallimg - 没摔伤
+- BMWSprint - BMW 强制疾跑
+- Freeze - 冻结
+- Stuck - 定身术
 - AutoJump - 自动跳跃
 - AutoRespawn - 自动重生
 - PearlPhase - 末影珍珠穿墙
 - ODMGear - ODM 装备移动
-- ElytraFly-  甲飞鞘翅
 
 ### 挖掘类模块 (Mining)
 - ScaffoldPlus - 脚手架增强版
+- ScaffoldPlusLeaves - Leaves 版脚手架
 - xhPacketMinePlus - 数据包挖掘增强
+- PacketMinePlus - 发包挖掘3（leaves 新版）
 - AdaPacketMine - Ada 数据包挖掘
+- AlienV4PacketMine - 发包挖掘V4（alien 移植）
 - TntBomber - TNT 轰炸机
 - AntiAntiXray - 反反矿物透视
 - OreVeinESP - 矿脉 ESP 显示
@@ -68,10 +78,12 @@ A personal addon for the Meteor client that adds various entertainment modules. 
 - RTsearch - 实时搜索
 
 ### 自动操作类模块 (Automation)
+- AutoRefreshTrade - 自动刷村民附魔书（挖放讲台循环）
 - AutoChestAura - 箱子自动开启光环
 - AutoChorus - 紫颂果自动使用
 - AutoDeoxidizer - 自动除锈器
 - AutoFirework - 自动烟花
+- AutoTorch - 自动插火把
 - AutoSmithing - 自动锻造
 - AutoTPAccept - 自动接受传送
 - AutoServer - 自动服务器连接
@@ -83,6 +95,8 @@ A personal addon for the Meteor client that adds various entertainment modules. 
 - FastCrossbow - 快速弩箭装填
 
 ### 视觉类模块 (Visual)
+- Ambience - 环境/视觉修改
+- PlaceRender - 放置方块渲染
 - PortalESP - 传送门 ESP 显示
 - CustomItemESP - 自定义物品 ESP
 - ModuleList - 模块列表显示
@@ -101,23 +115,17 @@ A personal addon for the Meteor client that adds various entertainment modules. 
 - FeedbackBlocker - 反馈屏蔽器
 
 ### 实用工具类模块 (Utility)
+- GlobalSetting - Leaves 全局设置
 - AdvancedFakePlayer - 高级假人
 - adaManualCrystal - 手动水晶放置
 - adaAutoHotbar - 自动快捷栏
 - adaAttributeSwap - 属性交换
 - MassTpa - 批量传送请求
+- FireworkElytraFly - 烟花鞘翅飞行
 - MusicPlayer - 音乐播放器
 - SchematicPro - 专业建筑方案
-
-### 模块特点总结
-这些模块具有以下共同特点：
-- 基于 Meteor 客户端框架开发
-- 支持中文界面和设置
-- 包含详细的配置选项
-- 具有实时渲染和事件处理功能
-- 针对 PVP 和生存模式优化
-
-每个模块都提供了特定的游戏功能增强，从基础的自动操作到高级的战斗辅助，涵盖了 Minecraft 游戏的各个方面。这些模块的设计目标是提高游戏效率和玩家体验，特别是在竞争性游戏环境中。（包括这个介绍列表也是 AI 生成）
+- PrinterLeaves - Leaves 版打印/建筑辅助
+- AutoAnchor - 自动放置锚点
 
 ---
 
