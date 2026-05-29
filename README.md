@@ -25,45 +25,58 @@ A personal addon for the Meteor client that adds various entertainment modules. 
 
 ---
 
-## 1.21.11 版模块完整介绍（85 个模块）
+## 1.21.11 版模块完整介绍（126 个模块）
 
-### 战斗类模块 (Combat)
+### 战斗类模块 (Combat) — 25 个
 - TpAura - 传送攻击光环，tp 靠近目标重锤劈头
 - MaceAura - 狼牙棒自动攻击光环
 - MaceBreakerPro - 专业狼牙棒破坏者
 - MaceDMGPlus - 狼牙棒伤害增强（静默切换）
 - CrossbowAura - 弩箭自动攻击光环
+- TpBowAura - 传送弓攻击光环
+- TpMachineGun - 传送机关枪
+- XTpaura - X 传送光环
 - AttractAura - 吸引光环
 - TargetStrafe - 目标环绕攻击
 - SwordGap - 剑与金苹果自动切换
 - SpearExploit - 长矛利用技巧
-- AdvancedCriticals - 高级暴击系统
-- GrimCriticals - 致命暴击系统
-- AttackRangeIndicator - 攻击范围指示器
+- SpearKill - 长矛击杀
+- Backtrack - 回溯
+- CrystalMacro - 水晶宏
 - AutoCrystal - 自动水晶
 - PistonCrystal - 活塞水晶
 - AutoCity - 自动挖脚/踩脚底
+- ArrowDmg - 弓箭伤害增强
+- GAntiExplosion - 防爆炸
+- AdvancedCriticals - 高级暴击系统
+- GrimCriticals - 致命暴击系统
+- AttackRangeIndicator - 攻击范围指示器
 - HitboxESP - 实体碰撞箱显示
 - ShieldESP - 盾牌 ESP 显示
 
-### 移动类模块 (Movement)
-- ElytraFly - 鞘翅飞行（alien 移植）
+### 移动类模块 (Movement) — 20 个
+- ElytraFly - 鞘翅飞行（alien 移植版）
+- ElytraFlyPlus - 鞘翅飞行增强版
 - ElytraFollower - 鞘翅跟随器
 - FlightAntiKick - 飞行防踢
 - VelocityAlien - 速度控制
+- AlienSprint - 外星人疾跑
+- BMWSprint - BMW 强制疾跑
+- SprintStatusModule - 疾跑状态显示
 - KnockbackDirection - 击退方向控制
 - LegitNoFall - 合法无摔落伤害
 - LegitNoFallLeaves - Leaves 版摔落保护
 - NoFallimg - 没摔伤
-- BMWSprint - BMW 强制疾跑
 - Freeze - 冻结
 - Stuck - 定身术
+- Follower - 跟随者
 - AutoJump - 自动跳跃
 - AutoRespawn - 自动重生
 - PearlPhase - 末影珍珠穿墙
 - ODMGear - ODM 装备移动
+- MotionCamera - 动态相机
 
-### 挖掘类模块 (Mining)
+### 挖掘类模块 (Mining) — 14 个
 - ScaffoldPlus - 脚手架增强版
 - ScaffoldPlusLeaves - Leaves 版脚手架
 - xhPacketMinePlus - 数据包挖掘增强
@@ -72,17 +85,21 @@ A personal addon for the Meteor client that adds various entertainment modules. 
 - AlienV4PacketMine - 发包挖掘V4（alien 移植）
 - TntBomber - TNT 轰炸机
 - AntiAntiXray - 反反矿物透视
+- AntiLag - 反卡顿（降低挖掘延迟）
+- BreakESP - 方块破坏 ESP
 - OreVeinESP - 矿脉 ESP 显示
 - MineESP - 矿洞 ESP 显示
 - FillESP - 填充物 ESP 显示
 - RTsearch - 实时搜索
 
-### 自动操作类模块 (Automation)
+### 自动操作类模块 (Automation) — 16 个
 - AutoRefreshTrade - 自动刷村民附魔书（挖放讲台循环）
 - AutoChestAura - 箱子自动开启光环
 - AutoChorus - 紫颂果自动使用
 - AutoDeoxidizer - 自动除锈器
 - AutoFirework - 自动烟花
+- AutoDoubleHand - 自动双持
+- AutoInvTotem - 自动补图腾
 - AutoTorch - 自动插火把
 - AutoSmithing - 自动锻造
 - AutoTPAccept - 自动接受传送
@@ -94,18 +111,28 @@ A personal addon for the Meteor client that adds various entertainment modules. 
 - TpAnchor - 传送锚点
 - FastCrossbow - 快速弩箭装填
 
-### 视觉类模块 (Visual)
+### 视觉/Render 类模块 (Visual) — 19 个
 - Ambience - 环境/视觉修改
 - PlaceRender - 放置方块渲染
+- CameraClip - 相机穿墙
+- IMGChams - 透视
+- IMGFakePlayer - 假人渲染
+- IMGPopChams - 弹出 Chams
+- IMGTips - 提示显示
+- IMGTotemParticle - 图腾粒子
+- IMGWorldStats - 世界状态显示
+- Trajectories - 弹道轨迹
 - PortalESP - 传送门 ESP 显示
 - CustomItemESP - 自定义物品 ESP
+- EntityTags - 实体标签
 - ModuleList - 模块列表显示
 - xhEntityList - 实体列表显示
 - ItemDespawnTimer - 物品消失计时器
 - CustomFov - 自定义视野
 - KillFX - 击杀特效
+- SonarBypass - Sonar 绕过
 
-### 聊天类模块 (Chat)
+### 聊天类模块 (Chat) — 7 个
 - ChatPrefixCustom - 自定义聊天前缀
 - ChatHighlight - 聊天高亮
 - ChatFilter - 聊天过滤器
@@ -114,7 +141,20 @@ A personal addon for the Meteor client that adds various entertainment modules. 
 - InfiniteChat - 无限聊天
 - FeedbackBlocker - 反馈屏蔽器
 
-### 实用工具类模块 (Utility)
+### 村民交易类模块 (Villager) — 11 个
+- AutoLibrarian - 自动图书管理员
+- AutoRefreshTrade - 自动刷交易
+- EnchantSortConfig - 附魔分类配置
+- LibrarianStep - 图书管理员步骤
+- LibrarianWarp - 图书管理员传送
+- ShulkerManager - 潜影盒管理
+- VillagerEntityWarp - 村民实体传送
+- VillagerMode - 村民模式
+- VillagerStep - 村民步骤
+- VillagerTrader - 村民交易
+- VillagerType - 村民类型
+
+### 实用工具类模块 (Utility) — 14 个
 - GlobalSetting - Leaves 全局设置
 - AdvancedFakePlayer - 高级假人
 - adaManualCrystal - 手动水晶放置
@@ -122,10 +162,13 @@ A personal addon for the Meteor client that adds various entertainment modules. 
 - adaAttributeSwap - 属性交换
 - MassTpa - 批量传送请求
 - FireworkElytraFly - 烟花鞘翅飞行
+- Panic - 紧急关闭所有模块
+- Pitcher - 投掷者
+- PortalGodMode - 传送门无敌模式
+- AutoAnchor - 自动放置锚点
 - MusicPlayer - 音乐播放器
 - SchematicPro - 专业建筑方案
 - PrinterLeaves - Leaves 版打印/建筑辅助
-- AutoAnchor - 自动放置锚点
 
 ---
 
