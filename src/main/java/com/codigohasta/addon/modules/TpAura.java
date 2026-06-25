@@ -141,7 +141,7 @@ public class TpAura extends Module {
         for (int i = 0; i < 45; i++) {
             String name = mc.player.getInventory().getStack(i).getItem().toString().toLowerCase();
             if (name.contains("sword") || name.contains("mace") || name.contains("axe")) {
-                return i;
+                return i < 9 ? i + 36 : i;
             }
         }
         return -1;

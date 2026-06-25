@@ -121,6 +121,7 @@ public class AddonTemplate extends MeteorAddon {
          modules.add(new VillagerTrader());
          modules.add(new IMGWorldStats());
          modules.add(new XTpaura());
+         modules.add(new XCarry());
          modules.add(new EntityTags());
          modules.add(new TpBowAura());
          modules.add(new TpMachineGun());
@@ -165,6 +166,8 @@ public class AddonTemplate extends MeteorAddon {
          modules.add(new Freeze());
          modules.add(new BMWSprint());
          modules.add(new AutoVault());
+         modules.add(new ScreenActions());
+         modules.add(new MobHud());
 
          // BreakESP module - 挖掘显示 (必须放在AlienBreakManager初始化之前)
          modules.add(new BreakESP());

@@ -44,7 +44,8 @@
     "IVec3d",
     "MixinKeyboardInput",
     "MixinFireworkRocketEntity",
-    "MixinPlayerEntity"
+    "MixinPlayerEntity",
+    "AbstractClientPlayerEntityAccessor"
   ],
   "injectors": {
     "defaultRequire": 1
