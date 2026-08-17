@@ -10,6 +10,9 @@ uniform vec3 U_CameraPosition;
 
 uniform float U_GridSpeed;
 uniform float U_SunSpeed;
+uniform vec3 U_SunDirection;
+uniform float U_SunSize;
+uniform float U_SunBrightness;
 uniform float U_PulseSpeed; // 新增：控制呼吸灯速度
 uniform float U_ScanSpeed;
 uniform float U_LoopEnabled;
@@ -24,9 +27,13 @@ vec3 clipToView(vec2 uv, float depth) {
     return viewPos.xyz / viewPos.w;
 }
 
+bool isSkyDepth(float depth) {
+    return depth >= 0.9999;
+}
+
 vec3 fetchViewPos(vec2 uv) {
     float rawDepth = texture(MainDepthSampler, uv).r;
-    if (rawDepth >= 1.0) return vec3(0.0, 0.0, -1000.0);
+    if (isSkyDepth(rawDepth)) return vec3(0.0, 0.0, -1000.0);
     return clipToView(uv, rawDepth);
 }
 
@@ -64,12 +71,12 @@ float grid(vec3 worldPos, vec3 normal, float lineWidth, float scale) {
 }
 
 float synthwaveSun(vec2 uv, float time) {
-    float val = smoothstep(0.3, 0.29, length(uv));
-    float bloom = smoothstep(0.5, 0.0, length(uv));
-    float cut = 5.0 * sin((uv.y + time * U_SunSpeed) * 60.0);
-    cut += clamp(uv.y * 15.0, -6.0, 6.0);
-    cut = clamp(cut, 0.0, 1.0);
-    return clamp(val * cut, 0.0, 1.0) + bloom * 0.6;
+    float radius = length(uv);
+    float disc = 1.0 - smoothstep(U_SunSize * 0.94, U_SunSize, radius);
+    float bloom = 1.0 - smoothstep(U_SunSize, U_SunSize * 1.8, radius);
+    float stripeWave = sin((uv.y + time * U_SunSpeed) * 60.0) + clamp(uv.y * 12.0, -1.0, 1.0);
+    float stripes = smoothstep(-0.15, 0.15, stripeWave);
+    return disc * mix(0.35, 1.0, stripes) + bloom * 0.45;
 }
 
 void main() {
@@ -77,10 +84,11 @@ void main() {
     vec4 sceneColor = texture(MainColorSampler, texCoord); 
     vec3 synthColor = vec3(0.0);
 
-    if (rawDepth >= 1.0) {
+    bool sky = isSkyDepth(rawDepth);
+    if (sky) {
         vec3 viewPos = clipToView(texCoord, 1.0);
         vec3 worldViewDir = normalize(mat3(U_InverseViewMatrix) * normalize(viewPos));
-        vec3 sunDir = normalize(vec3(-1.0, 0.15, 0.0));
+        vec3 sunDir = normalize(U_SunDirection);
         float facingSun = dot(worldViewDir, sunDir);
         float sunShape = 0.0;
         vec2 sunUV = vec2(0.0);
@@ -91,7 +99,8 @@ void main() {
             sunShape = synthwaveSun(sunUV, U_GameTime * 1.0);
         }
         vec3 finalSunColor = mix(vec3(1.0, 0.0, 0.5), vec3(1.0, 0.8, 0.0), smoothstep(-0.3, 0.3, sunUV.y));
-        synthColor = mix(vec3(0.4, 0.0, 0.4), vec3(0.05, 0.0, 0.1), texCoord.y) + finalSunColor * sunShape;
+        synthColor = mix(vec3(0.4, 0.0, 0.4), vec3(0.05, 0.0, 0.1), texCoord.y)
+            + finalSunColor * sunShape * U_SunBrightness;
     } else {
         vec3 viewPos = clipToView(texCoord, rawDepth);
         vec3 normal = reconstructNormal(viewPos, texCoord);
@@ -116,11 +125,13 @@ void main() {
     float timeCycle = U_GameTime * U_ScanSpeed;
     if (U_LoopEnabled > 0.5) timeCycle = mod(timeCycle, U_ScanDuration);
     float mainRadius = pow(max(timeCycle, 0.0), 5.0);
-    float scanMetric = (rawDepth >= 1.0) ? normalize(clipToView(texCoord, 1.0)).y : length(clipToView(texCoord, rawDepth));
-    float scanThreshold = (rawDepth >= 1.0) ? mix(-0.8, 1.1, smoothstep(0.0, 1500.0, mainRadius)) : mainRadius;
-    float alphaMask = 1.0 - smoothstep(scanThreshold, scanThreshold + ((rawDepth >= 1.0) ? 0.15 : 10.0), scanMetric);
-    float scanLine = smoothstep(scanThreshold, scanThreshold + ((rawDepth >= 1.0) ? 0.15 : 10.0), scanMetric) * 
-                     smoothstep(scanThreshold + ((rawDepth >= 1.0) ? 0.2 : 12.0), scanThreshold + ((rawDepth >= 1.0) ? 0.02 : 1.0), scanMetric);
+    float scanMetric = sky ? normalize(clipToView(texCoord, 1.0)).y : length(clipToView(texCoord, rawDepth));
+    float scanThreshold = sky ? mix(-0.8, 1.1, smoothstep(0.0, 1500.0, mainRadius)) : mainRadius;
+    float scanSoftness = sky ? 0.15 : 10.0;
+    float alphaMask = 1.0 - smoothstep(scanThreshold, scanThreshold + scanSoftness, scanMetric);
+    float scanLine = smoothstep(scanThreshold, scanThreshold + scanSoftness, scanMetric)
+        * (1.0 - smoothstep(scanThreshold + (sky ? 0.02 : 1.0),
+                            scanThreshold + (sky ? 0.2 : 12.0), scanMetric));
     
     fragColor = vec4(mix(sceneColor.rgb, synthColor, alphaMask) + (vec3(0.5, 1.0, 1.2) * scanLine * 3.0), 1.0);
 }

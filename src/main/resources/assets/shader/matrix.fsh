@@ -23,9 +23,13 @@ vec3 clipToView(vec2 uv, float depth) {
     return viewPos.xyz / viewPos.w;
 }
 
+bool isSkyDepth(float depth) {
+    return depth >= 0.9999;
+}
+
 vec3 fetchViewPos(vec2 uv) {
     float rawDepth = texture(MainDepthSampler, uv).r;
-    if (rawDepth >= 1.0) return vec3(0.0, 0.0, -1000.0);
+    if (isSkyDepth(rawDepth)) return vec3(0.0, 0.0, -1000.0);
     return clipToView(uv, rawDepth);
 }
 
@@ -63,7 +67,7 @@ float grid(vec3 worldPos, vec3 normal, float lineWidth, float scale) {
 // 矩阵风格的数据核心（替代太阳）
 float matrixSun(vec2 uv, float time) {
     float d = length(uv);
-    float core = smoothstep(0.3, 0.0, d);
+    float core = 1.0 - smoothstep(0.0, 0.3, d);
     float pulse = sin(time * 5.0) * 0.1 + 0.9;
     // 增加一点扫描线感
     float lines = sin(uv.y * 100.0 - time * 20.0) * 0.5 + 0.5;
@@ -80,12 +84,13 @@ void main() {
     vec3 mDarkGreen = vec3(0.0, 0.1, 0.0); // 深绿背景
     vec3 mBlack = vec3(0.0, 0.0, 0.0);     // 纯黑
 
-    if (rawDepth >= 1.0) {
+    bool sky = isSkyDepth(rawDepth);
+    if (sky) {
         // 天空：黑暗代码空间
         vec3 viewPos = clipToView(texCoord, 1.0);
         vec3 worldViewDir = normalize(mat3(U_InverseViewMatrix) * normalize(viewPos));
         
-        vec3 sunDir = normalize(vec3(-1.0, 0.3, 0.0));
+        vec3 sunDir = normalize(vec3(-1.0, 0.45, 0.0));
         float facingSun = dot(worldViewDir, sunDir);
         float sunShape = 0.0;
         if(facingSun > 0.0) {
@@ -125,13 +130,13 @@ void main() {
     if (U_LoopEnabled > 0.5) timeCycle = mod(timeCycle, U_ScanDuration);
     float mainRadius = pow(max(timeCycle, 0.0), 5.0);
 
-    float scanMetric = (rawDepth >= 1.0) ? normalize(clipToView(texCoord, 1.0)).y : length(clipToView(texCoord, rawDepth));
-    float scanThreshold = (rawDepth >= 1.0) ? mix(-0.8, 1.1, smoothstep(0.0, 1500.0, mainRadius)) : mainRadius;
-    float scanSoftness = (rawDepth >= 1.0) ? 0.1 : 8.0;
+    float scanMetric = sky ? normalize(clipToView(texCoord, 1.0)).y : length(clipToView(texCoord, rawDepth));
+    float scanThreshold = sky ? mix(-0.8, 1.1, smoothstep(0.0, 1500.0, mainRadius)) : mainRadius;
+    float scanSoftness = sky ? 0.1 : 8.0;
 
     float alphaMask = 1.0 - smoothstep(scanThreshold, scanThreshold + scanSoftness, scanMetric);
-    float scanLine = smoothstep(scanThreshold, scanThreshold + scanSoftness, scanMetric) * 
-                     smoothstep(scanThreshold + (rawDepth >= 1.0 ? 0.1 : 10.0), scanThreshold, scanMetric);
+    float scanLine = smoothstep(scanThreshold, scanThreshold + scanSoftness, scanMetric)
+        * (1.0 - smoothstep(scanThreshold, scanThreshold + (sky ? 0.1 : 10.0), scanMetric));
     
     // 最终输出混合
     vec3 finalOutput = mix(sceneColor.rgb, matrixColor, alphaMask) + mGreen * scanLine * 2.0;
