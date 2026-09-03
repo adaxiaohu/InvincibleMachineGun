@@ -13,6 +13,8 @@ uniform float U_PinkIntensity; // 粉色滤镜强度
 uniform float U_ScanSpeed;
 uniform float U_LoopEnabled;
 uniform float U_ScanDuration;
+uniform float U_SkyEnabled;
+uniform float U_GroundEnabled;
 
 in vec2 texCoord;
 out vec4 fragColor;
@@ -58,6 +60,11 @@ vec3 clipToView(vec2 uv, float depth) {
 void main() {
     float rawDepth = texture(MainDepthSampler, texCoord).r;
     vec4 sceneColor = texture(MainColorSampler, texCoord);
+    bool sky = rawDepth >= 0.9999;
+    if ((sky && U_SkyEnabled < 0.5) || (!sky && U_GroundEnabled < 0.5)) {
+        fragColor = sceneColor;
+        return;
+    }
     
     // --- 1. 基础美化：提升亮度和粉色偏移 ---
     vec3 pinkTint = vec3(1.0, 0.75, 0.85); // 经典樱花粉
@@ -66,7 +73,7 @@ void main() {
 
     // --- 2. 天空逻辑 ---
     vec3 finalColor;
-    if (rawDepth >= 1.0) {
+    if (sky) {
         vec2 skyUV = texCoord;
         vec3 skyBlue = vec3(0.6, 0.8, 1.0);
         vec3 skyPink = vec3(1.0, 0.8, 0.9);
@@ -87,7 +94,7 @@ void main() {
     if (U_LoopEnabled > 0.5) timeCycle = mod(timeCycle, U_ScanDuration);
     float mainRadius = pow(max(timeCycle, 0.0), 4.0);
     
-    float dist = (rawDepth >= 1.0) ? 50.0 : length(clipToView(texCoord, rawDepth));
+    float dist = sky ? 50.0 : length(clipToView(texCoord, rawDepth));
     // 增加一点波纹起伏感
     float wave = sin(dist * 0.2 - U_GameTime * 2.0) * 0.5;
     float alphaMask = 1.0 - smoothstep(mainRadius, mainRadius + 15.0, dist + wave);

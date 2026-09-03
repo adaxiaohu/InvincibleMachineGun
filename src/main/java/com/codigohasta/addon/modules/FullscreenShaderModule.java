@@ -4,6 +4,9 @@ import com.codigohasta.addon.AddonTemplate;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.textures.GpuTexture;
 import meteordevelopment.meteorclient.events.render.Render3DEvent;
+import meteordevelopment.meteorclient.settings.BoolSetting;
+import meteordevelopment.meteorclient.settings.Setting;
+import meteordevelopment.meteorclient.settings.SettingGroup;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.render.RenderUtils;
 import meteordevelopment.meteorclient.utils.render.color.SettingColor;
@@ -28,6 +31,14 @@ import java.nio.FloatBuffer;
 import java.nio.charset.StandardCharsets;
 
 abstract class FullscreenShaderModule extends Module {
+    private final SettingGroup area = settings.createGroup("作用范围");
+    private final Setting<Boolean> renderSky = area.add(new BoolSetting.Builder()
+        .name("天空着色").description("对天空范围应用着色器效果。")
+        .defaultValue(true).build());
+    private final Setting<Boolean> renderGround = area.add(new BoolSetting.Builder()
+        .name("地面着色").description("对地面、方块和实体等非天空范围应用着色器效果。")
+        .defaultValue(true).build());
+
     private final Identifier vertexShader;
     private final Identifier fragmentShader;
     private final String textureLabel;
@@ -123,6 +134,8 @@ abstract class FullscreenShaderModule extends Module {
             float elapsedSeconds = (System.nanoTime() - startedAtNanos) / 1_000_000_000.0f;
             uniform2f("ScreenSize", width, height);
             uniform1f("U_GameTime", elapsedSeconds);
+            uniform1f("U_SkyEnabled", renderSky.get() ? 1.0f : 0.0f);
+            uniform1f("U_GroundEnabled", renderGround.get() ? 1.0f : 0.0f);
 
             var camera = client.gameRenderer.getCamera();
             var cameraPos = camera.getCameraPos();
@@ -202,7 +215,7 @@ abstract class FullscreenShaderModule extends Module {
         if (location >= 0) GL20.glUniform1i(location, unit - GL13.GL_TEXTURE0);
     }
 
-    private void uniform2f(String name, float x, float y) {
+    protected final void uniform2f(String name, float x, float y) {
         int location = GL20.glGetUniformLocation(program, name);
         if (location >= 0) GL20.glUniform2f(location, x, y);
     }

@@ -13,6 +13,8 @@ uniform vec3 U_FogColor;
 uniform vec3 U_MoodColor;
 uniform float U_MoodIntensity;
 uniform float U_Wetness;
+uniform float U_SkyEnabled;
+uniform float U_GroundEnabled;
 
 in vec2 texCoord;
 out vec4 fragColor;
@@ -26,12 +28,17 @@ vec3 clipToView(vec2 uv, float depth) {
 void main() {
     float rawDepth = texture(MainDepthSampler, texCoord).r;
     vec4 sceneColor = texture(MainColorSampler, texCoord);
+    bool sky = rawDepth >= 0.9999;
+    if ((sky && U_SkyEnabled < 0.5) || (!sky && U_GroundEnabled < 0.5)) {
+        fragColor = sceneColor;
+        return;
+    }
     
     float gray = dot(sceneColor.rgb, vec3(0.299, 0.587, 0.114));
     vec3 blueMoody = mix(sceneColor.rgb, vec3(gray), 0.5) * U_MoodColor;
 
     vec3 effect;
-    if (rawDepth >= 1.0) {
+    if (sky) {
         effect = mix(U_SkyBottom, U_SkyTop, texCoord.y);
     } else {
         vec3 viewPos = clipToView(texCoord, rawDepth);

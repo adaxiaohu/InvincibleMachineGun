@@ -17,6 +17,8 @@ uniform float U_PulseSpeed; // 新增：控制呼吸灯速度
 uniform float U_ScanSpeed;
 uniform float U_LoopEnabled;
 uniform float U_ScanDuration;
+uniform float U_SkyEnabled;
+uniform float U_GroundEnabled;
 
 in vec2 texCoord;
 out vec4 fragColor;
@@ -85,6 +87,10 @@ void main() {
     vec3 synthColor = vec3(0.0);
 
     bool sky = isSkyDepth(rawDepth);
+    if ((sky && U_SkyEnabled < 0.5) || (!sky && U_GroundEnabled < 0.5)) {
+        fragColor = sceneColor;
+        return;
+    }
     if (sky) {
         vec3 viewPos = clipToView(texCoord, 1.0);
         vec3 worldViewDir = normalize(mat3(U_InverseViewMatrix) * normalize(viewPos));

@@ -168,6 +168,7 @@ public class AddonTemplate extends MeteorAddon {
          modules.add(new MatrixShader());
          modules.add(new SakuraShader());
          modules.add(new SilentHillShader());
+         modules.add(new TerminatorHudShader());
          modules.add(new Freeze());
          modules.add(new BMWSprint());
          modules.add(new AutoVault());

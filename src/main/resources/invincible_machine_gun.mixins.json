@@ -27,6 +27,8 @@
     "MixinIMGEndCrystalRenderer",
     "MixinIMGEndCrystalEntityModel",
     "MixinIMGPlayerEntityRenderer",
+    "ModelPartAccessor",
+    "MixinTerminatorModelRender",
     "MixinIMGHeldItemRenderer",
     "MixinIMGItemRenderer",
     "MixinScreenOverlay",
