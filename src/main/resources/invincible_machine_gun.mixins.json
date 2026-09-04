@@ -47,7 +47,8 @@
     "MixinKeyboardInput",
     "MixinFireworkRocketEntity",
     "MixinPlayerEntity",
-    "AbstractClientPlayerEntityAccessor"
+    "AbstractClientPlayerEntityAccessor",
+    "HandledScreenInvoker"
   ],
   "injectors": {
     "defaultRequire": 1
