@@ -18,6 +18,7 @@ import meteordevelopment.meteorclient.events.game.GameLeftEvent;
 import meteordevelopment.meteorclient.systems.hud.Hud;
 import meteordevelopment.meteorclient.systems.hud.HudGroup;
 import meteordevelopment.meteorclient.systems.modules.Category;
+import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.systems.modules.Modules;
 import meteordevelopment.meteorclient.utils.player.ChatUtils;
 import meteordevelopment.meteorclient.utils.render.color.Color;
@@ -118,14 +119,14 @@ public class AddonTemplate extends MeteorAddon {
          modules.add(new Follower());
          modules.add(new ArrowDmg());
          modules.add(new Pitcher());
-         modules.add(new VillagerTrader());
          modules.add(new IMGWorldStats());
          modules.add(new XTpaura());
          modules.add(new XCarry());
          modules.add(new EntityTags());
          modules.add(new TpBowAura());
          modules.add(new TpMachineGun());
-         modules.add(new AutoLibrarian());
+         // AutoLibrarian 与 VillagerTrader 依赖 Baritone，缺失时跳过，见 addBaritoneModules
+         addBaritoneModules(modules);
          modules.add(new SpearKill()); 
          modules.add(new AntiLag());
          modules.add(new SprintStatusModule());
@@ -191,6 +192,40 @@ public class AddonTemplate extends MeteorAddon {
 
         // 注册事件总线以接收 GameJoinEvent
         MeteorClient.EVENT_BUS.subscribe(this);
+    }
+
+    /**
+     * 注册依赖 Baritone 的模块。
+     *
+     * AutoLibrarian 与 VillagerTrader 在类签名上实现了 Baritone 的
+     * AbstractGameEventListener，若在本类里直接 new，字节码校验阶段就会去解析
+     * baritone.api.*。Baritone 缺失时这会抛 NoClassDefFoundError，导致整个附属
+     * 初始化失败、游戏起不来，所以改成反射注册，并在 Baritone 不可用时跳过。
+     */
+    private void addBaritoneModules(Modules modules) {
+        if (!isBaritoneAvailable()) {
+            LOG.info("Baritone not found, skipping AutoLibrarian and VillagerTrader");
+            return;
+        }
+
+        for (String name : new String[]{"VillagerTrader", "AutoLibrarian"}) {
+            try {
+                Class<?> clazz = Class.forName("com.codigohasta.addon.modules." + name);
+                modules.add((Module) clazz.getDeclaredConstructor().newInstance());
+            } catch (Throwable t) {
+                LOG.warn("Failed to register Baritone module {}: {}", name, t.toString());
+            }
+        }
+    }
+
+    /** 检测 baritone.api 是否在类路径上。只加载不初始化，本方法不引用任何 Baritone 类型。 */
+    private static boolean isBaritoneAvailable() {
+        try {
+            Class.forName("baritone.api.BaritoneAPI", false, AddonTemplate.class.getClassLoader());
+            return true;
+        } catch (Throwable t) {
+            return false;
+        }
     }
 
     @Override
