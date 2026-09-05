@@ -46,6 +46,12 @@
     "IVec3d",
     "MixinKeyboardInput",
     "MixinFireworkRocketEntity",
+    "ModuleTranslationAccessor",
+    "SettingTranslationAccessor",
+    "SettingGroupTranslationAccessor",
+    "WDropdownEnglishTranslationMixin",
+    "WMeteorDropdownEnglishTranslationMixin",
+    "WMeteorDropdownValueEnglishTranslationMixin",
     "MixinPlayerEntity",
     "AbstractClientPlayerEntityAccessor",
     "HandledScreenInvoker"

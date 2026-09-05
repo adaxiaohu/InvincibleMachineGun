@@ -15,6 +15,7 @@ import meteordevelopment.meteorclient.addons.MeteorAddon;
 import meteordevelopment.meteorclient.commands.Commands;
 import meteordevelopment.meteorclient.events.game.GameJoinedEvent;
 import meteordevelopment.meteorclient.events.game.GameLeftEvent;
+import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.systems.hud.Hud;
 import meteordevelopment.meteorclient.systems.hud.HudGroup;
 import meteordevelopment.meteorclient.systems.modules.Category;
@@ -22,6 +23,7 @@ import meteordevelopment.meteorclient.systems.modules.Modules;
 import meteordevelopment.meteorclient.utils.player.ChatUtils;
 import meteordevelopment.meteorclient.utils.render.color.Color;
 import meteordevelopment.orbit.EventHandler;
+import net.minecraft.client.MinecraftClient;
 import net.minecraft.text.MutableText;
 import net.minecraft.text.Style;
 import net.minecraft.text.Text;
@@ -32,6 +34,8 @@ public class AddonTemplate extends MeteorAddon {
     public static final Logger LOG = LogUtils.getLogger();
 
     private boolean sentWelcome = false;
+    private int englishTranslationStartupDelay = 20;
+    private boolean englishTranslationStartupChecked;
 
     public static final Category CATEGORY = new Category("IMG");
     public static final HudGroup HUD_GROUP = new HudGroup("IMG");
@@ -177,10 +181,17 @@ public class AddonTemplate extends MeteorAddon {
          modules.add(new LavaESP());
          modules.add(new CustomFishingBot());
          modules.add(new FurnaceUnclogger());
+         modules.add(new EnglishUITranslation());
 
          // BreakESP module - 挖掘显示 (必须放在AlienBreakManager初始化之前)
          modules.add(new BreakESP());
          new AlienBreakManager();
+
+        // English UI is enabled by default for every Minecraft language except
+        // Simplified Chinese (zh_cn) and Traditional Chinese (zh_tw).
+        enableEnglishTranslationForCurrentLanguage();
+        EnglishUITranslation translation = modules.get(EnglishUITranslation.class);
+        LOG.info("IMG English Translation registered; language={}, active={}", currentLanguageCode(), translation != null && translation.isActive());
 
         // Commands
         Commands.add(new CommandExample());
@@ -211,6 +222,7 @@ public class AddonTemplate extends MeteorAddon {
 
     @EventHandler
     private void onGameJoin(GameJoinedEvent event) {
+        enableEnglishTranslationForCurrentLanguage();
         if (sentWelcome) return;
 
         ChatUtils.forceNextPrefixClass(getClass());
@@ -223,6 +235,23 @@ public class AddonTemplate extends MeteorAddon {
     private void onGameLeave(GameLeftEvent event) {
    
         sentWelcome = false;
+    }
+
+    // Meteor restores module profiles after addon initialization. Delay the default
+    // decision until client ticks have started so an existing profile cannot undo it.
+    @EventHandler
+    private void onTick(TickEvent.Post event) {
+        if (englishTranslationStartupChecked) return;
+        if (englishTranslationStartupDelay-- > 0) return;
+
+        englishTranslationStartupChecked = true;
+        enableEnglishTranslationForCurrentLanguage();
+
+        EnglishUITranslation translation = Modules.get().get(EnglishUITranslation.class);
+        LOG.info("IMG English Translation startup check; language={}, auto-enable={}, active={}",
+            currentLanguageCode(),
+            translation != null && translation.autoEnableForNonChinese.get(),
+            translation != null && translation.isActive());
     }
 
     private Text createGradientText(String text) {
@@ -238,5 +267,29 @@ public class AddonTemplate extends MeteorAddon {
             result.append(Text.literal(String.valueOf(text.charAt(i))).setStyle(Style.EMPTY.withColor(TextColor.fromRgb(stepColor.getPacked()))));
         }
         return result;
+    }
+
+    private boolean isNonChineseLanguage() {
+        String code = currentLanguageCode();
+        if (code == null || code.isBlank()) return true;
+        code = code.toLowerCase(java.util.Locale.ROOT);
+        return !code.equals("zh_cn") && !code.equals("zh_tw");
+    }
+
+    private String currentLanguageCode() {
+        return MinecraftClient.getInstance().getLanguageManager().getLanguage();
+    }
+
+    private void enableEnglishTranslationForCurrentLanguage() {
+        EnglishUITranslation translation = Modules.get().get(EnglishUITranslation.class);
+        if (translation == null || !translation.autoEnableForNonChinese.get() || !isNonChineseLanguage()) return;
+
+        if (!translation.isActive()) {
+            translation.enable();
+            LOG.info("IMG English Translation enabled for language={}", currentLanguageCode());
+        } else {
+            translation.refreshTranslation();
+            LOG.info("IMG English Translation refreshed for language={}", currentLanguageCode());
+        }
     }
 }

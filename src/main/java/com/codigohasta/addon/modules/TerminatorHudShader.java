@@ -268,7 +268,7 @@ public final class TerminatorHudShader extends FullscreenShaderModule {
     private long deathStartedNanos;
 
     public TerminatorHudShader() {
-        super("终结者 HUD 着色器", "开启红色机器视觉、玩家扫描锁定和 T-800 风格战术 HUD。", "terminator");
+        super("终结者 HUD 着色器", "开启红色机器视觉、玩家扫描锁定和 T-800 风格战术 HUD。变成没敌终结者，无尽的追杀敌人。。。", "terminator");
     }
 
     @Override

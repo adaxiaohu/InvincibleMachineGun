@@ -40,7 +40,7 @@ public final class CyberFujiShader extends FullscreenShaderModule {
         .defaultValue(3.0).min(1.0).sliderMax(10.0).visible(loopScan::get).build());
 
     public CyberFujiShader() {
-        super("赛博富士着色器", "开关赛博合成波风格的全屏世界着色器。", "synthwave");
+        super("合成器浪潮着色器", "开关赛博蒸汽波风格的全屏世界着色器。", "synthwave");
     }
 
     @Override

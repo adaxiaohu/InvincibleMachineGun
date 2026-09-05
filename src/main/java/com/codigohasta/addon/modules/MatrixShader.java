@@ -25,7 +25,7 @@ public final class MatrixShader extends FullscreenShaderModule {
         .defaultValue(3.0).min(1.0).sliderMax(10.0).visible(loopScan::get).build());
 
     public MatrixShader() {
-        super("矩阵着色器", "开关绿色矩阵网格和数据核心风格的世界着色器。", "matrix");
+        super("矩阵着色器", "开关绿色矩阵网格和数据核心风格的世界着色器 黑客帝国。", "matrix");
     }
 
     @Override
