@@ -1,6 +1,6 @@
 package com.codigohasta.addon.modules;
 
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.phys.Vec3;
 
 import com.codigohasta.addon.AddonTemplate;
 import meteordevelopment.meteorclient.events.world.TickEvent;
@@ -47,23 +47,23 @@ public class PearlPhase extends Module {
     @Override
     public void onDeactivate() {
         if (mc.player != null) {
-            mc.player.noClip = false;
+            mc.player.noPhysics = false;
         }
     }
 
     @EventHandler
     private void onTick(TickEvent.Pre event) {
-        if (mc.player == null || mc.world == null) return;
+        if (mc.player == null || mc.level == null) return;
 
         if (isInsideBlock()) {
-            mc.player.noClip = true;
+            mc.player.noPhysics = true;
             mc.player.fallDistance = 0;
             mc.player.setOnGround(true);
 
             // 删除了所有夜视代码，现在这里只处理移动
             handleMove();
         } else {
-            mc.player.noClip = false;
+            mc.player.noPhysics = false;
         }
     }
 
@@ -75,12 +75,12 @@ public class PearlPhase extends Module {
         
         double finalSpeed = baseSpeed * speed.get();
 
-        double n = mc.player.input.playerInput.forward() ? 1.0 : 0.0;
-        double n2 = mc.player.input.playerInput.backward() ? 1.0 : 0.0;
-        double n3 = mc.player.getYaw();
+        double n = mc.player.input.keyPresses.forward() ? 1.0 : 0.0;
+        double n2 = mc.player.input.keyPresses.backward() ? 1.0 : 0.0;
+        double n3 = mc.player.getYRot();
 
         if (n == 0.0 && n2 == 0.0) {
-            mc.player.setVelocity(0, 0, 0);
+            mc.player.setDeltaMovement(0, 0, 0);
             return;
         }
 
@@ -92,10 +92,10 @@ public class PearlPhase extends Module {
         double motionX = n * finalSpeed * -Math.sin(Math.toRadians(n3)) + n2 * finalSpeed * Math.cos(Math.toRadians(n3));
         double motionZ = n * finalSpeed * Math.cos(Math.toRadians(n3)) - n2 * finalSpeed * -Math.sin(Math.toRadians(n3));
 
-        mc.player.setVelocity(motionX, 0, motionZ);
+        mc.player.setDeltaMovement(motionX, 0, motionZ);
     }
 
     private boolean isInsideBlock() {
-        return mc.world.getBlockCollisions(mc.player, mc.player.getBoundingBox().contract(0.001)).iterator().hasNext();
+        return mc.level.getBlockCollisions(mc.player, mc.player.getBoundingBox().deflate(0.001)).iterator().hasNext();
     }
 }

@@ -1,6 +1,6 @@
 package com.codigohasta.addon.modules;
 
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.phys.Vec3;
 
 import com.codigohasta.addon.AddonTemplate;
 import meteordevelopment.meteorclient.MeteorClient;
@@ -15,7 +15,7 @@ import meteordevelopment.meteorclient.gui.widgets.pressable.WButton;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.nbt.NbtCompound;
+import net.minecraft.nbt.CompoundTag;
 import org.lwjgl.BufferUtils;
 import org.lwjgl.PointerBuffer;
 import org.lwjgl.system.MemoryUtil;
@@ -277,15 +277,15 @@ public class MusicPlayer extends Module {
     private void sendCommand(String cmd) {
         if (mc.player == null) return;
         if (cmd.startsWith("/")) {
-            mc.getNetworkHandler().sendChatCommand(cmd.substring(1));
+            mc.getConnection().sendCommand(cmd.substring(1));
         } else {
-            mc.getNetworkHandler().sendChatMessage(cmd);
+            mc.getConnection().sendChat(cmd);
         }
     }
 
     @Override
-    public NbtCompound toTag() {
-        NbtCompound tag = super.toTag();
+    public CompoundTag toTag() {
+        CompoundTag tag = super.toTag();
         if (file != null && file.exists()) {
             tag.putString("file", file.getAbsolutePath());
         }
@@ -293,7 +293,7 @@ public class MusicPlayer extends Module {
     }
 
     @Override
-    public Module fromTag(NbtCompound tag) {
+    public Module fromTag(CompoundTag tag) {
         if (tag.contains("file")) {
             file = new File(tag.getString("file").orElse(""));
         }

@@ -6,8 +6,7 @@ import com.codigohasta.addon.utils.leaveshack.BlockUtil;
 import com.codigohasta.addon.utils.leaveshack.InventoryUtil;
 import com.codigohasta.addon.utils.leaveshack.Rotation;
 import com.codigohasta.addon.utils.leaveshack.events.MoveEvent;
-import fi.dy.masa.litematica.world.SchematicWorldHandler;
-import fi.dy.masa.litematica.world.WorldSchematic;
+import com.codigohasta.addon.utils.SchematicBridge;
 import meteordevelopment.meteorclient.events.render.Render3DEvent;
 import meteordevelopment.meteorclient.renderer.ShapeMode;
 import meteordevelopment.meteorclient.settings.*;
@@ -15,19 +14,32 @@ import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.render.color.SettingColor;
 import meteordevelopment.orbit.EventHandler;
 import meteordevelopment.orbit.EventPriority;
-import net.minecraft.block.*;
-import net.minecraft.block.enums.SlabType;
-import net.minecraft.item.ItemPlacementContext;
-import net.minecraft.network.packet.c2s.play.PlayerInputC2SPacket;
-import net.minecraft.state.property.Properties;
-import net.minecraft.text.Text;
-import net.minecraft.util.Hand;
-import net.minecraft.util.PlayerInput;
-import net.minecraft.util.hit.BlockHitResult;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Box;
-import net.minecraft.util.math.Direction;
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.DaylightDetectorBlock;
+import net.minecraft.world.level.block.DiodeBlock;
+import net.minecraft.world.level.block.FurnaceBlock;
+import net.minecraft.world.level.block.HopperBlock;
+import net.minecraft.world.level.block.ObserverBlock;
+import net.minecraft.world.level.block.PressurePlateBlock;
+import net.minecraft.world.level.block.RedStoneWireBlock;
+import net.minecraft.world.level.block.RedstoneLampBlock;
+import net.minecraft.world.level.block.SlabBlock;
+import net.minecraft.world.level.block.TargetBlock;
+import net.minecraft.world.level.block.TripWireHookBlock;
+import net.minecraft.world.level.block.piston.PistonBaseBlock;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.SlabType;
+import net.minecraft.world.item.context.BlockPlaceContext;
+import net.minecraft.network.protocol.game.ServerboundPlayerInputPacket;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+import net.minecraft.network.chat.Component;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.entity.player.Input;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.core.Direction;
+import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -146,8 +158,8 @@ public class PrinterLeaves extends Module {
     }
     @EventHandler
     private void onRender3D(Render3DEvent event) {
-        if (mc.player == null || mc.world == null) return;
-        WorldSchematic schematic = SchematicWorldHandler.getSchematicWorld();
+        if (mc.player == null || mc.level == null) return;
+        Object schematic = SchematicBridge.getSchematicWorld();
         if (schematic == null) return;
         if (!shiftTimer.passedMs(shiftTime.get()) && hasSneak && ignoreSneak.get()) {
             return;
@@ -155,12 +167,12 @@ public class PrinterLeaves extends Module {
         List<BlockPos> sphere = BlockUtil.getSphere(printingRange.get());
         int placed = 0;
         for (BlockPos pos : sphere) {
-            BlockState required = schematic.getBlockState(pos);
+            BlockState required = SchematicBridge.getBlockState(schematic, pos);
             if (listMode.get() == ListMode.Blacklist && blacklist.get().contains(required.getBlock())) continue;
             if (listMode.get() == ListMode.Whitelist && !whitelist.get().contains(required.getBlock())) continue;
-            if (!required.isAir() && !required.isLiquid() && (mc.world.isAir(pos) || BlockUtil.canReplace(pos)) && !BlockUtil.hasEntity(pos, false)) {
+            if (!required.isAir() && !required.liquid() && (mc.level.isEmptyBlock(pos) || BlockUtil.canReplace(pos)) && !BlockUtil.hasEntity(pos, false)) {
                 if (placed >= 1) {
-                    if (debug.get()) mc.player.sendMessage(Text.of("已超过最大数量，当前placed:" + placed), false);
+                    if (debug.get()) mc.player.sendSystemMessage(Component.literal("已超过最大数量，当前placed:" + placed));
                     return;
                 }
                 int slot = inventorySwap.get() ? InventoryUtil.findBlockInventory(required.getBlock()) : InventoryUtil.findBlock(required.getBlock());
@@ -168,36 +180,36 @@ public class PrinterLeaves extends Module {
                 int old = ((InventoryAccessor)mc.player.getInventory()).getSelectedSlot();
                 ArrayList<Direction> sides = BlockUtil.getPlaceSides(pos, null, ignoreSneak.get());
                 if (sides.isEmpty()) continue;
-                event.renderer.box(new Box(pos), sideColor.get(), lineColor.get(), shapeMode.get(), 0);
+                event.renderer.box(new AABB(pos), sideColor.get(), lineColor.get(), shapeMode.get(), 0);
                 Direction target = sides.getFirst();
                 Direction facing = getBlockFacing(required);
                 if (facing != null && !isRedstoneComponent(required)) {
-                    if (debug.get()) mc.player.sendMessage(Text.of("方块包含方向"), false);
+                    if (debug.get()) mc.player.sendSystemMessage(Component.literal("方块包含方向"));
                     boolean find = false;
                     for (Direction i : sides) {
-                        if (debug.get()) mc.player.sendMessage(Text.of("side列表: " + i), false);
-                        if (checkState(pos.offset(i), required, i.getOpposite())) {
+                        if (debug.get()) mc.player.sendSystemMessage(Component.literal("side列表: " + i));
+                        if (checkState(pos.relative(i), required, i.getOpposite())) {
                             find = true;
                             target = i;
                         }
                     }
                     if (!find) {
-                        if (debug.get()) mc.player.sendMessage(Text.of("未找到目标方向"), false);
+                        if (debug.get()) mc.player.sendSystemMessage(Component.literal("未找到目标方向"));
                         continue;
                     }
                 }
-                if (required.getBlock() instanceof RedstoneWireBlock && (mc.world.isAir(pos.down()) || mc.world.getBlockState(pos.down()).isReplaceable())) continue;
-                if (BlockUtil.needSneak(BlockUtil.getBlock(pos.offset(target))) && !hasSneak) {
+                if (required.getBlock() instanceof RedStoneWireBlock && (mc.level.isEmptyBlock(pos.below()) || mc.level.getBlockState(pos.below()).canBeReplaced())) continue;
+                if (BlockUtil.needSneak(BlockUtil.getBlock(pos.relative(target))) && !hasSneak) {
                     sendSneakPacket(true);
                     hasSneak = true;
-                    mc.player.setSneaking(true);
+                    mc.player.setShiftKeyDown(true);
                     shiftTimer.reset();
                     return;
                 }
                 placed++;
                 doSwap(slot);
                 if (rotate.get()) {
-                    Vec3d directionVec = new Vec3d(pos.getX() + 0.5 + target.getVector().getX() * 0.5, pos.getY() + 0.5 + target.getVector().getY() * 0.5, pos.getZ() + 0.5 + target.getVector().getZ() * 0.5);
+                    Vec3 directionVec = new Vec3(pos.getX() + 0.5 + target.getUnitVec3i().getX() * 0.5, pos.getY() + 0.5 + target.getUnitVec3i().getY() * 0.5, pos.getZ() + 0.5 + target.getUnitVec3i().getZ() * 0.5);
                     Rotation.snapAt(directionVec);
                 }
                 if (facing != null && isRedstoneComponent(required)) {
@@ -222,11 +234,11 @@ public class PrinterLeaves extends Module {
                 }
                 if (hasSneak && ignoreSneak.get()) {
                     sendSneakPacket(false);
-                    mc.player.setSneaking(false);
+                    mc.player.setShiftKeyDown(false);
                     hasSneak = false;
                 }
                 Rotation.snapBack();
-                event.renderer.box(new Box(pos), sideColor.get(), lineColor.get(), shapeMode.get(), 0);
+                event.renderer.box(new AABB(pos), sideColor.get(), lineColor.get(), shapeMode.get(), 0);
                 if (inventorySwap.get()) {
                     doSwap(slot);
                 } else {
@@ -241,7 +253,7 @@ public class PrinterLeaves extends Module {
             double x = event.getX();
             double y = event.getY();
             double z = event.getZ();
-            if (mc.player.isOnGround()) {
+            if (mc.player.onGround()) {
                 double increment = 0.05;
                 while (x != 0.0 && this.isOffsetBBEmpty(x, -1.0, 0.0)) {
                     if (x < increment && x >= -increment) {
@@ -285,7 +297,7 @@ public class PrinterLeaves extends Module {
     }
 
     public boolean isOffsetBBEmpty(double offsetX, double offsetY, double offsetZ) {
-        return !mc.world.canCollide(mc.player, mc.player.getBoundingBox().offset(offsetX, offsetY, offsetZ));
+        return !mc.level.noCollision(mc.player, mc.player.getBoundingBox().move(offsetX, offsetY, offsetZ));
     }
     @EventHandler
     public void onMove2(MoveEvent event) {
@@ -297,9 +309,9 @@ public class PrinterLeaves extends Module {
         if (!hasSneak) return;
         double speed = sneakSpeed.get();
         double moveSpeed = 0.2873 / 100 * speed;
-        double n = (mc.player.input.playerInput.forward() ? 1.0f : 0.0f) - (mc.player.input.playerInput.backward() ? 1.0f : 0.0f);
-        double n2 = (mc.player.input.playerInput.left() ? 1.0f : 0.0f) - (mc.player.input.playerInput.right() ? 1.0f : 0.0f);
-        double n3 = mc.player.getYaw();
+        double n = (mc.player.input.keyPresses.forward() ? 1.0f : 0.0f) - (mc.player.input.keyPresses.backward() ? 1.0f : 0.0f);
+        double n2 = (mc.player.input.keyPresses.left() ? 1.0f : 0.0f) - (mc.player.input.keyPresses.right() ? 1.0f : 0.0f);
+        double n3 = mc.player.getYRot();
         if (n == 0.0 && n2 == 0.0) {
             event.setX(0.0);
             event.setZ(0.0);
@@ -313,7 +325,7 @@ public class PrinterLeaves extends Module {
     }
     public static SlabType getSlabType(BlockState state) {
         if (state.getBlock() instanceof SlabBlock) {
-            return state.get(SlabBlock.TYPE);
+            return state.getValue(SlabBlock.TYPE);
         }
         return null;
     }
@@ -335,51 +347,51 @@ public class PrinterLeaves extends Module {
     public static boolean isRedstoneComponent(BlockState state) {
         Block block = state.getBlock();
 
-        return block instanceof RedstoneWireBlock
-                || block instanceof AbstractRedstoneGateBlock
+        return block instanceof RedStoneWireBlock
+                || block instanceof DiodeBlock
                 || block instanceof PressurePlateBlock
                 || block instanceof ObserverBlock
                 || block instanceof TargetBlock
-                || block instanceof TripwireHookBlock
+                || block instanceof TripWireHookBlock
                 || block instanceof DaylightDetectorBlock
-                || block instanceof PistonBlock
+                || block instanceof PistonBaseBlock
                 || block instanceof RedstoneLampBlock
                 || block instanceof FurnaceBlock;
     }
     public boolean checkState(BlockPos pos, BlockState targetState, Direction i) {
-        Vec3d directionVec = new Vec3d(pos.getX() + 0.5 + i.getVector().getX() * 0.5, pos.getY() + 0.5 + i.getVector().getY() * 0.5, pos.getZ() + 0.5 + i.getVector().getZ() * 0.5);
+        Vec3 directionVec = new Vec3(pos.getX() + 0.5 + i.getUnitVec3i().getX() * 0.5, pos.getY() + 0.5 + i.getUnitVec3i().getY() * 0.5, pos.getZ() + 0.5 + i.getUnitVec3i().getZ() * 0.5);
         BlockHitResult hit = new BlockHitResult(
                 directionVec,
                 i,
                 pos,
                 false
         );
-        ItemPlacementContext ctx = new ItemPlacementContext(
+        BlockPlaceContext ctx = new BlockPlaceContext(
                 mc.player,
-                Hand.MAIN_HAND,
-                mc.player.getMainHandStack(),
+                InteractionHand.MAIN_HAND,
+                mc.player.getMainHandItem(),
                 hit
         );
-        BlockState result = targetState.getBlock().getPlacementState(ctx);
+        BlockState result = targetState.getBlock().getStateForPlacement(ctx);
         if (result != null && isSameFacing(result, targetState)) {
             return true;
         } else if (result == null) {
-            if (debug.get()) mc.player.sendMessage(Text.of("result: null"), false);
+            if (debug.get()) mc.player.sendSystemMessage(Component.literal("result: null"));
         }
         return false;
     }
     public static Direction getBlockFacing(BlockState state) {
         if (state.getBlock() instanceof HopperBlock) {
-            return state.get(HopperBlock.FACING);
+            return state.getValue(HopperBlock.FACING);
         }
-        if (state.contains(Properties.HORIZONTAL_FACING)) {
-            return state.get(Properties.HORIZONTAL_FACING);
+        if (state.hasProperty(BlockStateProperties.HORIZONTAL_FACING)) {
+            return state.getValue(BlockStateProperties.HORIZONTAL_FACING);
         }
-        if (state.contains(Properties.FACING)) {
-            return state.get(Properties.FACING);
+        if (state.hasProperty(BlockStateProperties.FACING)) {
+            return state.getValue(BlockStateProperties.FACING);
         }
-        if (state.contains(Properties.AXIS)) {
-            switch (state.get(Properties.AXIS)) {
+        if (state.hasProperty(BlockStateProperties.AXIS)) {
+            switch (state.getValue(BlockStateProperties.AXIS)) {
                 case X: return Direction.EAST;
                 case Y: return Direction.UP;
                 case Z: return Direction.SOUTH;
@@ -396,14 +408,14 @@ public class PrinterLeaves extends Module {
 
 
 
-        if (debug.get()) mc.player.sendMessage(Text.of("fa: " + fa + " fb: " + fb), false);
+        if (debug.get()) mc.player.sendSystemMessage(Component.literal("fa: " + fa + " fb: " + fb));
         if (fa == null || fb == null) return true;
 
         return fa == fb;
     }
     private void sendSneakPacket(boolean sneaking) {
-        PlayerInput current = mc.player.input.playerInput;
-        mc.getNetworkHandler().sendPacket(new PlayerInputC2SPacket(new PlayerInput(
+        Input current = mc.player.input.keyPresses;
+        mc.getConnection().send(new ServerboundPlayerInputPacket(new Input(
             current.forward(), current.backward(),
             current.left(), current.right(),
             current.jump(), sneaking, current.sprint()

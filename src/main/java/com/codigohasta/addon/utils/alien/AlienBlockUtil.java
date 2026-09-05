@@ -2,34 +2,49 @@ package com.codigohasta.addon.utils.alien;
 
 import java.util.ArrayList;
 import java.util.List;
-import net.minecraft.block.*;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.ItemEntity;
-import net.minecraft.entity.decoration.ArmorStandEntity;
-import net.minecraft.entity.decoration.EndCrystalEntity;
-import net.minecraft.entity.projectile.ArrowEntity;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
-import net.minecraft.network.packet.c2s.play.PlayerInteractBlockC2SPacket;
-import net.minecraft.util.Hand;
-import net.minecraft.util.hit.BlockHitResult;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Box;
-import net.minecraft.util.math.Direction;
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.level.block.AnvilBlock;
+import net.minecraft.world.level.block.BaseEntityBlock;
+import net.minecraft.world.level.block.BasePressurePlateBlock;
+import net.minecraft.world.level.block.BedBlock;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.ButtonBlock;
+import net.minecraft.world.level.block.CartographyTableBlock;
+import net.minecraft.world.level.block.CraftingTableBlock;
+import net.minecraft.world.level.block.DoorBlock;
+import net.minecraft.world.level.block.FenceGateBlock;
+import net.minecraft.world.level.block.GrindstoneBlock;
+import net.minecraft.world.level.block.LoomBlock;
+import net.minecraft.world.level.block.NoteBlock;
+import net.minecraft.world.level.block.StonecutterBlock;
+import net.minecraft.world.level.block.TrapDoorBlock;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.client.Minecraft;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.entity.decoration.ArmorStand;
+import net.minecraft.world.entity.boss.enderdragon.EndCrystal;
+import net.minecraft.world.entity.projectile.arrow.Arrow;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.network.protocol.game.ServerboundUseItemOnPacket;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.core.Direction;
+import net.minecraft.world.phys.Vec3;
 
 public class AlienBlockUtil {
-   private static final MinecraftClient mc = MinecraftClient.getInstance();
+   private static final Minecraft mc = Minecraft.getInstance();
 
    public static Block getBlock(BlockPos pos) {
-      return mc.world.getBlockState(pos).getBlock();
+      return mc.level.getBlockState(pos).getBlock();
    }
 
    public static boolean canReplace(BlockPos pos) {
       if (pos.getY() >= 320) return false;
-      BlockState state = mc.world.getBlockState(pos);
-      return state.isReplaceable();
+      BlockState state = mc.level.getBlockState(pos);
+      return state.canBeReplaced();
    }
 
    public static boolean isClickable(Block block) {
@@ -40,24 +55,24 @@ public class AlienBlockUtil {
          || block instanceof GrindstoneBlock
          || block instanceof StonecutterBlock
          || block instanceof ButtonBlock
-         || block instanceof AbstractPressurePlateBlock
-         || block instanceof BlockWithEntity
+         || block instanceof BasePressurePlateBlock
+         || block instanceof BaseEntityBlock
          || block instanceof BedBlock
          || block instanceof FenceGateBlock
          || block instanceof DoorBlock
          || block instanceof NoteBlock
-         || block instanceof TrapdoorBlock;
+         || block instanceof TrapDoorBlock;
    }
 
    public static boolean canClick(BlockPos pos) {
-      BlockState state = mc.world.getBlockState(pos);
+      BlockState state = mc.level.getBlockState(pos);
       Block block = state.getBlock();
-      return mc.player.isSneaking() || !isClickable(block);
+      return mc.player.isShiftKeyDown() || !isClickable(block);
    }
 
-   public static List<Entity> getEntities(Box box) {
+   public static List<Entity> getEntities(AABB box) {
       List<Entity> list = new ArrayList<>();
-      for (Entity entity : mc.world.getEntities()) {
+      for (Entity entity : mc.level.entitiesForRendering()) {
          if (entity != null && entity.getBoundingBox().intersects(box)) {
             list.add(entity);
          }
@@ -65,10 +80,10 @@ public class AlienBlockUtil {
       return list;
    }
 
-   public static List<EndCrystalEntity> getEndCrystals(Box box) {
-      List<EndCrystalEntity> list = new ArrayList<>();
-      for (Entity entity : mc.world.getEntities()) {
-         if (entity instanceof EndCrystalEntity crystal && crystal.getBoundingBox().intersects(box)) {
+   public static List<EndCrystal> getEndCrystals(AABB box) {
+      List<EndCrystal> list = new ArrayList<>();
+      for (Entity entity : mc.level.entitiesForRendering()) {
+         if (entity instanceof EndCrystal crystal && crystal.getBoundingBox().intersects(box)) {
             list.add(crystal);
          }
       }
@@ -76,15 +91,15 @@ public class AlienBlockUtil {
    }
 
    public static boolean hasEntity(BlockPos pos, boolean ignoreCrystal) {
-      return hasEntity(new Box(pos), ignoreCrystal);
+      return hasEntity(new AABB(pos), ignoreCrystal);
    }
 
-   public static boolean hasEntity(Box box, boolean ignoreCrystal) {
+   public static boolean hasEntity(AABB box, boolean ignoreCrystal) {
       for (Entity entity : getEntities(box)) {
          if (entity.isAlive()
             && !(entity instanceof ItemEntity)
-            && !(entity instanceof ArrowEntity)
-            && (!ignoreCrystal || !(entity instanceof EndCrystalEntity))) {
+            && !(entity instanceof Arrow)
+            && (!ignoreCrystal || !(entity instanceof EndCrystal))) {
             return true;
          }
       }
@@ -92,8 +107,8 @@ public class AlienBlockUtil {
    }
 
    public static boolean hasCrystal(BlockPos pos) {
-      for (Entity entity : getEndCrystals(new Box(pos))) {
-         if (entity.isAlive() && entity instanceof EndCrystalEntity) {
+      for (Entity entity : getEndCrystals(new AABB(pos))) {
+         if (entity.isAlive() && entity instanceof EndCrystal) {
             return true;
          }
       }
@@ -114,7 +129,7 @@ public class AlienBlockUtil {
       double minDistance = Double.MAX_VALUE;
       for (Direction i : Direction.values()) {
          if (isStrictDirection(pos, i)) {
-            double disSq = mc.player.getEyePos().squaredDistanceTo(pos.offset(i).toCenterPos());
+            double disSq = mc.player.getEyePosition().distanceToSqr(pos.relative(i).getCenter());
             if (!(disSq > minDistance)) {
                side = i;
                minDistance = disSq;
@@ -129,7 +144,7 @@ public class AlienBlockUtil {
       double minDistance = Double.MAX_VALUE;
       for (Direction i : Direction.values()) {
          if (isStrictDirection(pos, i)) {
-            double disSq = mc.player.getEyePos().squaredDistanceTo(pos.offset(i).toCenterPos());
+            double disSq = mc.player.getEyePosition().distanceToSqr(pos.relative(i).getCenter());
             if (!(disSq > minDistance)) {
                side = i;
                minDistance = disSq;
@@ -151,8 +166,8 @@ public class AlienBlockUtil {
       double minDistance = Double.MAX_VALUE;
       Direction side = null;
       for (Direction i : Direction.values()) {
-         if (canClick(pos.offset(i)) && !canReplace(pos.offset(i)) && isStrictDirection(pos.offset(i), i.getOpposite())) {
-            double vecDis = mc.player.getEyePos().squaredDistanceTo(pos.toCenterPos().add(i.getVector().getX() * 0.5, i.getVector().getY() * 0.5, i.getVector().getZ() * 0.5));
+         if (canClick(pos.relative(i)) && !canReplace(pos.relative(i)) && isStrictDirection(pos.relative(i), i.getOpposite())) {
+            double vecDis = mc.player.getEyePosition().distanceToSqr(pos.getCenter().add(i.getUnitVec3i().getX() * 0.5, i.getUnitVec3i().getY() * 0.5, i.getUnitVec3i().getZ() * 0.5));
             if (!(Math.sqrt(vecDis) > reachDistance) && !(vecDis > minDistance)) {
                side = i;
                minDistance = vecDis;
@@ -165,31 +180,31 @@ public class AlienBlockUtil {
    public static void placeBlock(BlockPos pos, boolean rotate, boolean packet) {
       Direction side = getPlaceSide(pos);
       if (side != null) {
-         clickBlock(pos.offset(side), side.getOpposite(), rotate, Hand.MAIN_HAND, packet);
+         clickBlock(pos.relative(side), side.getOpposite(), rotate, InteractionHand.MAIN_HAND, packet);
       }
    }
 
    public static void placeCrystal(BlockPos pos, boolean rotate) {
-      boolean offhand = mc.player.getOffHandStack().getItem() == Items.END_CRYSTAL;
-      BlockPos obsPos = pos.down();
+      boolean offhand = mc.player.getOffhandItem().getItem() == Items.END_CRYSTAL;
+      BlockPos obsPos = pos.below();
       Direction facing = getClickSide(obsPos);
-      Vec3d vec = obsPos.toCenterPos().add(facing.getVector().getX() * 0.5, facing.getVector().getY() * 0.5, facing.getVector().getZ() * 0.5);
+      Vec3 vec = obsPos.getCenter().add(facing.getUnitVec3i().getX() * 0.5, facing.getUnitVec3i().getY() * 0.5, facing.getUnitVec3i().getZ() * 0.5);
 
-      clickBlock(obsPos, facing, rotate, offhand ? Hand.OFF_HAND : Hand.MAIN_HAND, true);
+      clickBlock(obsPos, facing, rotate, offhand ? InteractionHand.OFF_HAND : InteractionHand.MAIN_HAND, true);
    }
 
-   public static void clickBlock(BlockPos pos, Direction side, boolean rotate, Hand hand, boolean packet) {
-      Vec3d directionVec = new Vec3d(
-         pos.getX() + 0.5 + side.getVector().getX() * 0.5,
-         pos.getY() + 0.5 + side.getVector().getY() * 0.5,
-         pos.getZ() + 0.5 + side.getVector().getZ() * 0.5
+   public static void clickBlock(BlockPos pos, Direction side, boolean rotate, InteractionHand hand, boolean packet) {
+      Vec3 directionVec = new Vec3(
+         pos.getX() + 0.5 + side.getUnitVec3i().getX() * 0.5,
+         pos.getY() + 0.5 + side.getUnitVec3i().getY() * 0.5,
+         pos.getZ() + 0.5 + side.getUnitVec3i().getZ() * 0.5
       );
 
       BlockHitResult result = new BlockHitResult(directionVec, side, pos, false);
       if (packet) {
-         mc.getNetworkHandler().sendPacket(new PlayerInteractBlockC2SPacket(hand, result, 0));
+         mc.getConnection().send(new ServerboundUseItemOnPacket(hand, result, 0));
       } else {
-         mc.interactionManager.interactBlock(mc.player, hand, result);
+         mc.gameMode.useItemOn(mc.player, hand, result);
       }
    }
 }

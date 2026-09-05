@@ -1,6 +1,6 @@
 package com.codigohasta.addon.modules;
 
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.phys.Vec3;
 
 import com.codigohasta.addon.AddonTemplate;
 import meteordevelopment.meteorclient.events.world.TickEvent;
@@ -8,8 +8,8 @@ import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.player.Rotations;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.client.option.Perspective;
-import net.minecraft.util.math.MathHelper;
+import net.minecraft.client.CameraType;
+import net.minecraft.util.Mth;
 
 import java.util.Random;
 
@@ -111,8 +111,8 @@ public class AutoNod extends Module {
     @Override
     public void onDeactivate() {
         if (mc.player != null) {
-            mc.player.setYaw(mc.player.getYaw() - lastAddedYaw);
-            mc.player.setPitch(mc.player.getPitch() - lastAddedPitch);
+            mc.player.setYRot(mc.player.getYRot() - lastAddedYaw);
+            mc.player.setXRot(mc.player.getXRot() - lastAddedPitch);
         }
         lastAddedYaw = 0;
         lastAddedPitch = 0;
@@ -123,8 +123,8 @@ public class AutoNod extends Module {
         if (mc.player == null) return;
 
         // 1. 还原上一帧偏移 (保证基于鼠标朝向)
-        mc.player.setYaw(mc.player.getYaw() - lastAddedYaw);
-        mc.player.setPitch(mc.player.getPitch() - lastAddedPitch);
+        mc.player.setYRot(mc.player.getYRot() - lastAddedYaw);
+        mc.player.setXRot(mc.player.getXRot() - lastAddedPitch);
         lastAddedYaw = 0;
         lastAddedPitch = 0;
 
@@ -193,24 +193,24 @@ public class AutoNod extends Module {
                 break;
             case Smart:
                 // 第一人称静默，其他情况可见
-                usePacket = mc.options.getPerspective() == Perspective.FIRST_PERSON;
+                usePacket = mc.options.getCameraType() == CameraType.FIRST_PERSON;
                 break;
         }
 
-        float realYaw = mc.player.getYaw();
-        float realPitch = mc.player.getPitch();
+        float realYaw = mc.player.getYRot();
+        float realPitch = mc.player.getXRot();
 
         float targetYaw = realYaw + offsetX;
         float targetPitch = realPitch + offsetY;
-        targetPitch = MathHelper.clamp(targetPitch, -90, 90);
+        targetPitch = Mth.clamp(targetPitch, -90, 90);
 
         if (usePacket) {
             // 发送数据包，不改变本地实体
             Rotations.rotate(targetYaw, targetPitch, 100);
         } else {
             // 改变本地实体，并记录偏移量以便下一帧还原
-            mc.player.setYaw(targetYaw);
-            mc.player.setPitch(targetPitch);
+            mc.player.setYRot(targetYaw);
+            mc.player.setXRot(targetPitch);
             
             lastAddedYaw = targetYaw - realYaw;
             lastAddedPitch = targetPitch - realPitch;

@@ -16,15 +16,15 @@ import meteordevelopment.meteorclient.utils.entity.DamageUtils;
 import meteordevelopment.meteorclient.utils.entity.EntityUtils;
 import meteordevelopment.meteorclient.utils.render.color.SettingColor;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.block.RespawnAnchorBlock;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.item.Items;
-import net.minecraft.sound.SoundCategory;
-import net.minecraft.sound.SoundEvents;
-import net.minecraft.util.Hand;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Box;
-import net.minecraft.util.math.Direction;
+import net.minecraft.world.level.block.RespawnAnchorBlock;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.Items;
+import net.minecraft.sounds.SoundSource;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.core.Direction;
 import com.codigohasta.addon.mixin.InventoryAccessor;
 
 public class AutoAnchor extends Module {
@@ -150,7 +150,7 @@ public class AutoAnchor extends Module {
             .sliderRange(0, 1)
             .build()
     );
-    public PlayerEntity target;
+    public Player target;
     public BlockPos currentPos;
     public int dmg;
     public final Timer placeTimer = new Timer();
@@ -170,7 +170,7 @@ public class AutoAnchor extends Module {
     @EventHandler
     private void onMyRender3D(RenderLeaves3DEvent event) {
         if (renderDmg.get() && currentPos != null) {
-            Render3DUtil.renderText3D(dmg + "f", currentPos.toCenterPos(), dmgColor.get().getPacked());
+            Render3DUtil.renderText3D(dmg + "f", currentPos.getCenter(), dmgColor.get().getPacked());
         }
     }
     @EventHandler
@@ -185,7 +185,7 @@ public class AutoAnchor extends Module {
             renderPosEntry.y += (currentPos.getY() - renderPosEntry.y) * renderSpeed.get();
             renderPosEntry.z += (currentPos.getZ() - renderPosEntry.z) * renderSpeed.get();
 
-            Box renderBox = new Box(
+            AABB renderBox = new AABB(
                     renderPosEntry.x, renderPosEntry.y, renderPosEntry.z,
                     renderPosEntry.x + 1.0, renderPosEntry.y + 1.0, renderPosEntry.z + 1.0
             );
@@ -216,8 +216,8 @@ public class AutoAnchor extends Module {
 
     private void doAnchor(int anchor, int glow) {
         if (currentPos != null) {
-            if (noSuicide.get() && DamageUtils.anchorDamage(mc.player, currentPos.toCenterPos()) > EntityUtils.getTotalHealth(mc.player)) return;
-            if (mc.player.getEyePos().distanceTo(currentPos.toCenterPos()) > range.get() || (!BlockUtil.canPlace(currentPos) && !(BlockUtil.getBlock(currentPos) instanceof RespawnAnchorBlock))) {
+            if (noSuicide.get() && DamageUtils.anchorDamage(mc.player, currentPos.getCenter()) > EntityUtils.getTotalHealth(mc.player)) return;
+            if (mc.player.getEyePosition().distanceTo(currentPos.getCenter()) > range.get() || (!BlockUtil.canPlace(currentPos) && !(BlockUtil.getBlock(currentPos) instanceof RespawnAnchorBlock))) {
                 updatePos(target);
             }
             if (!(BlockUtil.getBlock(currentPos) instanceof RespawnAnchorBlock)) {
@@ -236,7 +236,7 @@ public class AutoAnchor extends Module {
             } else if (BlockUtil.getBlock(currentPos) instanceof RespawnAnchorBlock){
                 int old = ((InventoryAccessor)mc.player.getInventory()).getSelectedSlot();
                 Direction side2 = BlockUtil.getClickSide(currentPos);
-                if (mc.world.getBlockState(currentPos).get(RespawnAnchorBlock.CHARGES) > 0) {
+                if (mc.level.getBlockState(currentPos).getValue(RespawnAnchorBlock.CHARGE) > 0) {
                     BlockUtil.clickBlock(currentPos, side2, rotate.get());
                     placeTimer.reset();
                     return;
@@ -244,7 +244,7 @@ public class AutoAnchor extends Module {
                 if (side2 != null) {
                     doSwap(glow);
                     BlockUtil.clickBlock(currentPos, side2, rotate.get());
-                    mc.world.playSound(null, mc.player.getX(), mc.player.getY(), mc.player.getZ(), SoundEvents.BLOCK_RESPAWN_ANCHOR_CHARGE, SoundCategory.AMBIENT, 5.0f, 1.0f);
+                    mc.level.playSound(null, mc.player.getX(), mc.player.getY(), mc.player.getZ(), SoundEvents.RESPAWN_ANCHOR_CHARGE, SoundSource.AMBIENT, 5.0f, 1.0f);
                     if (inventory.get()) {
                         doSwap(glow);
                     } else {
@@ -256,18 +256,18 @@ public class AutoAnchor extends Module {
         }
     }
 
-    private void updatePos(PlayerEntity target) {
+    private void updatePos(Player target) {
         if (preferHead.get()) {
-            BlockPos head = target.getBlockPos().up(2);
-            if (DamageUtils.anchorDamage(target, head.toCenterPos()) > minDamage.get()) {
+            BlockPos head = target.blockPosition().above(2);
+            if (DamageUtils.anchorDamage(target, head.getCenter()) > minDamage.get()) {
                 if (BlockUtil.canPlace(head) || BlockUtil.getBlock(head) instanceof RespawnAnchorBlock) {
                     currentPos = head;
                     return;
                 } else {
                     if (placeHelper.get()) {
                         for (Direction dir : new Direction[]{Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST}) {
-                            BlockPos temp = head.offset(dir);
-                            if (BlockUtil.canPlace(temp) && BlockUtil.isGrimDirection(temp.offset(dir), dir.getOpposite())) {
+                            BlockPos temp = head.relative(dir);
+                            if (BlockUtil.canPlace(temp) && BlockUtil.isGrimDirection(temp.relative(dir), dir.getOpposite())) {
                                 placeHelper(temp);
                                 return;
                             }
@@ -280,8 +280,8 @@ public class AutoAnchor extends Module {
         BlockPos bestPos = null;
         for (BlockPos pos : BlockUtil.getSphere(range.get())){
             if (!BlockUtil.canPlace(pos) && !(BlockUtil.getBlock(pos) instanceof RespawnAnchorBlock)) continue;
-            if (DamageUtils.anchorDamage(target, pos.toCenterPos()) > bestDmg && DamageUtils.anchorDamage(target, pos.toCenterPos()) > minDamage.get() && DamageUtils.anchorDamage(mc.player, pos.toCenterPos()) < maxSelfDmg.get()){
-                bestDmg = DamageUtils.anchorDamage(target, pos.toCenterPos());
+            if (DamageUtils.anchorDamage(target, pos.getCenter()) > bestDmg && DamageUtils.anchorDamage(target, pos.getCenter()) > minDamage.get() && DamageUtils.anchorDamage(mc.player, pos.getCenter()) < maxSelfDmg.get()){
+                bestDmg = DamageUtils.anchorDamage(target, pos.getCenter());
                 bestPos = pos;
             }
         }
@@ -310,7 +310,7 @@ public class AutoAnchor extends Module {
         return !usingPause.get() || checkPause(onlyMain.get());
     }
     public boolean checkPause(boolean onlyMain) {
-        return (mc.options.useKey.isPressed() || mc.player.isUsingItem()) && (!onlyMain || mc.player.getActiveHand() == Hand.MAIN_HAND);
+        return (mc.options.keyUse.isDown() || mc.player.isUsingItem()) && (!onlyMain || mc.player.getUsedItemHand() == InteractionHand.MAIN_HAND);
     }
     private void doSwap(int slot) {
         if (slot == -1) return;

@@ -57,7 +57,7 @@ public class MotionCamera extends Module {
     }
 
     public boolean on() {
-        return isActive() && (!noFirstPerson.get() || !mc.options.getPerspective().isFirstPerson());
+        return isActive() && (!noFirstPerson.get() || !mc.options.getCameraType().isFirstPerson());
     }
 
     @Override
@@ -80,7 +80,7 @@ public class MotionCamera extends Module {
         prevFakeY = fakeY;
         prevFakeZ = fakeZ;
 
-        double spd = mc.options.getPerspective().isFirstPerson() ? firstPersonSpeed.get() : speed.get();
+        double spd = mc.options.getCameraType().isFirstPerson() ? firstPersonSpeed.get() : speed.get();
 
         fakeX = AlienAnimateUtil.animate(fakeX, mc.player.getX(), spd);
         fakeY = AlienAnimateUtil.animate(fakeY, mc.player.getY() + mc.player.getEyeHeight(mc.player.getPose()), spd);

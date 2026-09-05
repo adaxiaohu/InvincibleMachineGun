@@ -1,7 +1,7 @@
 package com.codigohasta.addon.modules;
 
 import com.codigohasta.addon.AddonTemplate;
-import fi.dy.masa.litematica.world.SchematicWorldHandler;
+import com.codigohasta.addon.utils.SchematicBridge;
 import meteordevelopment.meteorclient.events.entity.player.InteractBlockEvent;
 import meteordevelopment.meteorclient.events.render.Render3DEvent;
 import meteordevelopment.meteorclient.events.world.TickEvent;
@@ -14,19 +14,19 @@ import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.Utils;
 import meteordevelopment.meteorclient.utils.render.color.SettingColor;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.block.entity.BlockEntity;
-import net.minecraft.block.entity.LootableContainerBlockEntity;
-import net.minecraft.client.gui.screen.ingame.HandledScreen;
-import net.minecraft.inventory.Inventory;
-import net.minecraft.item.ItemStack;
-import net.minecraft.network.packet.c2s.play.CreativeInventoryActionC2SPacket;
-import net.minecraft.screen.ScreenHandler;
-import net.minecraft.screen.slot.SlotActionType;
-import net.minecraft.util.Hand;
-import net.minecraft.util.hit.BlockHitResult;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Direction;
-import net.minecraft.util.math.Vec3d; // ✅ 1.21.11 必须导入
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.entity.RandomizableContainerBlockEntity;
+import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
+import net.minecraft.world.Container;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.network.protocol.game.ServerboundSetCreativeModeSlotPacket;
+import net.minecraft.world.inventory.AbstractContainerMenu;
+import net.minecraft.world.inventory.ContainerInput;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.world.phys.Vec3; // ✅ 1.21.11 必须导入
 
 import java.util.HashSet;
 import java.util.Set;
@@ -160,7 +160,7 @@ public class SchematicPro extends Module {
         if (!mc.player.isCreative()) return;
 
         BlockPos pos = event.result.getBlockPos();
-        if (mc.world.getBlockEntity(pos) instanceof LootableContainerBlockEntity) {
+        if (mc.level.getBlockEntity(pos) instanceof RandomizableContainerBlockEntity) {
             if (shouldSkipContainer(pos)) return; 
 
             currentTarget = pos;
@@ -171,7 +171,7 @@ public class SchematicPro extends Module {
 
     @EventHandler
     private void onTick(TickEvent.Pre event) {
-        if (mc.player == null || mc.world == null) return;
+        if (mc.player == null || mc.level == null) return;
 
         if (isWorking && currentTarget != null) {
             handleFillingInGui();
@@ -188,18 +188,18 @@ public class SchematicPro extends Module {
     }
 
     private void findAndOpenTarget() {
-        Vec3d playerPos = new Vec3d(mc.player.getX(), mc.player.getY(), mc.player.getZ());
+        Vec3 playerPos = new Vec3(mc.player.getX(), mc.player.getY(), mc.player.getZ());
         double interactSq = Math.pow(interactRange.get(), 2);
 
         // 仅遍历交互范围内的方块，用于打开容器
         // 为了性能，我们这里还是遍历 loaded entities，但在判断距离时卡死
         for (BlockEntity be : Utils.blockEntities()) {
-            BlockPos pos = be.getPos();
+            BlockPos pos = be.getBlockPos();
             
             // 距离检查：只处理交互范围内的
-            if (playerPos.squaredDistanceTo(pos.getX()+0.5, pos.getY()+0.5, pos.getZ()+0.5) > interactSq) continue;
+            if (playerPos.distanceToSqr(pos.getX()+0.5, pos.getY()+0.5, pos.getZ()+0.5) > interactSq) continue;
             
-            if (!(be instanceof LootableContainerBlockEntity)) continue;
+            if (!(be instanceof RandomizableContainerBlockEntity)) continue;
 
             if (finishedCache.contains(pos)) continue;
             if (shouldSkipContainer(pos)) continue;
@@ -209,8 +209,8 @@ public class SchematicPro extends Module {
                 isWorking = true;
                 timer = delay.get();
 
-                mc.interactionManager.interactBlock(mc.player, Hand.MAIN_HAND, 
-                    new BlockHitResult(new Vec3d(pos.getX()+0.5, pos.getY()+0.5, pos.getZ()+0.5), 
+                mc.gameMode.useItemOn(mc.player, InteractionHand.MAIN_HAND, 
+                    new BlockHitResult(new Vec3(pos.getX()+0.5, pos.getY()+0.5, pos.getZ()+0.5), 
                     Direction.UP, pos, false));
                 return; 
             } else {
@@ -220,15 +220,15 @@ public class SchematicPro extends Module {
     }
 
     private boolean shouldSkipContainer(BlockPos pos) {
-        var schematicWorld = SchematicWorldHandler.getSchematicWorld();
+        Object schematicWorld = SchematicBridge.getSchematicWorld();
         if (schematicWorld == null) return true;
 
-        BlockEntity schemBe = schematicWorld.getBlockEntity(pos);
-        if (!(schemBe instanceof Inventory schemInv)) return true;
+        BlockEntity schemBe = SchematicBridge.getBlockEntity(schematicWorld, pos);
+        if (!(schemBe instanceof Container schemInv)) return true;
 
         boolean isEmpty = true;
-        for (int i = 0; i < schemInv.size(); i++) {
-            if (!schemInv.getStack(i).isEmpty()) {
+        for (int i = 0; i < schemInv.getContainerSize(); i++) {
+            if (!schemInv.getItem(i).isEmpty()) {
                 isEmpty = false;
                 break;
             }
@@ -237,19 +237,19 @@ public class SchematicPro extends Module {
     }
 
     private boolean needsFixing(BlockPos pos) {
-        var schematicWorld = SchematicWorldHandler.getSchematicWorld();
+        Object schematicWorld = SchematicBridge.getSchematicWorld();
         if (schematicWorld == null) return false;
 
-        BlockEntity realBe = mc.world.getBlockEntity(pos);
-        BlockEntity schemBe = schematicWorld.getBlockEntity(pos);
+        BlockEntity realBe = mc.level.getBlockEntity(pos);
+        BlockEntity schemBe = SchematicBridge.getBlockEntity(schematicWorld, pos);
 
-        if (realBe instanceof Inventory realInv && schemBe instanceof Inventory schemInv) {
-            for (int i = 0; i < schemInv.size(); i++) {
-                ItemStack need = schemInv.getStack(i);
-                ItemStack have = realInv.getStack(i);
+        if (realBe instanceof Container realInv && schemBe instanceof Container schemInv) {
+            for (int i = 0; i < schemInv.getContainerSize(); i++) {
+                ItemStack need = schemInv.getItem(i);
+                ItemStack have = realInv.getItem(i);
                 
                 if (need.isEmpty() && have.isEmpty()) continue;
-                if (!ItemStack.areEqual(need, have)) {
+                if (!ItemStack.matches(need, have)) {
                     return true;
                 }
             }
@@ -258,7 +258,7 @@ public class SchematicPro extends Module {
     }
 
     private void handleFillingInGui() {
-        if (!(mc.currentScreen instanceof HandledScreen<?> screen)) {
+        if (!(mc.screen instanceof AbstractContainerScreen<?> screen)) {
             isWorking = false;
             currentTarget = null;
             return;
@@ -269,28 +269,28 @@ public class SchematicPro extends Module {
             return;
         }
 
-        var schematicWorld = SchematicWorldHandler.getSchematicWorld();
+        Object schematicWorld = SchematicBridge.getSchematicWorld();
         if (schematicWorld == null || currentTarget == null) {
             closeContainer();
             return;
         }
 
-        BlockEntity schemBe = schematicWorld.getBlockEntity(currentTarget);
-        if (!(schemBe instanceof Inventory schemInv)) {
+        BlockEntity schemBe = SchematicBridge.getBlockEntity(schematicWorld, currentTarget);
+        if (!(schemBe instanceof Container schemInv)) {
             closeContainer();
             return;
         }
 
-        ScreenHandler handler = screen.getScreenHandler();
+        AbstractContainerMenu handler = screen.getMenu();
         boolean allCorrect = true;
 
-        for (int i = 0; i < schemInv.size(); i++) {
+        for (int i = 0; i < schemInv.getContainerSize(); i++) {
             if (i >= handler.slots.size()) break;
 
-            ItemStack targetStack = schemInv.getStack(i);
-            ItemStack realStack = handler.getSlot(i).getStack();
+            ItemStack targetStack = schemInv.getItem(i);
+            ItemStack realStack = handler.getSlot(i).getItem();
 
-            if (ItemStack.areEqual(targetStack, realStack)) {
+            if (ItemStack.matches(targetStack, realStack)) {
                 continue;
             }
 
@@ -298,8 +298,8 @@ public class SchematicPro extends Module {
             if (targetStack.isEmpty()) continue; 
 
             ItemStack stackToSend = targetStack.copy();
-            mc.player.networkHandler.sendPacket(new CreativeInventoryActionC2SPacket(36, stackToSend));
-            mc.interactionManager.clickSlot(handler.syncId, i, 0, SlotActionType.SWAP, mc.player);
+            mc.player.connection.send(new ServerboundSetCreativeModeSlotPacket(36, stackToSend));
+            mc.gameMode.handleContainerInput(handler.containerId, i, 0, ContainerInput.SWAP, mc.player);
 
             timer = delay.get(); 
             return; 
@@ -317,7 +317,7 @@ public class SchematicPro extends Module {
     }
 
     private void closeContainer() {
-        if (mc.player != null) mc.player.closeHandledScreen();
+        if (mc.player != null) mc.player.closeContainer();
         isWorking = false;
         currentTarget = null;
         timer = delay.get();
@@ -327,11 +327,11 @@ public class SchematicPro extends Module {
 
     @EventHandler
     private void onRender(Render3DEvent event) {
-        if (mc.player == null || mc.world == null) return;
-        var schematicWorld = SchematicWorldHandler.getSchematicWorld();
+        if (mc.player == null || mc.level == null) return;
+        Object schematicWorld = SchematicBridge.getSchematicWorld();
         if (schematicWorld == null) return;
 
-        Vec3d playerPos = new Vec3d(mc.player.getX(), mc.player.getY(), mc.player.getZ());
+        Vec3 playerPos = new Vec3(mc.player.getX(), mc.player.getY(), mc.player.getZ());
         
         // 范围平方计算
         double renderSq = Math.pow(renderRange.get(), 2);
@@ -339,13 +339,13 @@ public class SchematicPro extends Module {
 
         // 遍历所有加载的 BlockEntity
         for (BlockEntity be : Utils.blockEntities()) {
-            BlockPos pos = be.getPos();
-            double distSq = playerPos.squaredDistanceTo(pos.getX()+0.5, pos.getY()+0.5, pos.getZ()+0.5);
+            BlockPos pos = be.getBlockPos();
+            double distSq = playerPos.distanceToSqr(pos.getX()+0.5, pos.getY()+0.5, pos.getZ()+0.5);
 
             // 1. 如果超出了全局渲染范围，直接跳过
             if (distSq > renderSq) continue;
             
-            if (!(be instanceof LootableContainerBlockEntity)) continue;
+            if (!(be instanceof RandomizableContainerBlockEntity)) continue;
 
             // 2. 投影空箱子过滤
             if (shouldSkipContainer(pos)) continue;

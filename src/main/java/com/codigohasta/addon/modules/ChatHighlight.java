@@ -1,6 +1,6 @@
 package com.codigohasta.addon.modules;
 
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.phys.Vec3;
 
 import com.codigohasta.addon.AddonTemplate;
 import meteordevelopment.meteorclient.events.game.ReceiveMessageEvent;
@@ -9,14 +9,14 @@ import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.player.ChatUtils;
 import meteordevelopment.meteorclient.utils.render.color.SettingColor;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.client.network.PlayerListEntry;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.nbt.NbtElement;
-import net.minecraft.nbt.NbtList;
-import net.minecraft.text.MutableText;
-import net.minecraft.text.Style;
-import net.minecraft.text.Text;
-import net.minecraft.text.TextColor;
+import net.minecraft.client.multiplayer.PlayerInfo;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.Tag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.network.chat.Style;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.TextColor;
 
 import java.util.Collection;
 import java.util.HashMap;
@@ -195,7 +195,7 @@ public class ChatHighlight extends Module {
 
     @EventHandler
     private void onMessageReceive(ReceiveMessageEvent event) {
-        if (mc.player == null || mc.world == null) return;
+        if (mc.player == null || mc.level == null) return;
 
         String textContent = event.getMessage().getString();
         String myName = mc.player.getName().getString();
@@ -272,8 +272,8 @@ public class ChatHighlight extends Module {
 
     // 判断消息来源是否为其他玩家
     private boolean isFromPlayer(String message) {
-        Collection<PlayerListEntry> playerList = mc.getNetworkHandler().getPlayerList();
-        for (PlayerListEntry entry : playerList) {
+        Collection<PlayerInfo> playerList = mc.getConnection().getOnlinePlayers();
+        for (PlayerInfo entry : playerList) {
             String pName = entry.getProfile().name();
             // 排除自己
             if (pName.equals(mc.player.getName().getString())) continue;
@@ -288,12 +288,12 @@ public class ChatHighlight extends Module {
 
     // 修改消息样式 (用于自己和名单玩家)
     private void modifyMessage(ReceiveMessageEvent event, SettingColor color, boolean bold, boolean italic, boolean underline, boolean strikethrough) {
-        MutableText newMessage = event.getMessage().copy();
+        MutableComponent newMessage = event.getMessage().copy();
         Style style = newMessage.getStyle()
                 .withColor(TextColor.fromRgb(color.getPacked()))
                 .withBold(bold)
                 .withItalic(italic)
-                .withUnderline(underline)
+                .withUnderlined(underline)
                 .withStrikethrough(strikethrough);
         
         newMessage.setStyle(style);
@@ -302,18 +302,18 @@ public class ChatHighlight extends Module {
 
     // 添加前缀并修改样式 (用于路人)
     private void addPrefixAndModify(ReceiveMessageEvent event) {
-        MutableText body = event.getMessage().copy();
+        MutableComponent body = event.getMessage().copy();
         Style bodyStyle = body.getStyle()
                 .withColor(TextColor.fromRgb(othersColor.get().getPacked()))
                 .withBold(othersBold.get())
                 .withItalic(othersItalic.get())
-                .withUnderline(othersUnderline.get())
+                .withUnderlined(othersUnderline.get())
                 .withStrikethrough(othersStrikethrough.get());
         body.setStyle(bodyStyle);
 
         String pText = othersPrefix.get();
         if (pText != null && !pText.isEmpty()) {
-            MutableText prefix = Text.literal(pText);
+            MutableComponent prefix = Component.literal(pText);
             // 前缀的样式
             Style prefixStyle = Style.EMPTY
                     .withColor(TextColor.fromRgb(othersPrefixColor.get().getPacked()))
@@ -363,9 +363,9 @@ public class ChatHighlight extends Module {
             ChatUtils.info("=== 特定高亮名单 (" + specificPlayers.size() + ") ===");
             for (Map.Entry<String, SettingColor> entry : specificPlayers.entrySet()) {
                 // 使用该颜色的文字打印名字
-                MutableText nameText = Text.literal(" - " + entry.getKey());
+                MutableComponent nameText = Component.literal(" - " + entry.getKey());
                 nameText.setStyle(Style.EMPTY.withColor(TextColor.fromRgb(entry.getValue().getPacked())));
-                mc.inGameHud.getChatHud().addMessage(nameText);
+                mc.gui.getChat().addClientSystemMessage(nameText);
             }
         }
         btnPrint.set(false); // 按钮回弹
@@ -374,12 +374,12 @@ public class ChatHighlight extends Module {
     // ================== NBT 保存与读取 (防止重启失效) ==================
 
     @Override
-    public NbtCompound toTag() {
-        NbtCompound tag = super.toTag();
-        NbtList list = new NbtList();
+    public CompoundTag toTag() {
+        CompoundTag tag = super.toTag();
+        ListTag list = new ListTag();
 
         for (Map.Entry<String, SettingColor> entry : specificPlayers.entrySet()) {
-            NbtCompound entryTag = new NbtCompound();
+            CompoundTag entryTag = new CompoundTag();
             entryTag.putString("name", entry.getKey());
             
             // 保存颜色 (R, G, B, A)
@@ -397,15 +397,15 @@ public class ChatHighlight extends Module {
     }
 
     @Override
-    public Module fromTag(NbtCompound tag) {
+    public Module fromTag(CompoundTag tag) {
         super.fromTag(tag); // 先读取常规设置
 
         if (tag.contains("specificPlayers")) {
             specificPlayers.clear(); // 清空旧数据
-            NbtList list = tag.getList("specificPlayers").orElse(null);
+            ListTag list = tag.getList("specificPlayers").orElse(null);
             
-            for (NbtElement element : list) {
-                NbtCompound entryTag = (NbtCompound) element;
+            for (Tag element : list) {
+                CompoundTag entryTag = (CompoundTag) element;
                 // 旧代码可能是直接 getString，现在需要 .orElse 或 .get
               String name = entryTag.getString("name").orElse(""); // 或者 .orElse("default")
               int r = entryTag.getInt("r").orElse(255);

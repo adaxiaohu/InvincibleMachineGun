@@ -1,7 +1,7 @@
 package com.codigohasta.addon.utils.bmw;
 
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.util.math.MathHelper;
+import net.minecraft.client.Minecraft;
+import net.minecraft.util.Mth;
 
 /**
  * BMWClient-nextgen 移植：Rotation 数据类
@@ -21,13 +21,13 @@ public class BMWRotation {
     }
 
     public BMWRotation normalize() {
-        return new BMWRotation(MathHelper.wrapDegrees(yaw), MathHelper.wrapDegrees(pitch));
+        return new BMWRotation(Mth.wrapDegrees(yaw), Mth.wrapDegrees(pitch));
     }
 
     public static BMWRotation ofPlayer() {
-        MinecraftClient mc = MinecraftClient.getInstance();
+        Minecraft mc = Minecraft.getInstance();
         if (mc.player == null) return ZERO;
-        return new BMWRotation(mc.player.getYaw(), mc.player.getPitch());
+        return new BMWRotation(mc.player.getYRot(), mc.player.getXRot());
     }
 
     @Override

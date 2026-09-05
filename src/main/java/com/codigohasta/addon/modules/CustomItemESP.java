@@ -1,6 +1,6 @@
 package com.codigohasta.addon.modules;
 
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.phys.Vec3;
 
 import com.codigohasta.addon.AddonTemplate;
 import meteordevelopment.meteorclient.events.render.Render2DEvent;
@@ -14,14 +14,14 @@ import meteordevelopment.meteorclient.utils.misc.Names;
 import meteordevelopment.meteorclient.utils.render.NametagUtils;
 import meteordevelopment.meteorclient.utils.render.color.SettingColor;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.client.gui.DrawContext;
-import net.minecraft.client.util.math.MatrixStack;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.ItemEntity;
-import net.minecraft.item.Item;
-import net.minecraft.item.ItemStack;
-import net.minecraft.util.math.Box;
-import net.minecraft.util.math.MathHelper;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import com.mojang.blaze3d.vertex.PoseStack;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.util.Mth;
 import org.joml.Vector3d;
 
 import java.util.List;
@@ -132,9 +132,9 @@ public class CustomItemESP extends Module {
     private void onRender3D(Render3DEvent event) {
         if (!renderBox.get()) return;
 
-        for (Entity entity : mc.world.getEntities()) {
+        for (Entity entity : mc.level.entitiesForRendering()) {
             if (entity instanceof ItemEntity itemEntity) {
-                ItemStack stack = itemEntity.getStack();
+                ItemStack stack = itemEntity.getItem();
                 
                 // 检查是否在白名单中
                 if (items.get().contains(stack.getItem())) {
@@ -146,7 +146,7 @@ public class CustomItemESP extends Module {
 
     private void renderItemBox(Render3DEvent event, ItemEntity entity) {
         // 掉落物的碰撞箱通常较小，我们可以手动指定一个好看的大小，或者直接用 entity.getBoundingBox()
-        Box box = entity.getBoundingBox();
+        AABB box = entity.getBoundingBox();
         event.renderer.box(box, sideColor.get(), lineColor.get(), shapeMode.get(), 0);
     }
 
@@ -155,20 +155,20 @@ public class CustomItemESP extends Module {
     private void onRender2D(Render2DEvent event) {
         if (!renderName.get()) return;
 
-        for (Entity entity : mc.world.getEntities()) {
+        for (Entity entity : mc.level.entitiesForRendering()) {
             if (entity instanceof ItemEntity itemEntity) {
-                ItemStack stack = itemEntity.getStack();
+                ItemStack stack = itemEntity.getItem();
 
                 // 检查是否在白名单中
                 if (items.get().contains(stack.getItem())) {
                     // 传入 drawContext 以便获取 Matrices
-                    renderItemNametag(itemEntity, stack, event.tickDelta, event.drawContext);
+                    renderItemNametag(itemEntity, stack, event.tickDelta, event.graphics);
                 }
             }
         }
     }
 
-    private void renderItemNametag(ItemEntity entity, ItemStack stack, double tickDelta, DrawContext drawContext) {
+    private void renderItemNametag(ItemEntity entity, ItemStack stack, double tickDelta, GuiGraphicsExtractor drawContext) {
         // 设置位置向量 (直接调用内部的 set 方法，不再引用外部类)
         setVector(pos, entity, tickDelta);
         
@@ -192,7 +192,7 @@ public class CustomItemESP extends Module {
             double height = textRenderer.getHeight();
             double widthHalf = width / 2;
 
-            // 绘制背景 (修复: 传入 drawContext.getMatrices())
+            // 绘制背景 (修复: 传入 drawContext.pose())
             if (renderBackground.get()) {
                 Renderer2D.COLOR.begin();
                 Renderer2D.COLOR.quad(-widthHalf - 2, -height / 2 - 2, width + 4, height + 4, backgroundColor.get());
@@ -210,9 +210,9 @@ public class CustomItemESP extends Module {
 
     // 内部工具方法，替代 UtilsRef (修复了第二个错误)
     private void setVector(Vector3d pos, Entity entity, double tickDelta) {
-        double x = MathHelper.lerp(tickDelta, entity.lastRenderX, entity.getX());
-        double y = MathHelper.lerp(tickDelta, entity.lastRenderY, entity.getY());
-        double z = MathHelper.lerp(tickDelta, entity.lastRenderZ, entity.getZ());
+        double x = Mth.lerp(tickDelta, entity.xOld, entity.getX());
+        double y = Mth.lerp(tickDelta, entity.yOld, entity.getY());
+        double z = Mth.lerp(tickDelta, entity.zOld, entity.getZ());
         pos.set(x, y, z);
     }
 }

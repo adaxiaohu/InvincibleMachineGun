@@ -1,0 +1,142 @@
+classTweaker	v1	official
+
+
+# ClientWorld
+accessible	method	net/minecraft/client/multiplayer/ClientLevel	getBlockStatePredictionHandler	()Lnet/minecraft/client/multiplayer/prediction/BlockStatePredictionHandler;
+accessible	method	net/minecraft/client/multiplayer/ClientLevel	getEntities	()Lnet/minecraft/world/level/entity/LevelEntityGetter;
+
+# MinecraftClient
+accessible	field	net/minecraft/client/Minecraft	missTime	I
+accessible	field	net/minecraft/client/Minecraft	clientLevelTeardownInProgress	Z
+
+# Entity
+accessible	field	net/minecraft/world/entity/Entity	dimensions	Lnet/minecraft/world/entity/EntityDimensions;
+accessible	method	net/minecraft/world/entity/Entity	maybeBackOffFromEdge	(Lnet/minecraft/world/phys/Vec3;Lnet/minecraft/world/entity/MoverType;)Lnet/minecraft/world/phys/Vec3;
+accessible	method	net/minecraft/world/entity/Entity	collectColliders	(Lnet/minecraft/world/entity/Entity;Lnet/minecraft/world/level/Level;Ljava/util/List;Lnet/minecraft/world/phys/AABB;)Ljava/util/List;
+accessible	method	net/minecraft/world/entity/Entity	collideWithShapes	(Lnet/minecraft/world/phys/Vec3;Lnet/minecraft/world/phys/AABB;Ljava/util/List;)Lnet/minecraft/world/phys/Vec3;
+accessible	method	net/minecraft/world/entity/Entity	collide	(Lnet/minecraft/world/phys/Vec3;)Lnet/minecraft/world/phys/Vec3;
+
+# LivingEntity
+accessible	field	net/minecraft/world/entity/LivingEntity	DATA_LIVING_ENTITY_FLAGS	Lnet/minecraft/network/syncher/EntityDataAccessor;
+accessible	method	net/minecraft/world/entity/LivingEntity	handleOnClimbable	(Lnet/minecraft/world/phys/Vec3;)Lnet/minecraft/world/phys/Vec3;
+accessible	method	net/minecraft/world/entity/LivingEntity	getFrictionInfluencedSpeed	(F)F
+
+# AbstractBlock
+accessible	method	net/minecraft/world/level/block/state/BlockBehaviour	getCollisionShape	(Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/world/level/BlockGetter;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/phys/shapes/CollisionContext;)Lnet/minecraft/world/phys/shapes/VoxelShape;
+
+# PalettedContainer
+accessible	method	net/minecraft/world/level/chunk/PalettedContainer	get	(I)Ljava/lang/Object;
+
+# ClientPlayerInteractionManager
+accessible	method	net/minecraft/client/multiplayer/MultiPlayerGameMode	startPrediction	(Lnet/minecraft/client/multiplayer/ClientLevel;Lnet/minecraft/client/multiplayer/prediction/PredictiveAction;)V
+
+# PlayerInteractEntityC2SPacket
+accessible	field	net/minecraft/network/protocol/game/ServerboundInteractPacket	entityId	I
+
+# VoxelShape utilities
+accessible	method	net/minecraft/world/phys/shapes/VoxelShape	getCoords	(Lnet/minecraft/core/Direction$Axis;)Lit/unimi/dsi/fastutil/doubles/DoubleList;
+accessible	field	net/minecraft/world/phys/shapes/OffsetDoubleList	offset	D
+accessible	field	net/minecraft/world/phys/shapes/OffsetDoubleList	delegate	Lit/unimi/dsi/fastutil/doubles/DoubleList;
+accessible	method	net/minecraft/world/phys/shapes/ArrayVoxelShape	<init>	(Lnet/minecraft/world/phys/shapes/DiscreteVoxelShape;Lit/unimi/dsi/fastutil/doubles/DoubleList;Lit/unimi/dsi/fastutil/doubles/DoubleList;Lit/unimi/dsi/fastutil/doubles/DoubleList;)V
+accessible	field	net/minecraft/world/phys/shapes/BitSetDiscreteVoxelShape	storage	Ljava/util/BitSet;
+
+# NBT
+accessible	field	net/minecraft/nbt/CompoundTag	tags	Ljava/util/Map;
+accessible	method	net/minecraft/nbt/CompoundTag	<init>	(Ljava/util/Map;)V
+
+# ItemStack
+accessible	field	net/minecraft/world/item/ItemStack	components	Lnet/minecraft/core/component/PatchedDataComponentMap;
+accessible	method	net/minecraft/world/item/ItemStack	transmuteCopyIgnoreEmpty	(Lnet/minecraft/world/level/ItemLike;I)Lnet/minecraft/world/item/ItemStack;
+
+# Component
+accessible	field	net/minecraft/world/item/component/CustomData	tag	Lnet/minecraft/nbt/CompoundTag;
+accessible	method	net/minecraft/world/item/component/CustomData	<init>	(Lnet/minecraft/nbt/CompoundTag;)V
+accessible	field	net/minecraft/core/component/PatchedDataComponentMap	patch	Lit/unimi/dsi/fastutil/objects/Reference2ObjectMap;
+accessible	method	net/minecraft/core/component/PatchedDataComponentMap	ensureMapOwnership	()V
+accessible	method	net/minecraft/core/component/DataComponentPatch	<init>	(Lit/unimi/dsi/fastutil/objects/Reference2ObjectMap;)V
+
+# Text
+accessible	field	net/minecraft/network/chat/TextColor	LEGACY_FORMAT_TO_COLOR	Ljava/util/Map;
+
+# Identifier
+accessible	method	net/minecraft/resources/Identifier	<init>	(Ljava/lang/String;Ljava/lang/String;)V
+
+# MinecraftClient internals
+accessible	field	net/minecraft/client/renderer/GameRenderer	renderBuffers	Lnet/minecraft/client/renderer/RenderBuffers;
+accessible	method	net/minecraft/client/KeyboardHandler	keyPress	(JILnet/minecraft/client/input/KeyEvent;)V
+accessible	field	net/minecraft/client/ClientRecipeBook	known	Ljava/util/Map;
+accessible	field	net/minecraft/client/renderer/GameRenderer	guiRenderer	Lnet/minecraft/client/gui/render/GuiRenderer;
+accessible	field	net/minecraft/client/renderer/GameRenderer	fogRenderer	Lnet/minecraft/client/renderer/fog/FogRenderer;
+accessible	field	net/minecraft/client/renderer/GameRenderer	resourcePool	Lcom/mojang/blaze3d/resource/CrossFrameResourcePool;
+
+# Mouse
+accessible	field	net/minecraft/client/MouseHandler	activeButton	Lnet/minecraft/client/input/MouseButtonInfo;
+accessible	method	net/minecraft/client/MouseHandler	simulateRightClick	(Lnet/minecraft/client/input/MouseButtonInfo;Z)Lnet/minecraft/client/input/MouseButtonInfo;
+accessible	field	net/minecraft/client/MouseHandler	lastClick	Lnet/minecraft/client/MouseHandler$LastClick;
+accessible	class	net/minecraft/client/MouseHandler$LastClick
+accessible	field	net/minecraft/client/MouseHandler	lastClickButton	I
+
+# GUI
+accessible	field	net/minecraft/client/gui/components/MultilineTextField	selectCursor	I
+accessible	field	net/minecraft/client/gui/screens/DisconnectedScreen	parent	Lnet/minecraft/client/gui/screens/Screen;
+accessible	field	net/minecraft/client/gui/screens/DisconnectedScreen	layout	Lnet/minecraft/client/gui/layouts/LinearLayout;
+
+# Input
+accessible	field	net/minecraft/client/player/ClientInput	moveVector	Lnet/minecraft/world/phys/Vec2;
+
+# Networking
+accessible	field	net/minecraft/network/Connection	channel	Lio/netty/channel/Channel;
+accessible	class	net/minecraft/network/PacketProcessor$ListenerAndPacket
+accessible	field	net/minecraft/network/protocol/game/ClientboundSectionBlocksUpdatePacket	sectionPos	Lnet/minecraft/core/SectionPos;
+
+# World
+accessible	field	net/minecraft/world/level/biome/BiomeManager	biomeZoomSeed	J
+accessible	field	net/minecraft/world/level/levelgen/placement/CountPlacement	count	Lnet/minecraft/util/valueproviders/IntProvider;
+accessible	field	net/minecraft/world/level/levelgen/placement/HeightRangePlacement	height	Lnet/minecraft/world/level/levelgen/heightproviders/HeightProvider;
+accessible	field	net/minecraft/world/level/levelgen/placement/RarityFilter	chance	I
+accessible	class	net/minecraft/client/multiplayer/ClientChunkCache$Storage
+accessible	field	net/minecraft/client/multiplayer/ClientChunkCache	storage	Lnet/minecraft/client/multiplayer/ClientChunkCache$Storage;
+accessible	field	net/minecraft/client/multiplayer/ClientChunkCache$Storage	chunks	Ljava/util/concurrent/atomic/AtomicReferenceArray;
+accessible	field	net/minecraft/client/gui/components/AbstractScrollArea	scrolling	Z
+accessible	field	net/minecraft/world/inventory/AbstractContainerMenu	stateId	I
+accessible	field	net/minecraft/world/level/chunk/PalettedContainer	data	Lnet/minecraft/world/level/chunk/PalettedContainer$Data;
+accessible	method	net/minecraft/world/level/chunk/PalettedContainer$Data	palette	()Lnet/minecraft/world/level/chunk/Palette;
+accessible	field	net/minecraft/client/multiplayer/prediction/BlockStatePredictionHandler	currentSequenceNr	I
+accessible	method	net/minecraft/world/item/BlockItem	getPlacementState	(Lnet/minecraft/world/item/context/BlockPlaceContext;)Lnet/minecraft/world/level/block/state/BlockState;
+accessible	field	net/minecraft/world/level/block/entity/BlockEntityType	validBlocks	Ljava/util/Set;
+accessible	field	net/minecraft/client/resources/model/ModelManager	missingModels	Lnet/minecraft/client/resources/model/ModelBakery$MissingModels;
+
+# MinecraftServer
+accessible	field	net/minecraft/server/MinecraftServer	storageSource	Lnet/minecraft/world/level/storage/LevelStorageSource$LevelStorageAccess;
+
+# HandledScreen
+accessible	method	net/minecraft/client/gui/screens/inventory/AbstractContainerScreen	getHoveredSlot	(DD)Lnet/minecraft/world/inventory/Slot;
+
+# ChatScreen
+accessible	field	net/minecraft/client/gui/screens/ChatScreen	input	Lnet/minecraft/client/gui/components/EditBox;
+accessible	field	net/minecraft/client/gui/screens/ChatScreen	commandSuggestions	Lnet/minecraft/client/gui/components/CommandSuggestions;
+
+# ---------------------------------------------------------------------------
+# Entries dropped in the 1.21.11 -> 26.1.2 port (API removed, not renamed).
+# The modules that relied on them need a rewrite, not a remap:
+#
+#   PlayerInteractEntityC2SPacket$Interact{,Type,At}Handler, #type, #ATTACK,
+#   #write(PacketByteBuf)
+#       26.1.2 ServerboundInteractPacket is a record
+#       (int entityId, InteractionHand hand, Vec3 location, boolean usingSecondaryAction)
+#       serialised through a public STREAM_CODEC. The handler hierarchy is gone and
+#       attacking moved to the new net/minecraft/network/protocol/game/ServerboundAttackPacket.
+#       Every member is already public, so no tweak is required.
+#
+#   GameRenderer#guiState (Lnet/minecraft/client/gui/render/state/GuiRenderState;)
+#       GuiRenderState moved to net/minecraft/client/renderer/state/gui/GuiRenderState and
+#       is owned by GameRenderer#guiRenderer (widened above).
+#
+#   GameRenderer#getFov(Camera, float, boolean)
+#       removed; the field of view now lives on net/minecraft/client/renderer/Projection#fov()
+#       (public) and CameraRenderState#hudFov (public).
+#
+#   DrawContext#tooltipDrawer
+#       net/minecraft/client/gui/DrawContext (GuiGraphics) no longer exists; GUI drawing goes
+#       through net/minecraft/client/gui/render/GuiRenderer + the GuiRenderState render graph.
+# ---------------------------------------------------------------------------

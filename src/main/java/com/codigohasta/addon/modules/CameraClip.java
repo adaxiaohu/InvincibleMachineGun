@@ -7,7 +7,7 @@ import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.client.option.Perspective;
+import net.minecraft.client.CameraType;
 
 public class CameraClip extends Module {
     public static CameraClip INSTANCE;
@@ -61,7 +61,7 @@ public class CameraClip extends Module {
         // Sync animation length BEFORE reset, so ease() uses the correct length immediately
         animation.setLength(animationTime.get());
         animation.reset();
-        wasFirstPerson = mc.options.getPerspective() == Perspective.FIRST_PERSON;
+        wasFirstPerson = mc.options.getCameraType() == CameraType.FIRST_PERSON;
     }
 
     @Override
@@ -71,14 +71,14 @@ public class CameraClip extends Module {
 
     @EventHandler
     private void onTick(TickEvent.Post event) {
-        if (mc.options.getPerspective() == Perspective.THIRD_PERSON_FRONT && noFront.get()) {
-            mc.options.setPerspective(Perspective.FIRST_PERSON);
+        if (mc.options.getCameraType() == CameraType.THIRD_PERSON_FRONT && noFront.get()) {
+            mc.options.setCameraType(CameraType.FIRST_PERSON);
         }
 
         animation.setLength(animationTime.get());
 
         // Detect perspective transitions and reset animation
-        if (mc.options.getPerspective() == Perspective.FIRST_PERSON) {
+        if (mc.options.getCameraType() == CameraType.FIRST_PERSON) {
             if (!wasFirstPerson) {
                 wasFirstPerson = true;
                 animation.reset();
@@ -91,7 +91,7 @@ public class CameraClip extends Module {
 
     public double getDistance() {
         double quad = animation.ease(ease.get());
-        if (mc.options.getPerspective() == Perspective.FIRST_PERSON) {
+        if (mc.options.getCameraType() == CameraType.FIRST_PERSON) {
             // Animate from max to 0 when switching to first person
             return distance.get() * (1.0 - quad);
         } else {

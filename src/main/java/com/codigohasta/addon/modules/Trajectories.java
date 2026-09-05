@@ -11,49 +11,49 @@ import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.render.color.SettingColor;
 import meteordevelopment.orbit.EventHandler;
 import org.jetbrains.annotations.Nullable;
-import net.minecraft.block.Blocks;
-import net.minecraft.enchantment.EnchantmentHelper;
-import net.minecraft.enchantment.Enchantments;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.projectile.ArrowEntity;
-import net.minecraft.entity.projectile.BreezeWindChargeEntity;
-import net.minecraft.entity.projectile.DragonFireballEntity;
-import net.minecraft.entity.projectile.FireballEntity;
-import net.minecraft.entity.projectile.FireworkRocketEntity;
-import net.minecraft.entity.projectile.FishingBobberEntity;
-import net.minecraft.entity.projectile.LlamaSpitEntity;
-import net.minecraft.entity.projectile.ShulkerBulletEntity;
-import net.minecraft.entity.projectile.SmallFireballEntity;
-import net.minecraft.entity.projectile.SpectralArrowEntity;
-import net.minecraft.entity.projectile.TridentEntity;
-import net.minecraft.entity.projectile.WindChargeEntity;
-import net.minecraft.entity.projectile.WitherSkullEntity;
-import net.minecraft.entity.projectile.thrown.EggEntity;
-import net.minecraft.entity.projectile.thrown.EnderPearlEntity;
-import net.minecraft.entity.projectile.thrown.ExperienceBottleEntity;
-import net.minecraft.entity.projectile.thrown.LingeringPotionEntity;
-import net.minecraft.entity.projectile.thrown.SnowballEntity;
-import net.minecraft.entity.projectile.thrown.SplashPotionEntity;
-import net.minecraft.item.BowItem;
-import net.minecraft.item.CrossbowItem;
-import net.minecraft.item.EggItem;
-import net.minecraft.item.EnderPearlItem;
-import net.minecraft.item.ExperienceBottleItem;
-import net.minecraft.item.Item;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.LingeringPotionItem;
-import net.minecraft.item.SnowballItem;
-import net.minecraft.item.SplashPotionItem;
-import net.minecraft.item.TridentItem;
-import net.minecraft.registry.RegistryKeys;
-import net.minecraft.util.Hand;
-import net.minecraft.util.hit.BlockHitResult;
-import net.minecraft.util.hit.HitResult;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Box;
-import net.minecraft.util.math.MathHelper;
-import net.minecraft.util.math.Vec3d;
-import net.minecraft.world.RaycastContext;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.item.enchantment.EnchantmentHelper;
+import net.minecraft.world.item.enchantment.Enchantments;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.projectile.arrow.Arrow;
+import net.minecraft.world.entity.projectile.hurtingprojectile.windcharge.BreezeWindCharge;
+import net.minecraft.world.entity.projectile.hurtingprojectile.DragonFireball;
+import net.minecraft.world.entity.projectile.hurtingprojectile.LargeFireball;
+import net.minecraft.world.entity.projectile.FireworkRocketEntity;
+import net.minecraft.world.entity.projectile.FishingHook;
+import net.minecraft.world.entity.projectile.LlamaSpit;
+import net.minecraft.world.entity.projectile.ShulkerBullet;
+import net.minecraft.world.entity.projectile.hurtingprojectile.SmallFireball;
+import net.minecraft.world.entity.projectile.arrow.SpectralArrow;
+import net.minecraft.world.entity.projectile.arrow.ThrownTrident;
+import net.minecraft.world.entity.projectile.hurtingprojectile.windcharge.WindCharge;
+import net.minecraft.world.entity.projectile.hurtingprojectile.WitherSkull;
+import net.minecraft.world.entity.projectile.throwableitemprojectile.ThrownEgg;
+import net.minecraft.world.entity.projectile.throwableitemprojectile.ThrownEnderpearl;
+import net.minecraft.world.entity.projectile.throwableitemprojectile.ThrownExperienceBottle;
+import net.minecraft.world.entity.projectile.throwableitemprojectile.ThrownLingeringPotion;
+import net.minecraft.world.entity.projectile.throwableitemprojectile.Snowball;
+import net.minecraft.world.entity.projectile.throwableitemprojectile.ThrownSplashPotion;
+import net.minecraft.world.item.BowItem;
+import net.minecraft.world.item.CrossbowItem;
+import net.minecraft.world.item.EggItem;
+import net.minecraft.world.item.EnderpearlItem;
+import net.minecraft.world.item.ExperienceBottleItem;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.LingeringPotionItem;
+import net.minecraft.world.item.SnowballItem;
+import net.minecraft.world.item.SplashPotionItem;
+import net.minecraft.world.item.TridentItem;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.HitResult;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.util.Mth;
+import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.level.ClipContext;
 
 public class Trajectories extends Module {
     private final SettingGroup sgGeneral = settings.getDefaultGroup();
@@ -138,7 +138,7 @@ public class Trajectories extends Module {
 
     @EventHandler
     public void onRender3D(Render3DEvent event) {
-        if (mc.player == null || mc.world == null) return;
+        if (mc.player == null || mc.level == null) return;
 
         // 渲染飞行中的抛射物轨迹
         renderFlyingProjectiles(event);
@@ -151,19 +151,19 @@ public class Trajectories extends Module {
         if (!pearlEnabled.get() && !arrowEnabled.get() && !xpEnabled.get()
             && !windChargeEnabled.get() && !throwableEnabled.get() && !tridentEnabled.get() && !otherEnabled.get()) return;
 
-        for (Entity en : mc.world.getEntities()) {
-            if (en instanceof EnderPearlEntity && pearlEnabled.get()) {
+        for (Entity en : mc.level.entitiesForRendering()) {
+            if (en instanceof ThrownEnderpearl && pearlEnabled.get()) {
                 calcTrajectory(en, pearlColor.get(), event, true);
-            } else if (en instanceof ExperienceBottleEntity && xpEnabled.get()) {
+            } else if (en instanceof ThrownExperienceBottle && xpEnabled.get()) {
                 calcTrajectory(en, xpColor.get(), event, false);
-            } else if (en instanceof ArrowEntity && arrowEnabled.get()) {
+            } else if (en instanceof Arrow && arrowEnabled.get()) {
                 calcTrajectory(en, arrowColor.get(), event, true);
-            } else if ((en instanceof WindChargeEntity || en instanceof BreezeWindChargeEntity) && windChargeEnabled.get()) {
+            } else if ((en instanceof WindCharge || en instanceof BreezeWindCharge) && windChargeEnabled.get()) {
                 calcTrajectory(en, windChargeColor.get(), event, false);
-            } else if ((en instanceof SnowballEntity || en instanceof EggEntity
-                || en instanceof SplashPotionEntity || en instanceof LingeringPotionEntity) && throwableEnabled.get()) {
+            } else if ((en instanceof Snowball || en instanceof ThrownEgg
+                || en instanceof ThrownSplashPotion || en instanceof ThrownLingeringPotion) && throwableEnabled.get()) {
                 calcTrajectory(en, throwableColor.get(), event, false);
-            } else if (en instanceof TridentEntity && tridentEnabled.get()) {
+            } else if (en instanceof ThrownTrident && tridentEnabled.get()) {
                 calcTrajectory(en, tridentColor.get(), event, true);
             } else if (otherEnabled.get() && isOtherProjectile(en)) {
                 calcTrajectory(en, otherColor.get(), event, false);
@@ -172,45 +172,45 @@ public class Trajectories extends Module {
     }
 
     private boolean isOtherProjectile(Entity en) {
-        return en instanceof SpectralArrowEntity
+        return en instanceof SpectralArrow
             || en instanceof FireworkRocketEntity
-            || en instanceof FishingBobberEntity
-            || en instanceof LlamaSpitEntity
-            || en instanceof ShulkerBulletEntity
-            || en instanceof FireballEntity
-            || en instanceof SmallFireballEntity
-            || en instanceof WitherSkullEntity
-            || en instanceof DragonFireballEntity;
+            || en instanceof FishingHook
+            || en instanceof LlamaSpit
+            || en instanceof ShulkerBullet
+            || en instanceof LargeFireball
+            || en instanceof SmallFireball
+            || en instanceof WitherSkull
+            || en instanceof DragonFireball;
     }
 
     private void renderHandTrajectory(Render3DEvent event) {
-        if (!mc.options.getPerspective().isFirstPerson()) return;
+        if (!mc.options.getCameraType().isFirstPerson()) return;
 
         // 依次检查主手和副手，找到第一个启用的物品类型
-        for (Hand checkHand : new Hand[]{Hand.MAIN_HAND, Hand.OFF_HAND}) {
-            ItemStack stack = checkHand == Hand.MAIN_HAND ? mc.player.getMainHandStack() : mc.player.getOffHandStack();
+        for (InteractionHand checkHand : new InteractionHand[]{InteractionHand.MAIN_HAND, InteractionHand.OFF_HAND}) {
+            ItemStack stack = checkHand == InteractionHand.MAIN_HAND ? mc.player.getMainHandItem() : mc.player.getOffhandItem();
             Item item = stack.getItem();
 
             SettingColor color = getHandColorForItem(item);
             if (color == null) continue;
 
             float tickDelta = event.tickDelta;
-            double x = MathHelper.lerp(tickDelta, mc.player.lastRenderX, mc.player.getX());
-            double y = MathHelper.lerp(tickDelta, mc.player.lastRenderY, mc.player.getY());
-            double z = MathHelper.lerp(tickDelta, mc.player.lastRenderZ, mc.player.getZ());
+            double x = Mth.lerp(tickDelta, mc.player.xOld, mc.player.getX());
+            double y = Mth.lerp(tickDelta, mc.player.yOld, mc.player.getY());
+            double z = Mth.lerp(tickDelta, mc.player.zOld, mc.player.getZ());
 
             if (item instanceof CrossbowItem) {
-                var registry = mc.world.getRegistryManager().getOrThrow(RegistryKeys.ENCHANTMENT);
-                boolean multishot = EnchantmentHelper.getLevel(registry.getOrThrow(Enchantments.MULTISHOT), stack) != 0;
+                var registry = mc.level.registryAccess().lookupOrThrow(Registries.ENCHANTMENT);
+                boolean multishot = EnchantmentHelper.getItemEnchantmentLevel(registry.getOrThrow(Enchantments.MULTISHOT), stack) != 0;
                 if (multishot) {
-                    calcTrajectory(item, mc.player.getYaw() - 10.0F, x, y, z, color, event);
-                    calcTrajectory(item, mc.player.getYaw(), x, y, z, color, event);
-                    calcTrajectory(item, mc.player.getYaw() + 10.0F, x, y, z, color, event);
+                    calcTrajectory(item, mc.player.getYRot() - 10.0F, x, y, z, color, event);
+                    calcTrajectory(item, mc.player.getYRot(), x, y, z, color, event);
+                    calcTrajectory(item, mc.player.getYRot() + 10.0F, x, y, z, color, event);
                 } else {
-                    calcTrajectory(item, mc.player.getYaw(), x, y, z, color, event);
+                    calcTrajectory(item, mc.player.getYRot(), x, y, z, color, event);
                 }
             } else {
-                calcTrajectory(item, mc.player.getYaw(), x, y, z, color, event);
+                calcTrajectory(item, mc.player.getYRot(), x, y, z, color, event);
             }
             return; // 只渲染第一个启用的手中物品轨迹
         }
@@ -219,7 +219,7 @@ public class Trajectories extends Module {
     private @Nullable SettingColor getHandColorForItem(Item item) {
         if (item instanceof BowItem && handBow.get()) return handBowColor.get();
         if (item instanceof CrossbowItem && handCrossbow.get()) return handCrossbowColor.get();
-        if (item instanceof EnderPearlItem && handPearl.get()) return handPearlColor.get();
+        if (item instanceof EnderpearlItem && handPearl.get()) return handPearlColor.get();
         if (item instanceof TridentItem && handTrident.get()) return handTridentColor.get();
         if (item instanceof ExperienceBottleItem || item instanceof SnowballItem
             || item instanceof EggItem || item instanceof SplashPotionItem
@@ -230,28 +230,28 @@ public class Trajectories extends Module {
     }
 
     private void calcTrajectory(Entity e, SettingColor color, Render3DEvent event, boolean arrowPhysics) {
-        double motionX = e.getVelocity().x;
-        double motionY = e.getVelocity().y;
-        double motionZ = e.getVelocity().z;
+        double motionX = e.getDeltaMovement().x;
+        double motionY = e.getDeltaMovement().y;
+        double motionZ = e.getDeltaMovement().z;
         if (motionX == 0.0 && motionY == 0.0 && motionZ == 0.0) return;
 
         // 凋灵之首：无阻力无重力，直线飞行
-        boolean noDragNoGravity = e instanceof WitherSkullEntity;
+        boolean noDragNoGravity = e instanceof WitherSkull;
         // 风弹：无重力，几乎直线
-        boolean noGravity = e instanceof WindChargeEntity || e instanceof BreezeWindChargeEntity;
+        boolean noGravity = e instanceof WindCharge || e instanceof BreezeWindCharge;
 
         double x = e.getX();
         double y = e.getY();
         double z = e.getZ();
 
         for (int i = 0; i < 300; i++) {
-            Vec3d lastPos = new Vec3d(x, y, z);
+            Vec3 lastPos = new Vec3(x, y, z);
             x += motionX;
             y += motionY;
             z += motionZ;
 
             if (!noDragNoGravity) {
-                if (mc.world.getBlockState(BlockPos.ofFloored(x, y, z)).getBlock() == Blocks.WATER) {
+                if (mc.level.getBlockState(BlockPos.containing(x, y, z)).getBlock() == Blocks.WATER) {
                     motionX *= 0.8;
                     motionY *= 0.8;
                     motionZ *= 0.8;
@@ -266,40 +266,40 @@ public class Trajectories extends Module {
                 motionY -= arrowPhysics ? 0.05F : 0.03F;
             }
 
-            Vec3d pos = new Vec3d(x, y, z);
+            Vec3 pos = new Vec3(x, y, z);
 
             if (y <= -65.0) break;
 
-            BlockHitResult bhr = mc.world.raycast(new RaycastContext(lastPos, pos, RaycastContext.ShapeType.OUTLINE, RaycastContext.FluidHandling.NONE, mc.player));
+            BlockHitResult bhr = mc.level.clip(new ClipContext(lastPos, pos, ClipContext.Block.OUTLINE, ClipContext.Fluid.NONE, mc.player));
             if (bhr != null && (bhr.getType() == HitResult.Type.BLOCK || bhr.getType() == HitResult.Type.ENTITY)) {
                 break;
             }
 
-            int alpha = MathHelper.clamp((int) (255.0F * ((i + 1) / 10.0F)), 0, 255);
+            int alpha = Mth.clamp((int) (255.0F * ((i + 1) / 10.0F)), 0, 255);
             event.renderer.line(lastPos.x, lastPos.y, lastPos.z, pos.x, pos.y, pos.z, new SettingColor(color.r, color.g, color.b, alpha));
         }
     }
 
     private void calcTrajectory(Item item, float yaw, double x, double y, double z, SettingColor color, Render3DEvent event) {
         y = y + mc.player.getEyeHeight(mc.player.getPose()) - 0.1000000014901161;
-        if (item == mc.player.getMainHandStack().getItem()) {
-            x -= MathHelper.cos(yaw / 180.0F * (float) Math.PI) * 0.16F;
-            z -= MathHelper.sin(yaw / 180.0F * (float) Math.PI) * 0.16F;
+        if (item == mc.player.getMainHandItem().getItem()) {
+            x -= Mth.cos(yaw / 180.0F * (float) Math.PI) * 0.16F;
+            z -= Mth.sin(yaw / 180.0F * (float) Math.PI) * 0.16F;
         } else {
-            x += MathHelper.cos(yaw / 180.0F * (float) Math.PI) * 0.16F;
-            z += MathHelper.sin(yaw / 180.0F * (float) Math.PI) * 0.16F;
+            x += Mth.cos(yaw / 180.0F * (float) Math.PI) * 0.16F;
+            z += Mth.sin(yaw / 180.0F * (float) Math.PI) * 0.16F;
         }
 
         float maxDist = getDistance(item);
-        double motionX = -MathHelper.sin(yaw / 180.0F * (float) Math.PI) * MathHelper.cos(mc.player.getPitch() / 180.0F * (float) Math.PI) * maxDist;
-        double motionY = -MathHelper.sin((mc.player.getPitch() - getThrowPitch(item)) / 180.0F * 3.141593F) * maxDist;
-        double motionZ = MathHelper.cos(yaw / 180.0F * (float) Math.PI) * MathHelper.cos(mc.player.getPitch() / 180.0F * (float) Math.PI) * maxDist;
+        double motionX = -Mth.sin(yaw / 180.0F * (float) Math.PI) * Mth.cos(mc.player.getXRot() / 180.0F * (float) Math.PI) * maxDist;
+        double motionY = -Mth.sin((mc.player.getXRot() - getThrowPitch(item)) / 180.0F * 3.141593F) * maxDist;
+        double motionZ = Mth.cos(yaw / 180.0F * (float) Math.PI) * Mth.cos(mc.player.getXRot() / 180.0F * (float) Math.PI) * maxDist;
 
-        float power = mc.player.getItemUseTime() / 20.0F;
+        float power = mc.player.getTicksUsingItem() / 20.0F;
         power = (power * power + power * 2.0F) / 3.0F;
         if (power > 1.0F) power = 1.0F;
 
-        float distance = MathHelper.sqrt((float) (motionX * motionX + motionY * motionY + motionZ * motionZ));
+        float distance = Mth.sqrt((float) (motionX * motionX + motionY * motionY + motionZ * motionZ));
         motionX /= distance;
         motionY /= distance;
         motionZ /= distance;
@@ -307,19 +307,19 @@ public class Trajectories extends Module {
         motionX *= pow;
         motionY *= pow;
         motionZ *= pow;
-        motionX += mc.player.getVelocity().getX();
-        motionY += mc.player.getVelocity().getY();
-        motionZ += mc.player.getVelocity().getZ();
+        motionX += mc.player.getDeltaMovement().x();
+        motionY += mc.player.getDeltaMovement().y();
+        motionZ += mc.player.getDeltaMovement().z();
 
         boolean arrowPhysics = item instanceof BowItem || item instanceof CrossbowItem || item instanceof TridentItem;
 
         for (int i = 0; i < 300; i++) {
-            Vec3d lastPos = new Vec3d(x, y, z);
+            Vec3 lastPos = new Vec3(x, y, z);
             x += motionX;
             y += motionY;
             z += motionZ;
 
-            if (mc.world.getBlockState(BlockPos.ofFloored(x, y, z)).getBlock() == Blocks.WATER) {
+            if (mc.level.getBlockState(BlockPos.containing(x, y, z)).getBlock() == Blocks.WATER) {
                 motionX *= 0.8;
                 motionY *= 0.8;
                 motionZ *= 0.8;
@@ -331,21 +331,21 @@ public class Trajectories extends Module {
 
             motionY -= arrowPhysics ? 0.05F : 0.03F;
 
-            Vec3d pos = new Vec3d(x, y, z);
+            Vec3 pos = new Vec3(x, y, z);
 
-            for (Entity ent : mc.world.getEntities()) {
-                if (!(ent instanceof ArrowEntity)
+            for (Entity ent : mc.level.entitiesForRendering()) {
+                if (!(ent instanceof Arrow)
                     && !ent.equals(mc.player)
-                    && ent.getBoundingBox().intersects(new Box(x - 0.3, y - 0.3, z - 0.3, x + 0.3, y + 0.3, z + 0.3))) {
-                    Box bb = ent.getBoundingBox();
+                    && ent.getBoundingBox().intersects(new AABB(x - 0.3, y - 0.3, z - 0.3, x + 0.3, y + 0.3, z + 0.3))) {
+                    AABB bb = ent.getBoundingBox();
                     event.renderer.box(bb.minX, bb.minY, bb.minZ, bb.maxX, bb.maxY, bb.maxZ, color, color, ShapeMode.Lines, 0);
                     break;
                 }
             }
 
-            BlockHitResult bhr = mc.world.raycast(new RaycastContext(lastPos, pos, RaycastContext.ShapeType.OUTLINE, RaycastContext.FluidHandling.NONE, mc.player));
+            BlockHitResult bhr = mc.level.clip(new ClipContext(lastPos, pos, ClipContext.Block.OUTLINE, ClipContext.Fluid.NONE, mc.player));
             if (bhr != null && bhr.getType() == HitResult.Type.BLOCK) {
-                Box bb = new Box(bhr.getBlockPos());
+                AABB bb = new AABB(bhr.getBlockPos());
                 event.renderer.box(bb.minX, bb.minY, bb.minZ, bb.maxX, bb.maxY, bb.maxZ, color, color, ShapeMode.Lines, 0);
                 break;
             }

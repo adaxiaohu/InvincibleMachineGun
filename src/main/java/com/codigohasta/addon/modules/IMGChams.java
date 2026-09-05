@@ -9,14 +9,14 @@ import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.render.WireframeEntityRenderer;
 import meteordevelopment.meteorclient.utils.render.color.SettingColor;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.decoration.EndCrystalEntity;
-import net.minecraft.entity.mob.MobEntity;
-import net.minecraft.entity.mob.SlimeEntity;
-import net.minecraft.entity.passive.AnimalEntity;
-import net.minecraft.entity.passive.VillagerEntity;
-import net.minecraft.entity.passive.WanderingTraderEntity;
-import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.boss.enderdragon.EndCrystal;
+import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.monster.Slime;
+import net.minecraft.world.entity.animal.Animal;
+import net.minecraft.world.entity.npc.villager.Villager;
+import net.minecraft.world.entity.npc.wanderingtrader.WanderingTrader;
+import net.minecraft.world.entity.player.Player;
 
 public class IMGChams extends Module {
     public static IMGChams INSTANCE;
@@ -240,8 +240,8 @@ public class IMGChams extends Module {
 
     @EventHandler
     private void onRender3D(Render3DEvent event) {
-        if (throughWall.get() && mc.world != null) {
-            for (Entity entity : mc.world.getEntities()) {
+        if (throughWall.get() && mc.level != null) {
+            for (Entity entity : mc.level.entitiesForRendering()) {
                 if (shouldRenderThroughWall(entity) && entity != mc.player) {
                     WireframeEntityRenderer.render(
                         event,
@@ -263,12 +263,12 @@ public class IMGChams extends Module {
     private boolean shouldRenderThroughWall(Entity entity) {
         if (!isActive() || !throughWall.get()) return false;
 
-        if (entity instanceof EndCrystalEntity) return twCrystals.get();
-        if (entity instanceof SlimeEntity) return twSlimes.get();
-        if (entity instanceof PlayerEntity) return twPlayers.get();
-        if (entity instanceof VillagerEntity || entity instanceof WanderingTraderEntity) return twVillagers.get();
-        if (entity instanceof AnimalEntity) return twAnimals.get();
-        if (entity instanceof MobEntity) return twMobs.get();
+        if (entity instanceof EndCrystal) return twCrystals.get();
+        if (entity instanceof Slime) return twSlimes.get();
+        if (entity instanceof Player) return twPlayers.get();
+        if (entity instanceof Villager || entity instanceof WanderingTrader) return twVillagers.get();
+        if (entity instanceof Animal) return twAnimals.get();
+        if (entity instanceof Mob) return twMobs.get();
 
         return false;
     }

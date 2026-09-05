@@ -22,24 +22,24 @@ import meteordevelopment.meteorclient.utils.render.WireframeEntityRenderer;
 import meteordevelopment.meteorclient.utils.render.color.Color;
 import meteordevelopment.meteorclient.utils.render.color.SettingColor;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.block.Block;
-import net.minecraft.block.Blocks;
-import net.minecraft.block.entity.SignBlockEntity;
-import net.minecraft.block.entity.SignText;
-import net.minecraft.client.network.PlayerListEntry;
-import net.minecraft.client.sound.PositionedSoundInstance;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.EntityType;
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.ItemEntity;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.item.Item;
-import net.minecraft.registry.Registries;
-import net.minecraft.sound.SoundEvent;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Box;
-import net.minecraft.util.math.Direction;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.entity.SignBlockEntity;
+import net.minecraft.world.level.block.entity.SignText;
+import net.minecraft.client.multiplayer.PlayerInfo;
+import net.minecraft.client.resources.sounds.SimpleSoundInstance;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.Item;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.sounds.SoundEvent;
+import net.minecraft.resources.Identifier;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.core.Direction;
 import org.joml.Vector3d;
 
 import java.util.ArrayDeque;
@@ -56,15 +56,15 @@ import java.util.concurrent.ThreadLocalRandom;
 public final class TerminatorHudShader extends FullscreenShaderModule {
     private static final String SOUND_NAMESPACE = "invincible_machine_gun";
     private static final Identifier[] ENTITY_CONFIRM_SOUND_IDS = {
-        Identifier.of(SOUND_NAMESPACE, "scan_and_confirm_1"),
-        Identifier.of(SOUND_NAMESPACE, "scan_and_confirm_2"),
-        Identifier.of(SOUND_NAMESPACE, "scan_and_confirm_3")
+        Identifier.fromNamespaceAndPath(SOUND_NAMESPACE, "scan_and_confirm_1"),
+        Identifier.fromNamespaceAndPath(SOUND_NAMESPACE, "scan_and_confirm_2"),
+        Identifier.fromNamespaceAndPath(SOUND_NAMESPACE, "scan_and_confirm_3")
     };
-    private static final Identifier BLOCK_CONFIRM_SOUND_ID = Identifier.of(SOUND_NAMESPACE, "block_scanning_confirmation");
-    private static final Identifier FOUND_SOUND_ID = Identifier.of(SOUND_NAMESPACE, "found_it");
-    private static final Identifier HURT_SOUND_ID = Identifier.of(SOUND_NAMESPACE, "hurt");
-    private static final Identifier DYING_SOUND_ID = Identifier.of(SOUND_NAMESPACE, "dying");
-    private static final Identifier TERMINATOR_SOUND_ID = Identifier.of(SOUND_NAMESPACE, "terminator");
+    private static final Identifier BLOCK_CONFIRM_SOUND_ID = Identifier.fromNamespaceAndPath(SOUND_NAMESPACE, "block_scanning_confirmation");
+    private static final Identifier FOUND_SOUND_ID = Identifier.fromNamespaceAndPath(SOUND_NAMESPACE, "found_it");
+    private static final Identifier HURT_SOUND_ID = Identifier.fromNamespaceAndPath(SOUND_NAMESPACE, "hurt");
+    private static final Identifier DYING_SOUND_ID = Identifier.fromNamespaceAndPath(SOUND_NAMESPACE, "dying");
+    private static final Identifier TERMINATOR_SOUND_ID = Identifier.fromNamespaceAndPath(SOUND_NAMESPACE, "terminator");
     private final SettingGroup general = settings.getDefaultGroup();
     private final SettingGroup scanner = settings.createGroup("目标扫描");
     private final SettingGroup blockScanner = settings.createGroup("方块扫描");
@@ -297,8 +297,8 @@ public final class TerminatorHudShader extends FullscreenShaderModule {
             : clamp((now - lastReticleFrameNanos) / 1_000_000_000.0, 0.001, 0.1);
         lastReticleFrameNanos = now;
 
-        float yaw = mc.gameRenderer.getCamera().getYaw();
-        float pitch = mc.gameRenderer.getCamera().getPitch();
+        float yaw = mc.gameRenderer.getMainCamera().yRot();
+        float pitch = mc.gameRenderer.getMainCamera().xRot();
         if (!cameraSampled) {
             lastYaw = yaw;
             lastPitch = pitch;
@@ -336,7 +336,7 @@ public final class TerminatorHudShader extends FullscreenShaderModule {
 
     @EventHandler
     private void onTick(TickEvent.Post event) {
-        if (mc.player == null || mc.world == null) {
+        if (mc.player == null || mc.level == null) {
             trackedPlayerId = null;
             previousHealth = Float.NaN;
             cachedBlockClusters = List.of();
@@ -344,18 +344,18 @@ public final class TerminatorHudShader extends FullscreenShaderModule {
             return;
         }
 
-        UUID playerId = mc.player.getUuid();
+        UUID playerId = mc.player.getUUID();
         if (!playerId.equals(trackedPlayerId)) {
             trackedPlayerId = playerId;
             previousHealth = mc.player.getHealth();
             lowHealthSoundPlayed = previousHealth <= lowHealthThreshold.get();
-            wasDead = mc.player.isDead() || previousHealth <= 0.0f;
+            wasDead = mc.player.isDeadOrDying() || previousHealth <= 0.0f;
             deathStartedNanos = wasDead ? System.nanoTime() : 0L;
         }
 
         long now = System.nanoTime();
         float health = mc.player.getHealth();
-        boolean dead = mc.player.isDead() || health <= 0.0f;
+        boolean dead = mc.player.isDeadOrDying() || health <= 0.0f;
         if (!dead) {
             if (!Float.isNaN(previousHealth) && health < previousHealth
                 && now - lastHurtSoundNanos > 450_000_000L) {
@@ -408,9 +408,9 @@ public final class TerminatorHudShader extends FullscreenShaderModule {
         int horizontal = blockScanRadius.get();
         int vertical = blockVerticalRange.get();
         Map<BlockPos, Block> matches = new HashMap<>();
-        for (BlockPos cursor : BlockPos.iterateOutwards(mc.player.getBlockPos(), horizontal, vertical, horizontal)) {
-            BlockPos pos = cursor.toImmutable();
-            Block block = mc.world.getBlockState(pos).getBlock();
+        for (BlockPos cursor : BlockPos.withinManhattan(mc.player.blockPosition(), horizontal, vertical, horizontal)) {
+            BlockPos pos = cursor.immutable();
+            Block block = mc.level.getBlockState(pos).getBlock();
             if (requested.contains(block)) matches.put(pos, block);
         }
 
@@ -441,13 +441,13 @@ public final class TerminatorHudShader extends FullscreenShaderModule {
                 maxY = Math.max(maxY, pos.getY());
                 maxZ = Math.max(maxZ, pos.getZ());
 
-                if (signTextScan.get() && mc.world.getBlockEntity(pos) instanceof SignBlockEntity sign) {
+                if (signTextScan.get() && mc.level.getBlockEntity(pos) instanceof SignBlockEntity sign) {
                     SignSnapshot snapshot = snapshotSign(pos, sign);
                     if (snapshot.hasText()) signs.add(snapshot);
                 }
 
                 for (Direction direction : Direction.values()) {
-                    BlockPos neighbor = pos.offset(direction);
+                    BlockPos neighbor = pos.relative(direction);
                     if (matches.get(neighbor) == type) {
                         matches.remove(neighbor);
                         queue.addLast(neighbor);
@@ -465,12 +465,12 @@ public final class TerminatorHudShader extends FullscreenShaderModule {
     }
 
     private SignSnapshot snapshotSign(BlockPos pos, SignBlockEntity sign) {
-        return new SignSnapshot(pos.toImmutable(), signLines(sign.getFrontText()), signLines(sign.getBackText()));
+        return new SignSnapshot(pos.immutable(), signLines(sign.getFrontText()), signLines(sign.getBackText()));
     }
 
     private List<String> signLines(SignText text) {
         List<String> lines = new ArrayList<>(4);
-        for (var message : text.getMessages(mc.shouldFilterText())) {
+        for (var message : text.getMessages(mc.isTextFilteringEnabled())) {
             String line = compactHudText(message.getString(), 42);
             if (!line.isEmpty()) lines.add(line);
         }
@@ -490,8 +490,8 @@ public final class TerminatorHudShader extends FullscreenShaderModule {
     }
 
     private void playSound(Identifier id) {
-        SoundEvent sound = SoundEvent.of(id);
-        mc.getSoundManager().play(PositionedSoundInstance.ui(sound, 1.0f, soundVolume.get().floatValue()));
+        SoundEvent sound = SoundEvent.createVariableRangeEvent(id);
+        mc.getSoundManager().play(SimpleSoundInstance.forUI(sound, 1.0f, soundVolume.get().floatValue()));
     }
 
     private void playRandomEntityConfirmSound() {
@@ -502,10 +502,10 @@ public final class TerminatorHudShader extends FullscreenShaderModule {
 
     @EventHandler(priority = 100)
     private void onRender3DFlash(Render3DEvent event) {
-        if (mc.world == null) return;
+        if (mc.level == null) return;
         long now = System.nanoTime();
-        for (Entity entity : mc.world.getEntities()) {
-            ScanState state = scanStates.get(entity.getUuid());
+        for (Entity entity : mc.level.entitiesForRendering()) {
+            ScanState state = scanStates.get(entity.getUUID());
             if (state == null) continue;
 
             if (isMissionTarget(entity)) {
@@ -577,7 +577,7 @@ public final class TerminatorHudShader extends FullscreenShaderModule {
 
     @EventHandler
     private void onRender2D(Render2DEvent event) {
-        if (mc.world == null || mc.player == null || mc.currentScreen != null) return;
+        if (mc.level == null || mc.player == null || mc.screen != null) return;
 
         long now = System.nanoTime();
         if (lastHudFrameNanos == 0L || now - lastHudFrameNanos > 500_000_000L) scanStates.clear();
@@ -596,9 +596,9 @@ public final class TerminatorHudShader extends FullscreenShaderModule {
         modelView.pushMatrix();
         try {
             // Meteor fires Render2DEvent with an unscaled framebuffer projection. All values in this
-            // class are GUI pixels (the same coordinate space as DrawContext), so restore GUI scale
+            // class are GUI pixels (the same coordinate space as GuiGraphicsExtractor), so restore GUI scale
             // for Renderer2D. This keeps geometry and labels locked to the exact same projection.
-            float scale = mc.getWindow().getScaleFactor();
+            float scale = mc.getWindow().getGuiScale();
             modelView.scale(scale, scale, 1.0f);
             Renderer2D.COLOR.begin();
             if (dataList.get()) drawDataPanelGeometry(systemData);
@@ -621,7 +621,7 @@ public final class TerminatorHudShader extends FullscreenShaderModule {
             for (BlockTargetRender blockTarget : blockTargets) drawBlockTargetText(event, blockTarget);
             for (TargetGroup group : groups) drawTargetGroupText(event, group);
             for (TargetRender target : targets) {
-                if (!groupedTargets.contains(target.entity.getUuid())) drawTargetText(event, target);
+                if (!groupedTargets.contains(target.entity.getUUID())) drawTargetText(event, target);
             }
         }
 
@@ -637,15 +637,15 @@ public final class TerminatorHudShader extends FullscreenShaderModule {
 
         List<TargetRender> result = new ArrayList<>();
         Set<UUID> seen = new HashSet<>();
-        for (Entity entity : mc.world.getEntities()) {
+        for (Entity entity : mc.level.entitiesForRendering()) {
             if (!shouldScan(entity)) continue;
             if (mc.player.distanceTo(entity) > scanRange.get()) continue;
-            if (!throughWalls.get() && !mc.player.canSee(entity)) continue;
+            if (!throughWalls.get() && !mc.player.hasLineOfSight(entity)) continue;
 
             ScreenBox box = projectEntity(entity, event);
             if (box == null) continue;
 
-            UUID id = entity.getUuid();
+            UUID id = entity.getUUID();
             ScanState state = scanStates.computeIfAbsent(id, ignored -> new ScanState(now));
             state.lastSeenNanos = now;
             seen.add(id);
@@ -667,7 +667,7 @@ public final class TerminatorHudShader extends FullscreenShaderModule {
 
         List<TargetRender> finalized = new ArrayList<>(targets.size());
         for (TargetRender target : targets) {
-            ScanState state = scanStates.get(target.entity.getUuid());
+            ScanState state = scanStates.get(target.entity.getUUID());
             boolean eligibleForStructure = structuralScan.get() && isMergeableLiving(target.entity);
             if (!eligibleForStructure) {
                 state.structuralScan = false;
@@ -704,11 +704,11 @@ public final class TerminatorHudShader extends FullscreenShaderModule {
         double maxDistance = mergeLivingDistance.get();
 
         for (TargetRender seed : targets) {
-            if (!isMergeableLiving(seed.entity) || assigned.contains(seed.entity.getUuid())) continue;
+            if (!isMergeableLiving(seed.entity) || assigned.contains(seed.entity.getUUID())) continue;
 
             List<TargetRender> members = new ArrayList<>();
             members.add(seed);
-            assigned.add(seed.entity.getUuid());
+            assigned.add(seed.entity.getUUID());
 
             // Connected same-type targets form one group. Iterating newly-added members also
             // handles schools/herds whose edge members are close even if the first and last are not.
@@ -716,17 +716,17 @@ public final class TerminatorHudShader extends FullscreenShaderModule {
                 TargetRender anchor = members.get(i);
                 for (TargetRender candidate : targets) {
                     if (!isMergeableLiving(candidate.entity)
-                        || assigned.contains(candidate.entity.getUuid())
+                        || assigned.contains(candidate.entity.getUUID())
                         || candidate.entity.getType() != seed.entity.getType()) continue;
                     if (anchor.entity.distanceTo(candidate.entity) <= maxDistance) {
                         members.add(candidate);
-                        assigned.add(candidate.entity.getUuid());
+                        assigned.add(candidate.entity.getUUID());
                     }
                 }
             }
 
             if (members.size() < 2) {
-                assigned.remove(seed.entity.getUuid());
+                assigned.remove(seed.entity.getUUID());
                 continue;
             }
 
@@ -745,13 +745,13 @@ public final class TerminatorHudShader extends FullscreenShaderModule {
     }
 
     private boolean isMergeableLiving(Entity entity) {
-        return entity instanceof LivingEntity && !(entity instanceof PlayerEntity);
+        return entity instanceof LivingEntity && !(entity instanceof Player);
     }
 
     private Set<UUID> groupedTargetIds(List<TargetGroup> groups) {
         Set<UUID> ids = new HashSet<>();
         for (TargetGroup group : groups) {
-            for (TargetRender member : group.members) ids.add(member.entity.getUuid());
+            for (TargetRender member : group.members) ids.add(member.entity.getUUID());
         }
         return ids;
     }
@@ -759,7 +759,7 @@ public final class TerminatorHudShader extends FullscreenShaderModule {
     private boolean shouldScan(Entity entity) {
         if (entity == mc.player || !entity.isAlive()) return false;
         boolean mission = isMissionTarget(entity);
-        if (entity instanceof PlayerEntity player) return (scanPlayers.get() || mission) && !player.isSpectator();
+        if (entity instanceof Player player) return (scanPlayers.get() || mission) && !player.isSpectator();
         if (entity instanceof ItemEntity) return scanItems.get() || mission;
         if (entity instanceof LivingEntity) return scanLiving.get() || mission;
         return scanEntities.get() || mission;
@@ -768,7 +768,7 @@ public final class TerminatorHudShader extends FullscreenShaderModule {
     private boolean isMissionTarget(Entity entity) {
         if (!missionScan.get()) return false;
         if (missionEntities.get().contains(entity.getType())) return true;
-        return entity instanceof ItemEntity item && missionItems.get().contains(item.getStack().getItem());
+        return entity instanceof ItemEntity item && missionItems.get().contains(item.getItem().getItem());
     }
 
     private void playMissionFoundSound(long now) {
@@ -788,11 +788,11 @@ public final class TerminatorHudShader extends FullscreenShaderModule {
     private ScreenBox projectEntity(Entity entity, Render2DEvent event) {
         Vector3d interpolated = new Vector3d();
         Utils.set(interpolated, entity, event.tickDelta);
-        Box box = entity.getBoundingBox().offset(
+        AABB box = entity.getBoundingBox().move(
             interpolated.x - entity.getX(),
             interpolated.y - entity.getY(),
             interpolated.z - entity.getZ()
-        ).expand(0.08);
+        ).inflate(0.08);
 
         return projectWorldBox(box);
     }
@@ -806,7 +806,7 @@ public final class TerminatorHudShader extends FullscreenShaderModule {
         List<BlockTargetRender> result = new ArrayList<>();
         Set<BlockClusterKey> seen = new HashSet<>();
         for (BlockCluster cluster : cachedBlockClusters) {
-            ScreenBox box = projectWorldBox(cluster.worldBox().expand(0.03));
+            ScreenBox box = projectWorldBox(cluster.worldBox().inflate(0.03));
             if (box == null) continue;
 
             BlockClusterKey key = cluster.key();
@@ -830,7 +830,7 @@ public final class TerminatorHudShader extends FullscreenShaderModule {
         return result;
     }
 
-    private ScreenBox projectWorldBox(Box box) {
+    private ScreenBox projectWorldBox(AABB box) {
 
         double[] xs = {box.minX, box.maxX};
         double[] ys = {box.minY, box.maxY};
@@ -840,7 +840,7 @@ public final class TerminatorHudShader extends FullscreenShaderModule {
         double maxX = Double.NEGATIVE_INFINITY;
         double maxY = Double.NEGATIVE_INFINITY;
         int projected = 0;
-        double guiScale = mc.getWindow().getScaleFactor();
+        double guiScale = mc.getWindow().getGuiScale();
 
         for (double x : xs) {
             for (double y : ys) {
@@ -1007,7 +1007,7 @@ public final class TerminatorHudShader extends FullscreenShaderModule {
     }
 
     private void drawTargetText(Render2DEvent event, TargetRender target) {
-        ScanState state = scanStates.get(target.entity.getUuid());
+        ScanState state = scanStates.get(target.entity.getUUID());
         String status;
         if (state != null && state.structuralScan && target.progress < 1.0) {
             int partCount = Math.max(1, state.structuralPartCount);
@@ -1022,15 +1022,15 @@ public final class TerminatorHudShader extends FullscreenShaderModule {
         }
         String identity = targetName(target.entity);
         String metrics = targetMetrics(target.entity);
-        int labelWidth = Math.max(mc.textRenderer.getWidth(status),
-            Math.max(mc.textRenderer.getWidth(identity), mc.textRenderer.getWidth(metrics)));
+        int labelWidth = Math.max(mc.font.width(status),
+            Math.max(mc.font.width(identity), mc.font.width(metrics)));
         int x = (int) clamp(target.box.centerX() - labelWidth * 0.5, 3.0, guiWidth() - labelWidth - 3.0);
         int statusY = (int) Math.max(3.0, target.box.minY - 12.0);
-        event.drawContext.drawText(mc.textRenderer, status, x, statusY, argb(240), true);
+        event.graphics.text(mc.font, status, x, statusY, argb(240), true);
         if (target.progress >= 0.35) {
             int detailY = (int) Math.min(guiHeight() - 23.0, target.box.maxY + 4.0);
-            event.drawContext.drawText(mc.textRenderer, identity, x, detailY, argb(215), true);
-            event.drawContext.drawText(mc.textRenderer, metrics, x, detailY + 11, argb(190), true);
+            event.graphics.text(mc.font, identity, x, detailY, argb(215), true);
+            event.graphics.text(mc.font, metrics, x, detailY + 11, argb(190), true);
         }
     }
 
@@ -1040,7 +1040,7 @@ public final class TerminatorHudShader extends FullscreenShaderModule {
             : group.progress < 0.75 ? "ANALYZING GROUP"
             : group.progress < 1.0 ? "VERIFYING GROUP"
             : "TARGET GROUP ACQUIRED";
-        String identity = ("GROUP // " + representative.getType().getName().getString()
+        String identity = ("GROUP // " + representative.getType().getDescription().getString()
             + " X" + group.members.size()).toUpperCase(Locale.ROOT);
         double averageRange = 0.0;
         double totalHealth = 0.0;
@@ -1051,15 +1051,15 @@ public final class TerminatorHudShader extends FullscreenShaderModule {
         averageRange /= group.members.size();
         String metrics = String.format(Locale.ROOT, "COUNT %02d  AVG RNG %.1fM  VIT %.0f",
             group.members.size(), averageRange, totalHealth);
-        int labelWidth = Math.max(mc.textRenderer.getWidth(status),
-            Math.max(mc.textRenderer.getWidth(identity), mc.textRenderer.getWidth(metrics)));
+        int labelWidth = Math.max(mc.font.width(status),
+            Math.max(mc.font.width(identity), mc.font.width(metrics)));
         int x = (int) clamp(group.box.centerX() - labelWidth * 0.5, 3.0, guiWidth() - labelWidth - 3.0);
         int statusY = (int) Math.max(3.0, group.box.minY - 18.0);
-        event.drawContext.drawText(mc.textRenderer, status, x, statusY, argb(245), true);
+        event.graphics.text(mc.font, status, x, statusY, argb(245), true);
         if (group.progress >= 0.35) {
             int detailY = (int) Math.min(guiHeight() - 23.0, group.box.maxY + 8.0);
-            event.drawContext.drawText(mc.textRenderer, identity, x, detailY, argb(220), true);
-            event.drawContext.drawText(mc.textRenderer, metrics, x, detailY + 11, argb(195), true);
+            event.graphics.text(mc.font, identity, x, detailY, argb(220), true);
+            event.graphics.text(mc.font, metrics, x, detailY + 11, argb(195), true);
         }
     }
 
@@ -1073,7 +1073,7 @@ public final class TerminatorHudShader extends FullscreenShaderModule {
         int dy = target.cluster.max.getY() - target.cluster.min.getY() + 1;
         int dz = target.cluster.max.getZ() - target.cluster.min.getZ() + 1;
         var center = target.cluster.worldBox().getCenter();
-        double range = Math.sqrt(mc.player.squaredDistanceTo(center.x, center.y, center.z));
+        double range = Math.sqrt(mc.player.distanceToSqr(center.x, center.y, center.z));
         String metrics = String.format(Locale.ROOT, "COUNT %d  SIZE %dX%dX%d  RNG %.1fM",
             target.cluster.count, dx, dy, dz, range);
         List<String> details = new ArrayList<>();
@@ -1081,16 +1081,16 @@ public final class TerminatorHudShader extends FullscreenShaderModule {
         details.add(metrics);
         if (target.progress >= 0.30) details.addAll(signHudLines(target.cluster, 6, 36));
 
-        int labelWidth = mc.textRenderer.getWidth(status);
-        for (String line : details) labelWidth = Math.max(labelWidth, mc.textRenderer.getWidth(line));
+        int labelWidth = mc.font.width(status);
+        for (String line : details) labelWidth = Math.max(labelWidth, mc.font.width(line));
         int x = (int) clamp(target.box.centerX() - labelWidth * 0.5, 3.0, guiWidth() - labelWidth - 3.0);
         int statusY = (int) Math.max(3.0, target.box.minY - 13.0);
-        event.drawContext.drawText(mc.textRenderer, status, x, statusY, argb(245), true);
+        event.graphics.text(mc.font, status, x, statusY, argb(245), true);
         if (target.progress >= 0.30) {
             int detailHeight = details.size() * 11;
             int detailY = (int) clamp(target.box.maxY + 5.0, 3.0, guiHeight() - detailHeight - 2.0);
             for (int i = 0; i < details.size(); i++) {
-                event.drawContext.drawText(mc.textRenderer, details.get(i), x, detailY + i * 11,
+                event.graphics.text(mc.font, details.get(i), x, detailY + i * 11,
                     argb(i == 0 ? 220 : 195), true);
             }
         }
@@ -1124,16 +1124,16 @@ public final class TerminatorHudShader extends FullscreenShaderModule {
 
     private String targetName(Entity entity) {
         if (entity instanceof ItemEntity item) {
-            return ("ITEM // " + item.getStack().getName().getString()).toUpperCase(Locale.ROOT);
+            return ("ITEM // " + item.getItem().getHoverName().getString()).toUpperCase(Locale.ROOT);
         }
-        return (entity instanceof PlayerEntity ? "HUMAN // " : "ENTITY // ")
+        return (entity instanceof Player ? "HUMAN // " : "ENTITY // ")
             + entity.getName().getString().toUpperCase(Locale.ROOT);
     }
 
     private String targetMetrics(Entity entity) {
         double range = mc.player.distanceTo(entity);
         if (entity instanceof ItemEntity item) {
-            return String.format(Locale.ROOT, "RNG %.1fM  QTY %d", range, item.getStack().getCount());
+            return String.format(Locale.ROOT, "RNG %.1fM  QTY %d", range, item.getItem().getCount());
         }
         if (entity instanceof LivingEntity living) {
             return String.format(Locale.ROOT, "RNG %.1fM  VIT %.0f/%.0f", range, living.getHealth(), living.getMaxHealth());
@@ -1171,41 +1171,41 @@ public final class TerminatorHudShader extends FullscreenShaderModule {
     }
 
     private List<String> buildSystemData(int targetCount) {
-        PlayerEntity player = mc.player;
+        Player player = mc.player;
         List<String> lines = new ArrayList<>();
-        double speed = player.getVelocity().horizontalLength() * 20.0;
-        String biome = mc.world.getBiome(player.getBlockPos()).getKey()
-            .map(key -> key.getValue().getPath()).orElse("unknown").toUpperCase(Locale.ROOT);
-        String dimension = mc.world.getRegistryKey().getValue().getPath().toUpperCase(Locale.ROOT);
-        long dayTime = mc.world.getTimeOfDay();
+        double speed = player.getDeltaMovement().horizontalDistance() * 20.0;
+        String biome = mc.level.getBiome(player.blockPosition()).unwrapKey()
+            .map(key -> key.identifier().getPath()).orElse("unknown").toUpperCase(Locale.ROOT);
+        String dimension = mc.level.dimension().identifier().getPath().toUpperCase(Locale.ROOT);
+        long dayTime = mc.level.getOverworldClockTime();
         int ping = 0;
-        if (mc.getNetworkHandler() != null) {
-            PlayerListEntry entry = mc.getNetworkHandler().getPlayerListEntry(player.getUuid());
+        if (mc.getConnection() != null) {
+            PlayerInfo entry = mc.getConnection().getPlayerInfo(player.getUUID());
             if (entry != null) ping = entry.getLatency();
         }
 
         lines.add("T-800 // CSM-101");
         lines.add("STATUS  SYSTEM ONLINE");
         lines.add(String.format(Locale.ROOT, "POS     %+07.1f %+06.1f %+07.1f", player.getX(), player.getY(), player.getZ()));
-        lines.add(String.format(Locale.ROOT, "VECTOR  YAW %06.1f  PITCH %+05.1f", normalizeYaw(player.getYaw()), player.getPitch()));
+        lines.add(String.format(Locale.ROOT, "VECTOR  YAW %06.1f  PITCH %+05.1f", normalizeYaw(player.getYRot()), player.getXRot()));
         lines.add(String.format(Locale.ROOT, "MOTION  %05.2f M/S", speed));
         lines.add(String.format(Locale.ROOT, "VITALS  %05.1f / %05.1f", player.getHealth(), player.getMaxHealth()));
-        lines.add(String.format(Locale.ROOT, "ARMOR   %02d     AIR %03d", player.getArmor(), player.getAir()));
+        lines.add(String.format(Locale.ROOT, "ARMOR   %02d     AIR %03d", player.getArmorValue(), player.getAirSupply()));
         lines.add("ZONE    " + dimension);
         lines.add("TERRAIN " + biome);
         lines.add(String.format(Locale.ROOT, "CYCLE   DAY %05d  T%05d", dayTime / 24000L, dayTime % 24000L));
-        lines.add(String.format(Locale.ROOT, "LINK    %03dMS   FPS %03d", ping, mc.getCurrentFps()));
+        lines.add(String.format(Locale.ROOT, "LINK    %03dMS   FPS %03d", ping, mc.getFps()));
         lines.add(String.format(Locale.ROOT, "CONTACT %02d  THREAT SCAN ACTIVE", targetCount));
         if (extendedDataList.get()) {
             lines.add(String.format(Locale.ROOT, "RESERVE ABS %04.1f  FOOD %02d  SAT %04.1f",
-                player.getAbsorptionAmount(), player.getHungerManager().getFoodLevel(),
-                player.getHungerManager().getSaturationLevel()));
+                player.getAbsorptionAmount(), player.getFoodData().getFoodLevel(),
+                player.getFoodData().getSaturationLevel()));
             lines.add(String.format(Locale.ROOT, "EXPER   LV %03d  PROGRESS %03d PERCENT",
                 player.experienceLevel, (int) (player.experienceProgress * 100.0f)));
-            lines.add("PRIMARY " + stackLabel(player.getMainHandStack()));
-            lines.add("AUX     " + stackLabel(player.getOffHandStack()));
+            lines.add("PRIMARY " + stackLabel(player.getMainHandItem()));
+            lines.add("AUX     " + stackLabel(player.getOffhandItem()));
             lines.add(String.format(Locale.ROOT, "STATE   %-10s EFFECTS %02d",
-                player.getPose().asString().toUpperCase(Locale.ROOT), player.getStatusEffects().size()));
+                player.getPose().getSerializedName().toUpperCase(Locale.ROOT), player.getActiveEffects().size()));
             lines.add(String.format(Locale.ROOT, "SECTOR  CHUNK %+05d %+05d  SLOT %02d",
                 player.getBlockX() >> 4, player.getBlockZ() >> 4, player.getInventory().getSelectedSlot() + 1));
         }
@@ -1214,7 +1214,7 @@ public final class TerminatorHudShader extends FullscreenShaderModule {
 
     private void drawDataPanelGeometry(List<String> lines) {
         int width = 0;
-        for (String line : lines) width = Math.max(width, mc.textRenderer.getWidth(line));
+        for (String line : lines) width = Math.max(width, mc.font.width(line));
         double x = 12.0;
         double y = 14.0;
         double w = width + 14.0;
@@ -1232,7 +1232,7 @@ public final class TerminatorHudShader extends FullscreenShaderModule {
         int y = 18;
         for (int i = 0; i < lines.size(); i++) {
             int alpha = i == 0 ? 255 : 205;
-            event.drawContext.drawText(mc.textRenderer, lines.get(i), 18, y, argb(alpha), true);
+            event.graphics.text(mc.font, lines.get(i), 18, y, argb(alpha), true);
             y += 10;
         }
     }
@@ -1285,9 +1285,9 @@ public final class TerminatorHudShader extends FullscreenShaderModule {
         double height = Math.min(98.0, screenHeight * 0.23);
         int x = (int) (screenWidth - width - 10.0);
         int y = (int) (screenHeight - height - 15.0);
-        event.drawContext.drawText(mc.textRenderer, "ENVIRONMENTAL MAPPING", x, y, argb(225), true);
-        String bearing = String.format(Locale.ROOT, "AZ %06.1f  EL %+05.1f", normalizeYaw(mc.player.getYaw()), -mc.player.getPitch());
-        event.drawContext.drawText(mc.textRenderer, bearing, x, (int) (screenHeight - 15.0), argb(190), true);
+        event.graphics.text(mc.font, "ENVIRONMENTAL MAPPING", x, y, argb(225), true);
+        String bearing = String.format(Locale.ROOT, "AZ %06.1f  EL %+05.1f", normalizeYaw(mc.player.getYRot()), -mc.player.getXRot());
+        event.graphics.text(mc.font, bearing, x, (int) (screenHeight - 15.0), argb(190), true);
     }
 
     private void drawCompassGeometry(Render2DEvent event) {
@@ -1296,7 +1296,7 @@ public final class TerminatorHudShader extends FullscreenShaderModule {
         double x = screenWidth - width - 14.0;
         double y = 14.0;
         double center = x + width * 0.5;
-        double heading = normalizeYaw(mc.player.getYaw());
+        double heading = normalizeYaw(mc.player.getYRot());
 
         Renderer2D.COLOR.quad(x, y, width, 34.0, color(24));
         Renderer2D.COLOR.boxLines(x, y, width, 34.0, color(100));
@@ -1317,18 +1317,18 @@ public final class TerminatorHudShader extends FullscreenShaderModule {
         double x = screenWidth - width - 14.0;
         double y = 14.0;
         double center = x + width * 0.5;
-        double heading = normalizeYaw(mc.player.getYaw());
+        double heading = normalizeYaw(mc.player.getYRot());
         String headingText = String.format(Locale.ROOT, "HEADING %06.1f // %s", heading, cardinalName(heading));
-        int headingX = (int) (center - mc.textRenderer.getWidth(headingText) * 0.5);
-        event.drawContext.drawText(mc.textRenderer, headingText, headingX, (int) y + 4, argb(230), true);
+        int headingX = (int) (center - mc.font.width(headingText) * 0.5);
+        event.graphics.text(mc.font, headingText, headingX, (int) y + 4, argb(230), true);
 
         String[] labels = {"S", "W", "N", "E"};
         int[] angles = {0, 90, 180, 270};
         for (int i = 0; i < labels.length; i++) {
             double diff = wrapDegrees((float) (angles[i] - heading));
             if (Math.abs(diff) > 90.0) continue;
-            int px = (int) (center + diff / 90.0 * (width * 0.47) - mc.textRenderer.getWidth(labels[i]) * 0.5);
-            event.drawContext.drawText(mc.textRenderer, labels[i], px, (int) y + 13, argb(245), true);
+            int px = (int) (center + diff / 90.0 * (width * 0.47) - mc.font.width(labels[i]) * 0.5);
+            event.graphics.text(mc.font, labels[i], px, (int) y + 13, argb(245), true);
         }
     }
 
@@ -1341,26 +1341,26 @@ public final class TerminatorHudShader extends FullscreenShaderModule {
             }
             Entity entity = target.entity;
             lines.add("CONTEXT // TARGET ANALYSIS");
-            lines.add("CLASS   " + entity.getType().getName().getString().toUpperCase(Locale.ROOT));
+            lines.add("CLASS   " + entity.getType().getDescription().getString().toUpperCase(Locale.ROOT));
             lines.add("IDENT   " + targetName(entity));
             lines.add(String.format(Locale.ROOT, "RANGE   %06.2f M", mc.player.distanceTo(entity)));
             lines.add(String.format(Locale.ROOT, "VECTOR  %+05.2f %+05.2f %+05.2f",
-                entity.getVelocity().x, entity.getVelocity().y, entity.getVelocity().z));
+                entity.getDeltaMovement().x, entity.getDeltaMovement().y, entity.getDeltaMovement().z));
             lines.add("SIGNAL  " + targetMetrics(entity));
             if (extendedContextData.get()) {
                 lines.add(String.format(Locale.ROOT, "ENTITY  ID %05d  UUID %s",
-                    entity.getId(), entity.getUuidAsString().substring(0, 8).toUpperCase(Locale.ROOT)));
+                    entity.getId(), entity.getStringUUID().substring(0, 8).toUpperCase(Locale.ROOT)));
                 lines.add(String.format(Locale.ROOT, "POS     %+07.1f %+06.1f %+07.1f",
                     entity.getX(), entity.getY(), entity.getZ()));
                 lines.add(String.format(Locale.ROOT, "BODY    %04.2f X %04.2f  POSE %s",
-                    entity.getWidth(), entity.getHeight(), entity.getPose().asString().toUpperCase(Locale.ROOT)));
+                    entity.getBbWidth(), entity.getBbHeight(), entity.getPose().getSerializedName().toUpperCase(Locale.ROOT)));
                 lines.add("STATE   " + entityState(entity));
                 if (entity instanceof LivingEntity living) {
                     lines.add(String.format(Locale.ROOT, "DEFENSE ARMOR %02d  ABS %04.1f  FX %02d",
-                        living.getArmor(), living.getAbsorptionAmount(), living.getStatusEffects().size()));
+                        living.getArmorValue(), living.getAbsorptionAmount(), living.getActiveEffects().size()));
                 } else if (entity instanceof ItemEntity item) {
                     lines.add(String.format(Locale.ROOT, "ITEM    QTY %03d  AGE %05.1f S",
-                        item.getStack().getCount(), item.getItemAge() / 20.0));
+                        item.getItem().getCount(), item.getAge() / 20.0));
                 }
             }
             lines.add(String.format(Locale.ROOT, "LOCK    %03d PERCENT", (int) (target.progress * 100.0)));
@@ -1378,7 +1378,7 @@ public final class TerminatorHudShader extends FullscreenShaderModule {
             int dy = cluster.max.getY() - cluster.min.getY() + 1;
             int dz = cluster.max.getZ() - cluster.min.getZ() + 1;
             var center = cluster.worldBox().getCenter();
-            double range = Math.sqrt(mc.player.squaredDistanceTo(center.x, center.y, center.z));
+            double range = Math.sqrt(mc.player.distanceToSqr(center.x, center.y, center.z));
             lines.add("CONTEXT // MATERIAL ANALYSIS");
             lines.add("CLASS   " + cluster.block.getName().getString().toUpperCase(Locale.ROOT));
             lines.add(String.format(Locale.ROOT, "COUNT   %05d BLOCKS", cluster.count));
@@ -1387,7 +1387,7 @@ public final class TerminatorHudShader extends FullscreenShaderModule {
             lines.add(String.format(Locale.ROOT, "RANGE   %06.2f M", range));
             lines.addAll(signHudLines(cluster, 6, 40));
             if (extendedContextData.get()) {
-                lines.add("BLOCKID " + Registries.BLOCK.getId(cluster.block).toString().toUpperCase(Locale.ROOT));
+                lines.add("BLOCKID " + BuiltInRegistries.BLOCK.getKey(cluster.block).toString().toUpperCase(Locale.ROOT));
                 lines.add(String.format(Locale.ROOT, "MINIMUM %+05d %+05d %+05d",
                     cluster.min.getX(), cluster.min.getY(), cluster.min.getZ()));
                 lines.add(String.format(Locale.ROOT, "MAXIMUM %+05d %+05d %+05d",
@@ -1406,16 +1406,16 @@ public final class TerminatorHudShader extends FullscreenShaderModule {
             return lines;
         }
 
-        if (mc.player.getHealth() < mc.player.getMaxHealth() * 0.45f || mc.player.getAir() < 100) {
+        if (mc.player.getHealth() < mc.player.getMaxHealth() * 0.45f || mc.player.getAirSupply() < 100) {
             lines.add("CONTEXT // DAMAGE CONTROL");
             lines.add(String.format(Locale.ROOT, "VITALS  %05.1f / %05.1f", mc.player.getHealth(), mc.player.getMaxHealth()));
-            lines.add(String.format(Locale.ROOT, "ARMOR   %02d", mc.player.getArmor()));
-            lines.add(String.format(Locale.ROOT, "OXYGEN  %03d / %03d", mc.player.getAir(), mc.player.getMaxAir()));
+            lines.add(String.format(Locale.ROOT, "ARMOR   %02d", mc.player.getArmorValue()));
+            lines.add(String.format(Locale.ROOT, "OXYGEN  %03d / %03d", mc.player.getAirSupply(), mc.player.getMaxAirSupply()));
             if (extendedContextData.get()) {
                 lines.add(String.format(Locale.ROOT, "ABSORB  %04.1f", mc.player.getAbsorptionAmount()));
                 lines.add(String.format(Locale.ROOT, "ENERGY  %02d / 20  SAT %04.1f",
-                    mc.player.getHungerManager().getFoodLevel(), mc.player.getHungerManager().getSaturationLevel()));
-                lines.add(String.format(Locale.ROOT, "EFFECTS %02d ACTIVE", mc.player.getStatusEffects().size()));
+                    mc.player.getFoodData().getFoodLevel(), mc.player.getFoodData().getSaturationLevel()));
+                lines.add(String.format(Locale.ROOT, "EFFECTS %02d ACTIVE", mc.player.getActiveEffects().size()));
             }
             lines.add("STATUS  " + (mc.player.getHealth() < 6.0f ? "CRITICAL" : "DAMAGED"));
             lines.add("ACTION  SEEK COVER");
@@ -1425,13 +1425,13 @@ public final class TerminatorHudShader extends FullscreenShaderModule {
         int page = (int) ((now / 4_000_000_000L) % 3L);
         if (page == 0) {
             lines.add("CONTEXT // ENVIRONMENT");
-            lines.add("WEATHER " + (mc.world.isThundering() ? "ELECTRICAL STORM" : mc.world.isRaining() ? "PRECIPITATION" : "CLEAR"));
-            lines.add("ZONE    " + mc.world.getRegistryKey().getValue().getPath().toUpperCase(Locale.ROOT));
-            String biome = mc.world.getBiome(mc.player.getBlockPos()).getKey()
-                .map(key -> key.getValue().getPath()).orElse("unknown").toUpperCase(Locale.ROOT);
+            lines.add("WEATHER " + (mc.level.isThundering() ? "ELECTRICAL STORM" : mc.level.isRaining() ? "PRECIPITATION" : "CLEAR"));
+            lines.add("ZONE    " + mc.level.dimension().identifier().getPath().toUpperCase(Locale.ROOT));
+            String biome = mc.level.getBiome(mc.player.blockPosition()).unwrapKey()
+                .map(key -> key.identifier().getPath()).orElse("unknown").toUpperCase(Locale.ROOT);
             lines.add("TERRAIN " + biome);
             lines.add(String.format(Locale.ROOT, "ALTITUDE %06.1f", mc.player.getY()));
-            lines.add(String.format(Locale.ROOT, "CYCLE   %05d", mc.world.getTimeOfDay() % 24000L));
+            lines.add(String.format(Locale.ROOT, "CYCLE   %05d", mc.level.getOverworldClockTime() % 24000L));
             if (extendedContextData.get()) {
                 lines.add(String.format(Locale.ROOT, "SECTOR  CHUNK %+05d %+05d",
                     mc.player.getBlockX() >> 4, mc.player.getBlockZ() >> 4));
@@ -1440,31 +1440,31 @@ public final class TerminatorHudShader extends FullscreenShaderModule {
             }
         } else if (page == 1) {
             lines.add("CONTEXT // LOADOUT");
-            lines.add("PRIMARY " + stackLabel(mc.player.getMainHandStack()));
-            lines.add("AUX     " + stackLabel(mc.player.getOffHandStack()));
-            lines.add(String.format(Locale.ROOT, "ARMOR   %02d", mc.player.getArmor()));
-            lines.add(String.format(Locale.ROOT, "ENERGY  %02d / 20", mc.player.getHungerManager().getFoodLevel()));
-            lines.add(String.format(Locale.ROOT, "EFFECTS %02d ACTIVE", mc.player.getStatusEffects().size()));
+            lines.add("PRIMARY " + stackLabel(mc.player.getMainHandItem()));
+            lines.add("AUX     " + stackLabel(mc.player.getOffhandItem()));
+            lines.add(String.format(Locale.ROOT, "ARMOR   %02d", mc.player.getArmorValue()));
+            lines.add(String.format(Locale.ROOT, "ENERGY  %02d / 20", mc.player.getFoodData().getFoodLevel()));
+            lines.add(String.format(Locale.ROOT, "EFFECTS %02d ACTIVE", mc.player.getActiveEffects().size()));
             if (extendedContextData.get()) {
                 lines.add(String.format(Locale.ROOT, "EXPER   LEVEL %03d  %03d PERCENT",
                     mc.player.experienceLevel, (int) (mc.player.experienceProgress * 100.0f)));
                 lines.add(String.format(Locale.ROOT, "HOTBAR  SLOT %02d", mc.player.getInventory().getSelectedSlot() + 1));
                 lines.add(String.format(Locale.ROOT, "ABSORB  %04.1f  SATURATION %04.1f",
-                    mc.player.getAbsorptionAmount(), mc.player.getHungerManager().getSaturationLevel()));
+                    mc.player.getAbsorptionAmount(), mc.player.getFoodData().getSaturationLevel()));
             }
         } else {
             lines.add("CONTEXT // MOTION CONTROL");
             lines.add(String.format(Locale.ROOT, "X       %+09.3f", mc.player.getX()));
             lines.add(String.format(Locale.ROOT, "Y       %+09.3f", mc.player.getY()));
             lines.add(String.format(Locale.ROOT, "Z       %+09.3f", mc.player.getZ()));
-            lines.add(String.format(Locale.ROOT, "SPEED   %06.2f M/S", mc.player.getVelocity().length() * 20.0));
-            lines.add(String.format(Locale.ROOT, "AZIMUTH %06.1f", normalizeYaw(mc.player.getYaw())));
+            lines.add(String.format(Locale.ROOT, "SPEED   %06.2f M/S", mc.player.getDeltaMovement().length() * 20.0));
+            lines.add(String.format(Locale.ROOT, "AZIMUTH %06.1f", normalizeYaw(mc.player.getYRot())));
             if (extendedContextData.get()) {
                 lines.add(String.format(Locale.ROOT, "HORIZ   %06.2f M/S  VERT %+06.2f M/S",
-                    mc.player.getVelocity().horizontalLength() * 20.0, mc.player.getVelocity().y * 20.0));
+                    mc.player.getDeltaMovement().horizontalDistance() * 20.0, mc.player.getDeltaMovement().y * 20.0));
                 lines.add("STATE   " + entityState(mc.player));
                 lines.add(String.format(Locale.ROOT, "PITCH   %+06.1f  POSE %s",
-                    mc.player.getPitch(), mc.player.getPose().asString().toUpperCase(Locale.ROOT)));
+                    mc.player.getXRot(), mc.player.getPose().getSerializedName().toUpperCase(Locale.ROOT)));
             }
             lines.add("CONTACT NO ACTIVE TARGET");
         }
@@ -1485,7 +1485,7 @@ public final class TerminatorHudShader extends FullscreenShaderModule {
 
     private void drawContextPanelGeometry(Render2DEvent event, List<String> lines) {
         int textWidth = 142;
-        for (String line : lines) textWidth = Math.max(textWidth, mc.textRenderer.getWidth(line));
+        for (String line : lines) textWidth = Math.max(textWidth, mc.font.width(line));
         double width = textWidth + 12.0;
         double height = lines.size() * 10.0 + 10.0;
         double x = guiWidth() - width - 12.0;
@@ -1499,27 +1499,27 @@ public final class TerminatorHudShader extends FullscreenShaderModule {
 
     private void drawContextPanelText(Render2DEvent event, List<String> lines) {
         int textWidth = 142;
-        for (String line : lines) textWidth = Math.max(textWidth, mc.textRenderer.getWidth(line));
+        for (String line : lines) textWidth = Math.max(textWidth, mc.font.width(line));
         double panelHeight = lines.size() * 10.0 + 10.0;
         int x = (int) (guiWidth() - textWidth - 18.0);
         int y = (int) (contextPanelY(panelHeight) + 4.0);
         for (int i = 0; i < lines.size(); i++) {
-            event.drawContext.drawText(mc.textRenderer, lines.get(i), x, y + i * 10, argb(i == 0 ? 245 : 195), true);
+            event.graphics.text(mc.font, lines.get(i), x, y + i * 10, argb(i == 0 ? 245 : 195), true);
         }
     }
 
     private String entityState(Entity entity) {
         List<String> states = new ArrayList<>(4);
-        states.add(entity.isOnGround() ? "GROUND" : "AIRBORNE");
-        if (entity.isSubmergedInWater()) states.add("SUBMERGED");
+        states.add(entity.onGround() ? "GROUND" : "AIRBORNE");
+        if (entity.isUnderWater()) states.add("SUBMERGED");
         if (entity.isOnFire()) states.add("BURNING");
-        if (entity.isSneaking()) states.add("CROUCH");
+        if (entity.isShiftKeyDown()) states.add("CROUCH");
         return String.join(" / ", states);
     }
 
-    private String stackLabel(net.minecraft.item.ItemStack stack) {
+    private String stackLabel(net.minecraft.world.item.ItemStack stack) {
         if (stack.isEmpty()) return "NONE";
-        return compactHudText(stack.getName().getString() + " X" + stack.getCount(), 32).toUpperCase(Locale.ROOT);
+        return compactHudText(stack.getHoverName().getString() + " X" + stack.getCount(), 32).toUpperCase(Locale.ROOT);
     }
 
     private static String cardinalName(double heading) {
@@ -1538,11 +1538,11 @@ public final class TerminatorHudShader extends FullscreenShaderModule {
     }
 
     private int guiWidth() {
-        return mc.getWindow().getScaledWidth();
+        return mc.getWindow().getGuiScaledWidth();
     }
 
     private int guiHeight() {
-        return mc.getWindow().getScaledHeight();
+        return mc.getWindow().getGuiScaledHeight();
     }
 
     private double contextPanelY(double panelHeight) {
@@ -1614,8 +1614,8 @@ public final class TerminatorHudShader extends FullscreenShaderModule {
             return new BlockClusterKey(block, min, max);
         }
 
-        private Box worldBox() {
-            return new Box(min.getX(), min.getY(), min.getZ(),
+        private AABB worldBox() {
+            return new AABB(min.getX(), min.getY(), min.getZ(),
                 max.getX() + 1.0, max.getY() + 1.0, max.getZ() + 1.0);
         }
     }

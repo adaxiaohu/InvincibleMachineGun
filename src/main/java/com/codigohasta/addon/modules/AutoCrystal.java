@@ -20,21 +20,21 @@ import meteordevelopment.meteorclient.utils.entity.EntityUtils;
 import meteordevelopment.meteorclient.utils.player.PlayerUtils;
 import meteordevelopment.meteorclient.utils.render.color.SettingColor;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.block.Blocks;
-import net.minecraft.entity.decoration.EndCrystalEntity;
-import net.minecraft.entity.effect.StatusEffectInstance;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.item.Items;
-import net.minecraft.util.Hand;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Box;
-import net.minecraft.util.math.Direction;
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.entity.boss.enderdragon.EndCrystal;
+import net.minecraft.world.effect.MobEffectInstance;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.core.Direction;
+import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
 import java.util.UUID;
 import com.codigohasta.addon.mixin.InventoryAccessor;
-import net.minecraft.client.network.OtherClientPlayerEntity;
+import net.minecraft.client.player.RemotePlayer;
 
 public class AutoCrystal extends Module {
     public static AutoCrystal INSTANCE;
@@ -211,7 +211,7 @@ public class AutoCrystal extends Module {
     private final Timer breakTimer = new Timer();
     private final Timer baseTimer = new Timer();
     private int dmg = 0;
-    private PlayerEntity target;
+    private Player target;
     public BlockPos crystalPos;
     public BlockPos lastBestPos;
     private static class RenderPos {
@@ -237,7 +237,7 @@ public class AutoCrystal extends Module {
     @EventHandler
     private void onRender(RenderLeaves3DEvent event) {
         if (!renderDmg.get() || crystalPos == null) return;
-        Vec3d vec = new Vec3d(renderPos.x + 0.5, renderPos.y + (1 - renderH.get()/2), renderPos.z + 0.5);
+        Vec3 vec = new Vec3(renderPos.x + 0.5, renderPos.y + (1 - renderH.get()/2), renderPos.z + 0.5);
         Render3DUtil.renderText3D(dmg + "f", vec, dmgColor.get().getPacked());
     }
     @EventHandler
@@ -257,7 +257,7 @@ public class AutoCrystal extends Module {
         renderPos.x += (crystalPos.getX() - renderPos.x) * renderSpeed.get();
         renderPos.y += (crystalPos.getY() - 1 - renderPos.y) * renderSpeed.get();
         renderPos.z += (crystalPos.getZ() - renderPos.z) * renderSpeed.get();
-        Box box = new Box(
+        AABB box = new AABB(
                 renderPos.x , renderPos.y + (1 - renderH.get()), renderPos.z,
                 renderPos.x + 1, renderPos.y + 1, renderPos.z + 1
         );
@@ -271,16 +271,16 @@ public class AutoCrystal extends Module {
     }
     @EventHandler
     private void onTick(TickEvent.Pre event) {
-        if (mc.player == null || mc.world == null) return;
-        if (crystalPos != null && !PlayerUtils.isWithin(crystalPos.toCenterPos(), placeRange.get())) {
+        if (mc.player == null || mc.level == null) return;
+        if (crystalPos != null && !PlayerUtils.isWithin(crystalPos.getCenter(), placeRange.get())) {
             crystalPos = null;
             lastBestPos = null;
         }
-        if (crystalPos != null && !PlayerUtils.isWithin(crystalPos.toCenterPos(), breakRange.get())) {
+        if (crystalPos != null && !PlayerUtils.isWithin(crystalPos.getCenter(), breakRange.get())) {
             crystalPos = null;
             lastBestPos = null;
         }
-        if (crystalPos != null && ((BlockUtil.getBlock(crystalPos.down()) != Blocks.OBSIDIAN && BlockUtil.getBlock(crystalPos.down()) != Blocks.BEDROCK) || !mc.world.isAir(crystalPos))) {
+        if (crystalPos != null && ((BlockUtil.getBlock(crystalPos.below()) != Blocks.OBSIDIAN && BlockUtil.getBlock(crystalPos.below()) != Blocks.BEDROCK) || !mc.level.isEmptyBlock(crystalPos))) {
             crystalPos = null;
             lastBestPos = null;
         }
@@ -317,23 +317,23 @@ public class AutoCrystal extends Module {
         }
     }
     private void findBestPos() {
-        PlayerEntity predictTarget = predictTarget(target);
+        Player predictTarget = predictTarget(target);
         float bestDamage = 0;
         BlockPos best = null;
         ArrayList<BlockPos> placeList = new ArrayList<>();
         for (BlockPos pos : BlockUtil.getSphere(placeRange.get())) {
-            if (autoBase.get() && !BlockUtil.canPlaceCrystal(pos) && BlockUtil.canPlace(pos.down())  && !BlockUtil.hasEntity(pos, true) && mc.world.isAir(pos) && pos.getY() <= target.getY() &&baseTimer.passedMs(baseDelay.get())) placeList.add(pos);
-            if (BlockUtil.canPlaceCrystal(pos) || (BlockUtil.hasCrystalPlace(pos) && mc.world.isAir(pos))) placeList.add(pos);
+            if (autoBase.get() && !BlockUtil.canPlaceCrystal(pos) && BlockUtil.canPlace(pos.below())  && !BlockUtil.hasEntity(pos, true) && mc.level.isEmptyBlock(pos) && pos.getY() <= target.getY() &&baseTimer.passedMs(baseDelay.get())) placeList.add(pos);
+            if (BlockUtil.canPlaceCrystal(pos) || (BlockUtil.hasCrystalPlace(pos) && mc.level.isEmptyBlock(pos))) placeList.add(pos);
         }
         if (placeList.isEmpty()) return;
         for (BlockPos pos : placeList) {
             if (autoBase.get()) {
-                CombatUtil.modifyPos = pos.down();
-                CombatUtil.modifyBlockState = Blocks.OBSIDIAN.getDefaultState();
+                CombatUtil.modifyPos = pos.below();
+                CombatUtil.modifyBlockState = Blocks.OBSIDIAN.defaultBlockState();
             }
-            Vec3d vec = new Vec3d(pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5);
-            float dmg = calcMode.get() == CalcMode.Meteor ? DamageUtils.crystalDamage(predictTarget, vec, false, pos.down()) : DamageUtil.calculateDamage(pos, predictTarget);
-            float self = calcMode.get() == CalcMode.Meteor ? DamageUtils.crystalDamage(mc.player, vec, false, pos.down()) : DamageUtil.calculateDamage(pos, mc.player);
+            Vec3 vec = new Vec3(pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5);
+            float dmg = calcMode.get() == CalcMode.Meteor ? DamageUtils.crystalDamage(predictTarget, vec, false, pos.below()) : DamageUtil.calculateDamage(pos, predictTarget);
+            float self = calcMode.get() == CalcMode.Meteor ? DamageUtils.crystalDamage(mc.player, vec, false, pos.below()) : DamageUtil.calculateDamage(pos, mc.player);
             if (autoBase.get()) CombatUtil.modifyPos = null;
             if (dmg < minDamage.get()) continue;
             if (self > maxSelfDmg.get()) continue;
@@ -345,12 +345,12 @@ public class AutoCrystal extends Module {
         }
         if (lastBestPos != null) {
             if (autoBase.get()) {
-                CombatUtil.modifyPos = lastBestPos.down();
-                CombatUtil.modifyBlockState = Blocks.OBSIDIAN.getDefaultState();
+                CombatUtil.modifyPos = lastBestPos.below();
+                CombatUtil.modifyBlockState = Blocks.OBSIDIAN.defaultBlockState();
             }
-            Vec3d vec = new Vec3d(lastBestPos.getX() + 0.5, lastBestPos.getY(), lastBestPos.getZ() +0.5);
-            float last = calcMode.get() == CalcMode.Meteor ? DamageUtils.crystalDamage(predictTarget, vec,false, lastBestPos.down()) : DamageUtil.calculateDamage(lastBestPos, predictTarget);
-            float lastSelf = calcMode.get() == CalcMode.Meteor ? DamageUtils.crystalDamage(mc.player, vec,false, lastBestPos.down()) : DamageUtil.calculateDamage(lastBestPos, mc.player);
+            Vec3 vec = new Vec3(lastBestPos.getX() + 0.5, lastBestPos.getY(), lastBestPos.getZ() +0.5);
+            float last = calcMode.get() == CalcMode.Meteor ? DamageUtils.crystalDamage(predictTarget, vec,false, lastBestPos.below()) : DamageUtil.calculateDamage(lastBestPos, predictTarget);
+            float lastSelf = calcMode.get() == CalcMode.Meteor ? DamageUtils.crystalDamage(mc.player, vec,false, lastBestPos.below()) : DamageUtil.calculateDamage(lastBestPos, mc.player);
             if (autoBase.get()) CombatUtil.modifyPos = null;
             if (best != null && last >= bestDamage * 0.95 && lastSelf < maxSelfDmg.get() && (!noSuicide.get() || lastSelf < EntityUtils.getTotalHealth(mc.player))) {
                 crystalPos = lastBestPos;
@@ -363,32 +363,32 @@ public class AutoCrystal extends Module {
                 return;
             }
         }
-        if (best != null && autoBase.get() && BlockUtil.canPlace(best.down()) && baseTimer.passedMs(baseDelay.get())) doBase(best.down());
+        if (best != null && autoBase.get() && BlockUtil.canPlace(best.below()) && baseTimer.passedMs(baseDelay.get())) doBase(best.below());
         lastBestPos = best;
         crystalPos = best;
         dmg = (int) bestDamage;
     }
-    private PlayerEntity predictTarget(PlayerEntity target) {
+    private Player predictTarget(Player target) {
         if (predict.get() <= 0) return target;
         int ticks = predict.get();
-        Vec3d vel = target.getVelocity();
+        Vec3 vel = target.getDeltaMovement();
         double predictX = target.getX() + vel.x * ticks;
         double predictY = target.getY() + vel.y * ticks;
         double predictZ = target.getZ() + vel.z * ticks;
-        OtherClientPlayerEntity fake = new OtherClientPlayerEntity(mc.world, new GameProfile(UUID.randomUUID(), "Predict"));
-        fake.refreshPositionAndAngles(predictX, predictY, predictZ, target.getYaw(), target.getPitch());
-        fake.setBodyYaw(target.bodyYaw);
-        fake.setHeadYaw(target.headYaw);
+        RemotePlayer fake = new RemotePlayer(mc.level, new GameProfile(UUID.randomUUID(), "Predict"));
+        fake.snapTo(predictX, predictY, predictZ, target.getYRot(), target.getXRot());
+        fake.setYBodyRot(target.yBodyRot);
+        fake.setYHeadRot(target.yHeadRot);
         fake.setPose(target.getPose());
-        fake.setOnGround(target.isOnGround());
-        fake.setVelocity(target.getVelocity());
-        fake.getAttributes().setFrom(target.getAttributes());
+        fake.setOnGround(target.onGround());
+        fake.setDeltaMovement(target.getDeltaMovement());
+        fake.getAttributes().assignAllValues(target.getAttributes());
         fake.setHealth(target.getHealth());
-        for (StatusEffectInstance se : target.getStatusEffects()) {
-            fake.addStatusEffect(new StatusEffectInstance(se));
+        for (MobEffectInstance se : target.getActiveEffects()) {
+            fake.addEffect(new MobEffectInstance(se));
         }
-        fake.getInventory().clone(target.getInventory());
-        fake.calculateDimensions();
+        fake.getInventory().replaceWith(target.getInventory());
+        fake.refreshDimensions();
         return fake;
     }
 
@@ -409,7 +409,7 @@ public class AutoCrystal extends Module {
     }
 
     private void placeCrystal(BlockPos pos, int slot) {
-        BlockPos base = pos.down();
+        BlockPos base = pos.below();
         var side = BlockUtil.getClickSide(base);
         if (side == null) return;
 
@@ -429,7 +429,7 @@ public class AutoCrystal extends Module {
 
     private boolean checkItem(int slot) {
         if (slot < 0 || slot > 8) return false;
-        return mc.player.getInventory().getStack(slot).getItem() == Items.END_CRYSTAL;
+        return mc.player.getInventory().getItem(slot).getItem() == Items.END_CRYSTAL;
     }
 
     private boolean shouldPause() {
@@ -439,16 +439,16 @@ public class AutoCrystal extends Module {
         return !usingPause.get() || checkPause(onlyMain.get());
     }
     public boolean checkPause(boolean onlyMain) {
-        return (mc.options.useKey.isPressed() || mc.player.isUsingItem()) && (!onlyMain || mc.player.getActiveHand() == Hand.MAIN_HAND);
+        return (mc.options.keyUse.isDown() || mc.player.isUsingItem()) && (!onlyMain || mc.player.getUsedItemHand() == InteractionHand.MAIN_HAND);
     }
     private void breakCrystal() {
-        for (var entity : mc.world.getEntities()) {
-            if (!(entity instanceof EndCrystalEntity crystal)) continue;
+        for (var entity : mc.level.entitiesForRendering()) {
+            if (!(entity instanceof EndCrystal crystal)) continue;
             if (!CombatUtil.isValid(entity,breakRange.get())) continue;
-            PlayerEntity predictTarget = predictTarget(target);
-            Vec3d crystalVec = new Vec3d(crystal.getX(), crystal.getY(), crystal.getZ());
-            float damage = calcMode.get() == CalcMode.Meteor ? DamageUtils.crystalDamage(predictTarget, crystalVec, false, crystal.getBlockPos().down()) : DamageUtil.calculateDamage(crystalVec, predictTarget);
-            float self = calcMode.get() == CalcMode.Meteor ? DamageUtils.crystalDamage(mc.player, crystalVec, false, crystal.getBlockPos().down()) : DamageUtil.calculateDamage(crystalVec, mc.player);
+            Player predictTarget = predictTarget(target);
+            Vec3 crystalVec = new Vec3(crystal.getX(), crystal.getY(), crystal.getZ());
+            float damage = calcMode.get() == CalcMode.Meteor ? DamageUtils.crystalDamage(predictTarget, crystalVec, false, crystal.blockPosition().below()) : DamageUtil.calculateDamage(crystalVec, predictTarget);
+            float self = calcMode.get() == CalcMode.Meteor ? DamageUtils.crystalDamage(mc.player, crystalVec, false, crystal.blockPosition().below()) : DamageUtil.calculateDamage(crystalVec, mc.player);
             if (damage < minDamage.get()) continue;
             if (self > maxSelfDmg.get()) continue;
             if (noSuicide.get() && self > EntityUtils.getTotalHealth(mc.player)) continue;

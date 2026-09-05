@@ -28,30 +28,30 @@ import meteordevelopment.meteorclient.utils.player.FindItemResult;
 import meteordevelopment.meteorclient.utils.player.InvUtils;
 import meteordevelopment.orbit.EventHandler;
 
-import net.minecraft.block.BlockState;
-import net.minecraft.block.Blocks;
-import net.minecraft.block.entity.BlockEntity;
-import net.minecraft.block.entity.BlockEntityType;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.passive.VillagerEntity;
-import net.minecraft.entity.projectile.ProjectileUtil;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
-import net.minecraft.network.packet.c2s.play.SelectMerchantTradeC2SPacket;
-import net.minecraft.network.packet.c2s.play.CloseHandledScreenC2SPacket;
-import net.minecraft.screen.GenericContainerScreenHandler;
-import net.minecraft.screen.MerchantScreenHandler;
-import net.minecraft.screen.PlayerScreenHandler;
-import net.minecraft.util.ActionResult;
-import net.minecraft.util.Hand;
-import net.minecraft.util.hit.EntityHitResult;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Direction;
-import net.minecraft.util.math.Vec3d;
-import net.minecraft.village.TradeOffer;
-import net.minecraft.village.TradeOfferList;
-import net.minecraft.village.VillagerProfession;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.entity.BlockEntityType;
+import net.minecraft.client.Minecraft;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.npc.villager.Villager;
+import net.minecraft.world.entity.projectile.ProjectileUtil;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.network.protocol.game.ServerboundSelectTradePacket;
+import net.minecraft.network.protocol.game.ServerboundContainerClosePacket;
+import net.minecraft.world.inventory.ChestMenu;
+import net.minecraft.world.inventory.MerchantMenu;
+import net.minecraft.world.inventory.InventoryMenu;
+import net.minecraft.world.InteractionResult;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.phys.EntityHitResult;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.item.trading.MerchantOffer;
+import net.minecraft.world.item.trading.MerchantOffers;
+import net.minecraft.world.entity.npc.villager.VillagerProfession;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -84,7 +84,7 @@ public class AutoLibrarian extends Module implements AbstractGameEventListener {
     private final Setting<List<BlockEntityType<?>>> emptyBoxStorage = sgGeneral.add(new StorageBlockListSetting.Builder().name("空盒补给容器").defaultValue(new BlockEntityType[]{BlockEntityType.DROPPER}).build());
 
     // 目标配置
-    private final Setting<java.util.Set<net.minecraft.registry.RegistryKey<net.minecraft.enchantment.Enchantment>>> targets = sgTarget.add(new EnchantmentListSetting.Builder()
+    private final Setting<java.util.Set<net.minecraft.resources.ResourceKey<net.minecraft.world.item.enchantment.Enchantment>>> targets = sgTarget.add(new EnchantmentListSetting.Builder()
         .name("目标附魔清单")
         .description("勾选你想要交易的所有附魔书")
         .defaultValue(java.util.Collections.emptySet())
@@ -163,13 +163,13 @@ public class AutoLibrarian extends Module implements AbstractGameEventListener {
 
     @Override
     public void onActivate() {
-        if (mc.player == null || mc.world == null) {
+        if (mc.player == null || mc.level == null) {
             toggle();
             return;
         }
 
         // 获取当前维度的唯一标识符 (例如：minecraft:overworld)
-        String currentWorld = mc.world.getRegistryKey().getValue().toString();
+        String currentWorld = mc.level.dimension().identifier().toString();
         boolean worldChanged = !currentWorld.equals(memoryWorld);
 
         // ==========================================
@@ -181,12 +181,12 @@ public class AutoLibrarian extends Module implements AbstractGameEventListener {
             librarianList.clear();
             memoryWorld = currentWorld;
 
-            for (Entity entity : mc.world.getEntities()) {
-                if (entity instanceof VillagerEntity villager) {
-                    if (villager.getVillagerData().profession().matchesKey(VillagerProfession.LIBRARIAN)) {
+            for (Entity entity : mc.level.entitiesForRendering()) {
+                if (entity instanceof Villager villager) {
+                    if (villager.getVillagerData().profession().is(VillagerProfession.LIBRARIAN)) {
                         BlockPos lecternPos = getOperatePos(villager);
                         if (lecternPos != null) {
-                            librarianList.add(new LibrarianWarp(villager.getUuid(), lecternPos));
+                            librarianList.add(new LibrarianWarp(villager.getUUID(), lecternPos));
                         }
                     }
                 }
@@ -229,7 +229,7 @@ public class AutoLibrarian extends Module implements AbstractGameEventListener {
             return;
         }
         
-        sortAreaCenter = mc.player.getBlockPos();
+        sortAreaCenter = mc.player.blockPosition();
         baritoneSettings.allowBreak.value = false;
         baritoneSettings.allowPlace.value = false;
         
@@ -325,36 +325,36 @@ case TAKE_BASE_BOOK -> takeItems(bookPos, Items.BOOK, Math.max(requiredBooks, su
     }
 
     private void doDiscoverTrade() {
-        VillagerEntity villager = currentTarget.getVillager();
+        Villager villager = currentTarget.getVillager();
         if (villager == null || !villager.isAlive()) {
             currentTarget.setDiscovered(true); // 死了就跳过
             step = LibrarianStep.INIT_SCAN;
             return;
         }
 
-        if (!(mc.currentScreen instanceof net.minecraft.client.gui.screen.ingame.MerchantScreen)) {
+        if (!(mc.screen instanceof net.minecraft.client.gui.screens.inventory.MerchantScreen)) {
             // 打开界面重试机制
             openEntityGUI(villager, LibrarianStep.OPEN_FOR_DISCOVER);
             return;
         }
 
-        MerchantScreenHandler handler = (MerchantScreenHandler) mc.player.currentScreenHandler;
-        TradeOfferList offers = handler.getRecipes();
+        MerchantMenu handler = (MerchantMenu) mc.player.containerMenu;
+        MerchantOffers offers = handler.getOffers();
         currentTarget.clearOffers();
 
         for (int i = 0; i < offers.size(); i++) {
-            TradeOffer trade = offers.get(i);
-            ItemStack sellItem = trade.getSellItem();
+            MerchantOffer trade = offers.get(i);
+            ItemStack sellItem = trade.getResult();
             
             if (sellItem.getItem().toString().contains("enchanted_book")) {
                 var mainEnchant = sortConfig.getMainEnchantment(sellItem);
                 if (mainEnchant != null) {
-                    int cPrice = trade.getDisplayedFirstBuyItem().getCount();
-                    int oPrice = trade.getOriginalFirstBuyItem().getCount();
+                    int cPrice = trade.getCostA().getCount();
+                    int oPrice = trade.getBaseCostA().getCount();
                     int level = sortConfig.getEnchantmentLevel(sellItem, mainEnchant);
 
-                    currentTarget.addOffer(new LibrarianOffer(i, mainEnchant, level, cPrice, oPrice, trade.isDisabled()));
-                    info("摸底发现: " + mainEnchant.getValue().getPath() + " Lv." + level + " | 原价:" + oPrice + " 现价:" + cPrice);
+                    currentTarget.addOffer(new LibrarianOffer(i, mainEnchant, level, cPrice, oPrice, trade.isOutOfStock()));
+                    info("摸底发现: " + mainEnchant.identifier().getPath() + " Lv." + level + " | 原价:" + oPrice + " 现价:" + cPrice);
                 }
             }
         }
@@ -374,7 +374,7 @@ case TAKE_BASE_BOOK -> takeItems(bookPos, Items.BOOK, Math.max(requiredBooks, su
 
         int emptySlots = 0;
         for (int i = 0; i < 36; i++) {
-            if (mc.player.getInventory().getStack(i).isEmpty()) emptySlots++;
+            if (mc.player.getInventory().getItem(i).isEmpty()) emptySlots++;
         }
         if (emptySlots < 2) {
             warning("背包空间严重不足，无法进货，请清理！");
@@ -402,7 +402,7 @@ case TAKE_BASE_BOOK -> takeItems(bookPos, Items.BOOK, Math.max(requiredBooks, su
                 if (currentPrice > maxPrice.get()) continue; 
                 
                  boolean isWanted = false;
-                for (net.minecraft.registry.RegistryKey<net.minecraft.enchantment.Enchantment> targetKey : targets.get()) {
+                for (net.minecraft.resources.ResourceKey<net.minecraft.world.item.enchantment.Enchantment> targetKey : targets.get()) {
                     if (targetKey.equals(offer.getEnchantment())) {
                         isWanted = true;
                         break;
@@ -421,7 +421,7 @@ case TAKE_BASE_BOOK -> takeItems(bookPos, Items.BOOK, Math.max(requiredBooks, su
         if (currentTarget == null) {
             // 🌟核心修复1：拦截日志刷屏，仅在首次切入待机时打印
             if (!this.wait) {
-                long time = mc.world.getTimeOfDay() % 24000L;
+                long time = mc.level.getOverworldClockTime() % 24000L;
                 if (time >= this.workEndTick.get()) {
                     info("村民已下班且所有目标缺货，进入待机模式...");
                 } else {
@@ -450,31 +450,31 @@ case TAKE_BASE_BOOK -> takeItems(bookPos, Items.BOOK, Math.max(requiredBooks, su
         }
     }
 
-    private void takeItems(BlockPos containerPos, net.minecraft.item.Item targetItem, int amountNeeded, LibrarianStep nextStep) {
-        var handler = mc.player.currentScreenHandler;
+    private void takeItems(BlockPos containerPos, net.minecraft.world.item.Item targetItem, int amountNeeded, LibrarianStep nextStep) {
+        var handler = mc.player.containerMenu;
 
-        if (handler instanceof PlayerScreenHandler) {
+        if (handler instanceof InventoryMenu) {
             HeBlockUtils.open(containerPos);
             setDelay(windowDelay.get());
             return;
         }
 
-        if (handler instanceof GenericContainerScreenHandler chestHandler) {
+        if (handler instanceof ChestMenu chestHandler) {
             int currentCount = InvUtils.find(targetItem).count();
             if (currentCount >= amountNeeded) {
                 setDelayCloseScreenAndNext(nextStep);
                 return;
             }
 
-            for (int i = 0; i < chestHandler.getInventory().size(); i++) {
-                if (chestHandler.getSlot(i).getStack().getItem() == targetItem) {
+            for (int i = 0; i < chestHandler.getContainer().getContainerSize(); i++) {
+                if (chestHandler.getSlot(i).getItem().getItem() == targetItem) {
                     InvUtils.shiftClick().slotId(i);
                     setDelay(clickDelay.get());
                     return; 
                 }
             }
             
-            warning("容器内 " + targetItem.getName().getString() + " 不足！需要人工干预。");
+            warning("容器内 " + new ItemStack(targetItem).getHoverName().getString() + " 不足！需要人工干预。");
             toggle();
         } else {
             HeInvUtils.closeCurScreen();
@@ -494,7 +494,7 @@ case TAKE_BASE_BOOK -> takeItems(bookPos, Items.BOOK, Math.max(requiredBooks, su
     }
 
     private void openTradeGUI() {
-        VillagerEntity villager = currentTarget.getVillager();
+        Villager villager = currentTarget.getVillager();
         if (villager == null || !villager.isAlive()) {
             currentTarget.setTradeTimes((long) this.maxExhaustions.get());
             step = LibrarianStep.CHECK_SUPPLY;
@@ -504,26 +504,26 @@ case TAKE_BASE_BOOK -> takeItems(bookPos, Items.BOOK, Math.max(requiredBooks, su
     }
 
     private void executeTrade() {
-        if (!(mc.currentScreen instanceof net.minecraft.client.gui.screen.ingame.MerchantScreen)) {
+        if (!(mc.screen instanceof net.minecraft.client.gui.screens.inventory.MerchantScreen)) {
             setDelay(windowDelay.get());
             step = LibrarianStep.OPEN_TRADE;
             return;
         }
 
-        MerchantScreenHandler handler = (MerchantScreenHandler) mc.player.currentScreenHandler;
-        TradeOfferList tradeOffers = handler.getRecipes();
+        MerchantMenu handler = (MerchantMenu) mc.player.containerMenu;
+        MerchantOffers tradeOffers = handler.getOffers();
         
         if (currentOffer.getTradeIndex() >= tradeOffers.size()) {
             setDelayCloseScreenAndNext(LibrarianStep.CHECK_SUPPLY);
             return;
         }
 
-        TradeOffer actualTrade = tradeOffers.get(currentOffer.getTradeIndex());
+        MerchantOffer actualTrade = tradeOffers.get(currentOffer.getTradeIndex());
 
         // ==========================================
         // 🌟核心修复1：买书前强制“验货”，防止盲买买错！
         // ==========================================
-        ItemStack sellItem = actualTrade.getSellItem();
+        ItemStack sellItem = actualTrade.getResult();
         if (sellItem.getItem().toString().contains("enchanted_book")) {
             var actualEnchant = sortConfig.getMainEnchantment(sellItem);
             if (actualEnchant == null || !actualEnchant.equals(currentOffer.getEnchantment())) {
@@ -536,13 +536,13 @@ case TAKE_BASE_BOOK -> takeItems(bookPos, Items.BOOK, Math.max(requiredBooks, su
         }
 
         // 缺货与上限判断
-        if (actualTrade.isDisabled() || actualTrade.getUses() >= actualTrade.getMaxUses()) {
+        if (actualTrade.isOutOfStock() || actualTrade.getUses() >= actualTrade.getMaxUses()) {
             long currentExhaustions = currentTarget.getTradeTimes();
             if (this.tradedThisSession) {
                 currentTarget.setTradeTimes(currentExhaustions + 1L);
                 info("此书售罄，今日累计交易次数: " + (currentExhaustions + 1) + "/" + maxExhaustions.get());
             } else {
-                long time = mc.world.getTimeOfDay() % 24000L;
+                long time = mc.level.getOverworldClockTime() % 24000L;
                 if (time >= workEndTick.get()) {
                     currentTarget.setTradeTimes((long) maxExhaustions.get());
                 }
@@ -558,7 +558,7 @@ case TAKE_BASE_BOOK -> takeItems(bookPos, Items.BOOK, Math.max(requiredBooks, su
         // 背包与材料检查
         int emptySlots = 0;
         for (int i = 0; i < 36; i++) {
-            if (mc.player.getInventory().getStack(i).isEmpty()) emptySlots++;
+            if (mc.player.getInventory().getItem(i).isEmpty()) emptySlots++;
         }
         if (emptySlots == 0) {
             info("背包已满，停止进货，准备去卸货。");
@@ -567,12 +567,12 @@ case TAKE_BASE_BOOK -> takeItems(bookPos, Items.BOOK, Math.max(requiredBooks, su
         }
 
         int emeralds = InvUtils.find(Items.EMERALD).count();
-        if (handler.getSlot(0).getStack().isOf(Items.EMERALD)) emeralds += handler.getSlot(0).getStack().getCount();
-        if (handler.getSlot(1).getStack().isOf(Items.EMERALD)) emeralds += handler.getSlot(1).getStack().getCount();
+        if (handler.getSlot(0).getItem().is(Items.EMERALD)) emeralds += handler.getSlot(0).getItem().getCount();
+        if (handler.getSlot(1).getItem().is(Items.EMERALD)) emeralds += handler.getSlot(1).getItem().getCount();
 
         int books = InvUtils.find(Items.BOOK).count();
-        if (handler.getSlot(0).getStack().isOf(Items.BOOK)) books += handler.getSlot(0).getStack().getCount();
-        if (handler.getSlot(1).getStack().isOf(Items.BOOK)) books += handler.getSlot(1).getStack().getCount();
+        if (handler.getSlot(0).getItem().is(Items.BOOK)) books += handler.getSlot(0).getItem().getCount();
+        if (handler.getSlot(1).getItem().is(Items.BOOK)) books += handler.getSlot(1).getItem().getCount();
 
         if (emeralds < currentOffer.getEmeraldPrice() || books < 1) {
             info("身上材料不足(绿宝石或书耗尽)，关闭界面回去补给。");
@@ -582,8 +582,8 @@ case TAKE_BASE_BOOK -> takeItems(bookPos, Items.BOOK, Math.max(requiredBooks, su
         
         // 执行交易
         this.tradedThisSession = true;
-        handler.setRecipeIndex(currentOffer.getTradeIndex());
-        mc.getNetworkHandler().sendPacket(new SelectMerchantTradeC2SPacket(currentOffer.getTradeIndex()));
+        handler.setSelectionHint(currentOffer.getTradeIndex());
+        mc.getConnection().send(new ServerboundSelectTradePacket(currentOffer.getTradeIndex()));
         InvUtils.shiftClick().slotId(2);
         
         setDelay(clickDelay.get()); 
@@ -593,11 +593,11 @@ case TAKE_BASE_BOOK -> takeItems(bookPos, Items.BOOK, Math.max(requiredBooks, su
     // 阶段 4：智能分类系统
     // ==========================================
    private void sortBooksLogic() {
-        var handler = mc.player.currentScreenHandler;
+        var handler = mc.player.containerMenu;
         
-        if (!(handler instanceof PlayerScreenHandler)) {
+        if (!(handler instanceof InventoryMenu)) {
             // 在潜影盒 GUI 内... (保持你原本代码不变)
-            ItemStack itemInSlot = mc.player.getInventory().getStack(currentSortItemSlot);
+            ItemStack itemInSlot = mc.player.getInventory().getItem(currentSortItemSlot);
             
             if (itemInSlot.isEmpty() || !itemInSlot.getItem().toString().contains("enchanted_book")) {
                 setDelayCloseScreenAndNext(LibrarianStep.SORT_BOOKS);
@@ -607,7 +607,7 @@ case TAKE_BASE_BOOK -> takeItems(bookPos, Items.BOOK, Math.max(requiredBooks, su
             InvUtils.shiftClick().slot(currentSortItemSlot);
             setDelay(clickDelay.get());
 
-            ItemStack afterClick = mc.player.getInventory().getStack(currentSortItemSlot);
+            ItemStack afterClick = mc.player.getInventory().getItem(currentSortItemSlot);
             if (!afterClick.isEmpty() && afterClick.getCount() == itemInSlot.getCount()) {
                 warning("该颜色潜影盒已满！触发自动换盒程序...");
                 setDelayCloseScreenAndNext(LibrarianStep.HANDLE_FULL_BOX);
@@ -624,22 +624,22 @@ case TAKE_BASE_BOOK -> takeItems(bookPos, Items.BOOK, Math.max(requiredBooks, su
         }
 
         currentSortItemSlot = book.slot();
-        net.minecraft.block.Block targetColor = sortConfig.getTargetBoxType(mc.player.getInventory().getStack(book.slot()));
+        net.minecraft.world.level.block.Block targetColor = sortConfig.getTargetBoxType(mc.player.getInventory().getItem(book.slot()));
         
         // ==========================================
         // 🌟核心修复2：遍历所有容器，计算最短距离，就近存放！
         // ==========================================
         BlockPos nearestBoxPos = null;
         double minDistance = Double.MAX_VALUE;
-        Vec3d playerPos = new Vec3d(mc.player.getX(), mc.player.getY(), mc.player.getZ());
+        Vec3 playerPos = new Vec3(mc.player.getX(), mc.player.getY(), mc.player.getZ());
 
         for (BlockEntity be : Utils.blockEntities()) {
-            if (mc.world.getBlockState(be.getPos()).getBlock() == targetColor) {
+            if (mc.level.getBlockState(be.getBlockPos()).getBlock() == targetColor) {
                 // 计算当前找到的这个潜影盒到玩家的距离平方 (性能更好)
-                double dist = be.getPos().toCenterPos().squaredDistanceTo(playerPos);
+                double dist = be.getBlockPos().getCenter().distanceToSqr(playerPos);
                 if (dist < minDistance) {
                     minDistance = dist;
-                    nearestBoxPos = be.getPos();
+                    nearestBoxPos = be.getBlockPos();
                 }
             }
         }
@@ -669,9 +669,9 @@ case TAKE_BASE_BOOK -> takeItems(bookPos, Items.BOOK, Math.max(requiredBooks, su
             return;
         }
         
-        BlockState boxState = mc.world.getBlockState(currentSortBoxPos);
+        BlockState boxState = mc.level.getBlockState(currentSortBoxPos);
         // 🌟核心升级：直接获取物理物品对象，而不是名字字符串！
-        net.minecraft.item.Item boxItem = boxState.getBlock().asItem(); 
+        net.minecraft.world.item.Item boxItem = boxState.getBlock().asItem(); 
         
         shulkerManager.initReplacement(currentSortBoxPos, boxItem);
         step = LibrarianStep.BREAK_FULL_BOX;
@@ -681,9 +681,9 @@ case TAKE_BASE_BOOK -> takeItems(bookPos, Items.BOOK, Math.max(requiredBooks, su
     // 通用机制与辅助方法 (完全移植)
     // ==========================================
     private void gotoIfNeed(BlockPos targetPos, String msg, LibrarianStep nextStep) {
-        // 修复：使用 new Vec3d(...) 构建当前坐标，避免映射问题
-        Vec3d currentPos = new Vec3d(mc.player.getX(), mc.player.getY(), mc.player.getZ());
-        double dist = currentPos.distanceTo(targetPos.toCenterPos());
+        // 修复：使用 new Vec3(...) 构建当前坐标，避免映射问题
+        Vec3 currentPos = new Vec3(mc.player.getX(), mc.player.getY(), mc.player.getZ());
+        double dist = currentPos.distanceTo(targetPos.getCenter());
         
         if (dist > this.minDistance.get() + 1.5) {
             info(msg);
@@ -708,26 +708,26 @@ case TAKE_BASE_BOOK -> takeItems(bookPos, Items.BOOK, Math.max(requiredBooks, su
     }
 
     private void openEntityGUI(Entity entity, LibrarianStep nextStep) {
-        // 修复：使用 new Vec3d(...) 避免不同映射版本对 Entity.getPos() 的兼容性问题
-        Vec3d entityPos = new Vec3d(entity.getX(), entity.getY(), entity.getZ());
-        Vec3d playerPos = new Vec3d(mc.player.getX(), mc.player.getY(), mc.player.getZ());
+        // 修复：使用 new Vec3(...) 避免不同映射版本对 Entity.getPos() 的兼容性问题
+        Vec3 entityPos = new Vec3(entity.getX(), entity.getY(), entity.getZ());
+        Vec3 playerPos = new Vec3(mc.player.getX(), mc.player.getY(), mc.player.getZ());
         double distance = entityPos.distanceTo(playerPos);
         
         if (distance > this.minDistance.get() + 1.5) {
             // 如果意外被挤开，重新寻路，不强行交互
-            gotoIfNeed(entity.getBlockPos(), "靠近村民", nextStep);
+            gotoIfNeed(entity.blockPosition(), "靠近村民", nextStep);
             return;
         }
 
-        EntityHitResult hit = ProjectileUtil.raycast(mc.player, playerPos, entityPos, entity.getBoundingBox(), Entity::canHit, distance * distance);
-        HeRotationUtils.rotate(entity.getEyePos());
+        EntityHitResult hit = ProjectileUtil.getEntityHitResult(mc.player, playerPos, entityPos, entity.getBoundingBox(), Entity::isPickable, distance * distance);
+        HeRotationUtils.rotate(entity.getEyePosition());
         
         if (hit == null) {
-            mc.interactionManager.interactEntity(mc.player, entity, Hand.MAIN_HAND);
+            mc.gameMode.interact(mc.player, entity, new EntityHitResult(entity), InteractionHand.MAIN_HAND);
         } else {
-            ActionResult res = mc.interactionManager.interactEntityAtLocation(mc.player, entity, hit, Hand.MAIN_HAND);
-            if (!res.isAccepted()) {
-                mc.interactionManager.interactEntity(mc.player, entity, Hand.MAIN_HAND);
+            InteractionResult res = mc.gameMode.interact(mc.player, entity, hit, InteractionHand.MAIN_HAND);
+            if (!res.consumesAction()) {
+                mc.gameMode.interact(mc.player, entity, new EntityHitResult(entity), InteractionHand.MAIN_HAND);
             }
         }
         
@@ -743,22 +743,22 @@ case TAKE_BASE_BOOK -> takeItems(bookPos, Items.BOOK, Math.max(requiredBooks, su
     }
 
     private void closeScreenAndNext() {
-        if (mc.currentScreen instanceof net.minecraft.client.gui.screen.ingame.HandledScreen) {
+        if (mc.screen instanceof net.minecraft.client.gui.screens.inventory.AbstractContainerScreen) {
             HeInvUtils.closeCurScreen();
         }
         this.step = this.closeScreenNextStep;
     }
 
     // 核心寻路锚定点：三点一线寻找讲台正确站位
-    private BlockPos getOperatePos(VillagerEntity villager) {
+    private BlockPos getOperatePos(Villager villager) {
         Direction[] dirs = {Direction.NORTH, Direction.SOUTH, Direction.WEST, Direction.EAST};
         for (Direction dir : dirs) {
-            BlockPos blockPos = villager.getBlockPos().offset(dir);
-            BlockState blockState = mc.world.getBlockState(blockPos);
+            BlockPos blockPos = villager.blockPosition().relative(dir);
+            BlockState blockState = mc.level.getBlockState(blockPos);
             // 匹配讲台
-            if (blockState.isOf(Blocks.LECTERN)) {
-                BlockPos pos = blockPos.offset(dir);
-                if (mc.world.getBlockState(pos).isAir() || mc.world.getBlockState(pos).isReplaceable()) {
+            if (blockState.is(Blocks.LECTERN)) {
+                BlockPos pos = blockPos.relative(dir);
+                if (mc.level.getBlockState(pos).isAir() || mc.level.getBlockState(pos).canBeReplaced()) {
                     return pos;
                 }
             }
@@ -768,20 +768,20 @@ case TAKE_BASE_BOOK -> takeItems(bookPos, Items.BOOK, Math.max(requiredBooks, su
 
     private void scanContainers() {
         emeraldPos = bookPos = dumpPos = emptyBoxPos = null;
-        // 修复：使用 new Vec3d(...) 避免不同映射版本的冲突
-        Vec3d pPos = new Vec3d(mc.player.getX(), mc.player.getY(), mc.player.getZ());
+        // 修复：使用 new Vec3(...) 避免不同映射版本的冲突
+        Vec3 pPos = new Vec3(mc.player.getX(), mc.player.getY(), mc.player.getZ());
         for (BlockEntity be : Utils.blockEntities()) {
-            if (pPos.distanceTo(be.getPos().toCenterPos()) > searchRange.get()) continue;
+            if (pPos.distanceTo(be.getBlockPos().getCenter()) > searchRange.get()) continue;
             BlockEntityType<?> type = be.getType();
-            if (emeraldStorage.get().contains(type)) emeraldPos = be.getPos();
-            else if (bookStorage.get().contains(type)) bookPos = be.getPos();
-            else if (dumpStorage.get().contains(type)) dumpPos = be.getPos();
-            else if (emptyBoxStorage.get().contains(type)) emptyBoxPos = be.getPos();
+            if (emeraldStorage.get().contains(type)) emeraldPos = be.getBlockPos();
+            else if (bookStorage.get().contains(type)) bookPos = be.getBlockPos();
+            else if (dumpStorage.get().contains(type)) dumpPos = be.getBlockPos();
+            else if (emptyBoxStorage.get().contains(type)) emptyBoxPos = be.getBlockPos();
         }
     }
 
     private void handleWait() {
-        long time = mc.world.getTimeOfDay() % 24000L;
+        long time = mc.level.getOverworldClockTime() % 24000L;
         
         if (time < 100L) {
             if (this.wait) {
@@ -819,7 +819,7 @@ case TAKE_BASE_BOOK -> takeItems(bookPos, Items.BOOK, Math.max(requiredBooks, su
 
                         // 2. 目标附魔过滤器
                         boolean isWanted = false;
-                        for (net.minecraft.registry.RegistryKey<net.minecraft.enchantment.Enchantment> targetKey : targets.get()) {
+                        for (net.minecraft.resources.ResourceKey<net.minecraft.world.item.enchantment.Enchantment> targetKey : targets.get()) {
                             if (targetKey.equals(offer.getEnchantment())) {
                                 isWanted = true;
                                 break;

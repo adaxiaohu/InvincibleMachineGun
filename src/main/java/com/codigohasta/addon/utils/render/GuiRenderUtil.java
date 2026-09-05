@@ -2,7 +2,7 @@ package com.codigohasta.addon.utils.render;
 
 import meteordevelopment.meteorclient.systems.hud.HudRenderer;
 import meteordevelopment.meteorclient.utils.render.color.Color;
-import net.minecraft.util.math.MathHelper;
+import net.minecraft.util.Mth;
 
 /**
  * GUI 渲染工具 — 基于 HudRenderer，实现圆角/渐变/阴影
@@ -114,6 +114,6 @@ public class GuiRenderUtil {
     // ─── 内部 ─────────────────────────────────────────────
 
     private static double clamp(double r, double w, double h) {
-        return MathHelper.clamp(r, 0, Math.min(w, h) / 2);
+        return Mth.clamp(r, 0, Math.min(w, h) / 2);
     }
 }

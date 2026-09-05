@@ -10,12 +10,12 @@ import meteordevelopment.meteorclient.systems.modules.Modules;
 import meteordevelopment.meteorclient.systems.modules.combat.KillAura;
 import meteordevelopment.meteorclient.utils.misc.input.KeyAction;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.client.network.PlayerListEntry;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket;
-import net.minecraft.util.math.MathHelper;
-import net.minecraft.util.math.Vec3d;
-import net.minecraft.world.GameMode;
+import net.minecraft.client.multiplayer.PlayerInfo;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
+import net.minecraft.util.Mth;
+import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.level.GameType;
 import org.lwjgl.glfw.GLFW;
 
 public class AttractAura extends Module {
@@ -67,7 +67,7 @@ public class AttractAura extends Module {
     private final Setting<Boolean> followAdventure = sgFilters.add(new BoolSetting.Builder().name("冒险模式").defaultValue(true).build());
     private final Setting<Boolean> followCreative = sgFilters.add(new BoolSetting.Builder().name("创造模式").defaultValue(false).build());
 
-    private PlayerEntity target;
+    private Player target;
     private int antiKickTimer = 0;
 
     public AttractAura() {
@@ -81,31 +81,31 @@ public class AttractAura extends Module {
     }
 
     // --- 目标合法性判定逻辑 ---
-    private boolean isTargetValid(PlayerEntity player) {
+    private boolean isTargetValid(Player player) {
         if (player == null || player == mc.player || !player.isAlive()) return false;
         if (mode.get() != Mode.锁定 && mc.player.distanceTo(player) > range.get() + 30) return false;
         if (ignoreFriends.get() && !Friends.get().shouldAttack(player)) return false;
         
-        if (mc.getNetworkHandler() == null) return false;
-        PlayerListEntry entry = mc.getNetworkHandler().getPlayerListEntry(player.getUuid());
+        if (mc.getConnection() == null) return false;
+        PlayerInfo entry = mc.getConnection().getPlayerInfo(player.getUUID());
         if (entry == null) return false;
         
-        GameMode gm = entry.getGameMode();
-        if (gm == GameMode.SURVIVAL) return followSurvival.get();
-        if (gm == GameMode.ADVENTURE) return followAdventure.get();
-        if (gm == GameMode.CREATIVE) return followCreative.get();
+        GameType gm = entry.getGameMode();
+        if (gm == GameType.SURVIVAL) return followSurvival.get();
+        if (gm == GameType.ADVENTURE) return followAdventure.get();
+        if (gm == GameType.CREATIVE) return followCreative.get();
         return false;
     }
 
-    private PlayerEntity getTargetByCrosshair() {
-        PlayerEntity best = null;
+    private Player getTargetByCrosshair() {
+        Player best = null;
         double bestDiff = Double.MAX_VALUE;
-        for (PlayerEntity player : mc.world.getPlayers()) {
+        for (Player player : mc.level.players()) {
             if (!isTargetValid(player)) continue;
             double diffX = player.getX() - mc.player.getX();
             double diffZ = player.getZ() - mc.player.getZ();
             float targetYaw = (float) Math.toDegrees(Math.atan2(diffZ, diffX)) - 90;
-            float diff = Math.abs(MathHelper.wrapDegrees(mc.player.getYaw() - targetYaw));
+            float diff = Math.abs(Mth.wrapDegrees(mc.player.getYRot() - targetYaw));
             if (diff < bestDiff) { 
                 bestDiff = diff; 
                 best = player; 
@@ -118,7 +118,7 @@ public class AttractAura extends Module {
     @EventHandler
     private void onMouseClick(MouseClickEvent event) {
         // 根据你提供的源码：button() 是方法，action 是 public 字段
-        if (middleClickLock.get() && event.button() == GLFW.GLFW_MOUSE_BUTTON_MIDDLE && event.action == KeyAction.Press && mc.currentScreen == null) {
+        if (middleClickLock.get() && event.button() == GLFW.GLFW_MOUSE_BUTTON_MIDDLE && event.action == KeyAction.Press && mc.screen == null) {
             if (mode.get() == Mode.锁定) {
                 target = null;
                 if (toggleBehavior.get() == ToggleBehavior.停止追踪) {
@@ -131,7 +131,7 @@ public class AttractAura extends Module {
                 return;
             }
             
-            PlayerEntity lookedAt = getTargetByCrosshair();
+            Player lookedAt = getTargetByCrosshair();
             if (lookedAt != null) {
                 target = lookedAt;
                 mode.set(Mode.锁定);
@@ -143,7 +143,7 @@ public class AttractAura extends Module {
 
     @EventHandler
     private void onTick(TickEvent.Pre event) {
-        if (mc.player == null || mc.world == null) return;
+        if (mc.player == null || mc.level == null) return;
         if (mode.get() == Mode.无) {
             target = null;
             return;
@@ -159,13 +159,13 @@ public class AttractAura extends Module {
             }
         } else {
             KillAura aura = Modules.get().get(KillAura.class);
-            if (aura != null && aura.isActive() && aura.getTarget() instanceof PlayerEntity auraPlayer && isTargetValid(auraPlayer)) {
+            if (aura != null && aura.isActive() && aura.getTarget() instanceof Player auraPlayer && isTargetValid(auraPlayer)) {
                 target = auraPlayer;
             } else {
                 if (mode.get() == Mode.最近) {
                     target = null;
                     double bestDist = Double.MAX_VALUE;
-                    for (PlayerEntity p : mc.world.getPlayers()) {
+                    for (Player p : mc.level.players()) {
                         if (isTargetValid(p) && mc.player.distanceTo(p) < bestDist) {
                             bestDist = mc.player.distanceTo(p);
                             target = p;
@@ -180,12 +180,12 @@ public class AttractAura extends Module {
         if (target == null) return;
 
         // --- 物理吸引计算 ---
-        Vec3d targetPos = target.getBoundingBox().getCenter();
-        Vec3d playerPos = mc.player.getEyePos();
+        Vec3 targetPos = target.getBoundingBox().getCenter();
+        Vec3 playerPos = mc.player.getEyePosition();
         double distance = playerPos.distanceTo(targetPos);
 
         if (distance > stopDistance.get()) {
-            Vec3d dir = targetPos.subtract(playerPos).normalize();
+            Vec3 dir = targetPos.subtract(playerPos).normalize();
             
             double velX = dir.x * speed.get();
             double velY = dir.y * speed.get();
@@ -196,24 +196,24 @@ public class AttractAura extends Module {
             if (antiKickTimer >= kickDelay.get()) {
                 if (antiKick.get() == AntiKickMode.向下抖动) {
                     velY = -0.05;
-                } else if (antiKick.get() == AntiKickMode.地板伪造 && mc.getNetworkHandler() != null) {
-                    mc.getNetworkHandler().sendPacket(new PlayerMoveC2SPacket.OnGroundOnly(true, mc.player.horizontalCollision));
+                } else if (antiKick.get() == AntiKickMode.地板伪造 && mc.getConnection() != null) {
+                    mc.getConnection().send(new ServerboundMovePlayerPacket.StatusOnly(true, mc.player.horizontalCollision));
                 }
                 antiKickTimer = 0;
             }
 
-            mc.player.setVelocity(velX, velY, velZ);
+            mc.player.setDeltaMovement(velX, velY, velZ);
 
             if (lookAt.get()) {
                 double diffX = targetPos.x - playerPos.x;
                 double diffY = targetPos.y - playerPos.y;
                 double diffZ = targetPos.z - playerPos.z;
                 double diffXZ = Math.sqrt(diffX * diffX + diffZ * diffZ);
-                mc.player.setYaw((float) Math.toDegrees(Math.atan2(diffZ, diffX)) - 90F);
-                mc.player.setPitch((float) -Math.toDegrees(Math.atan2(diffY, diffXZ)));
+                mc.player.setYRot((float) Math.toDegrees(Math.atan2(diffZ, diffX)) - 90F);
+                mc.player.setXRot((float) -Math.toDegrees(Math.atan2(diffY, diffXZ)));
             }
         } else {
-            mc.player.setVelocity(0, 0, 0);
+            mc.player.setDeltaMovement(0, 0, 0);
         }
     }
 

@@ -1,6 +1,6 @@
 package com.codigohasta.addon.modules;
 
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.phys.Vec3;
 
 import com.codigohasta.addon.AddonTemplate;
 import meteordevelopment.meteorclient.events.game.GameJoinedEvent;
@@ -15,12 +15,12 @@ import meteordevelopment.meteorclient.utils.render.NametagUtils;
 import meteordevelopment.meteorclient.utils.render.color.Color;
 import meteordevelopment.meteorclient.utils.render.color.SettingColor;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.client.util.math.MatrixStack;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.ItemEntity;
-import net.minecraft.sound.SoundCategory;
-import net.minecraft.sound.SoundEvent;
-import net.minecraft.sound.SoundEvents;
+import com.mojang.blaze3d.vertex.PoseStack;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.sounds.SoundSource;
+import net.minecraft.sounds.SoundEvent;
+import net.minecraft.sounds.SoundEvents;
 import org.joml.Vector3d;
 
 import java.util.Map;
@@ -159,12 +159,12 @@ public class ItemDespawnTimer extends Module {
     // 音效与缓存更新逻辑
     @EventHandler
     private void onTick(TickEvent.Post event) {
-        if (mc.world == null || mc.player == null) return;
+        if (mc.level == null || mc.player == null) return;
 
         boolean shouldPlay = false;
         boolean fastPlay = false;
 
-        for (Entity entity : mc.world.getEntities()) {
+        for (Entity entity : mc.level.entitiesForRendering()) {
             if (entity instanceof ItemEntity itemEntity) {
                 // 计算真实剩余 tick
                 int ticksLeft = getRealTicksLeft(itemEntity);
@@ -187,11 +187,11 @@ public class ItemDespawnTimer extends Module {
 
         if (fastPlay || shouldPlay) {
             float pitch = fastPlay ? 2.0f : 1.0f;
-            mc.world.playSound(
+            mc.level.playSound(
                 mc.player,
-                mc.player.getBlockPos(),
+                mc.player.blockPosition(),
                 soundType.get().getSound(),
-                SoundCategory.PLAYERS,
+                SoundSource.PLAYERS,
                 soundVolume.get().floatValue(),
                 pitch
             );
@@ -200,9 +200,9 @@ public class ItemDespawnTimer extends Module {
 
     @EventHandler
     private void onRender2D(Render2DEvent event) {
-        if (mc.world == null || mc.player == null) return;
+        if (mc.level == null || mc.player == null) return;
 
-        for (Entity entity : mc.world.getEntities()) {
+        for (Entity entity : mc.level.entitiesForRendering()) {
             if (entity instanceof ItemEntity itemEntity) {
                 renderTimer(itemEntity, event);
             }
@@ -211,10 +211,10 @@ public class ItemDespawnTimer extends Module {
 
     // --- 核心逻辑：获取真实剩余时间 ---
     private int getRealTicksLeft(ItemEntity item) {
-        int itemAge = item.getItemAge();
+        int itemAge = item.getAge();
         if (itemAge == -32768) return 999999; // 无限寿命
 
-        UUID uuid = item.getUuid();
+        UUID uuid = item.getUUID();
         long now = System.currentTimeMillis();
         int maxAge = 6000;
         
@@ -290,7 +290,7 @@ public class ItemDespawnTimer extends Module {
         }
 
         Utils.set(pos, item, event.tickDelta);
-        pos.add(0, item.getHeight() + heightOffset.get(), 0);
+        pos.add(0, item.getBbHeight() + heightOffset.get(), 0);
 
         if (NametagUtils.to2D(pos, scale.get())) {
             renderNametag(finalContent, finalColor, event);
@@ -307,7 +307,7 @@ public class ItemDespawnTimer extends Module {
 
     private void renderNametag(String textStr, Color color, Render2DEvent event) {
         TextRenderer text = TextRenderer.get();
-        NametagUtils.begin(pos, event.drawContext);
+        NametagUtils.begin(pos, event.graphics);
 
         double width = text.getWidth(textStr, true);
         double height = text.getHeight(true);
@@ -319,7 +319,7 @@ public class ItemDespawnTimer extends Module {
         text.render(textStr, -widthHalf, -height, color, true);
         text.end();
 
-        NametagUtils.end(event.drawContext);
+        NametagUtils.end(event.graphics);
     }
 
     private void drawBg(double x, double y, double width, double height) {
@@ -334,11 +334,11 @@ public class ItemDespawnTimer extends Module {
     }
 
     public enum SoundType {
-        PLING(SoundEvents.BLOCK_NOTE_BLOCK_PLING.value()),
-        ORB(SoundEvents.ENTITY_EXPERIENCE_ORB_PICKUP),
-        ANVIL(SoundEvents.BLOCK_ANVIL_LAND),
+        PLING(SoundEvents.NOTE_BLOCK_PLING.value()),
+        ORB(SoundEvents.EXPERIENCE_ORB_PICKUP),
+        ANVIL(SoundEvents.ANVIL_LAND),
         CLICK(SoundEvents.UI_BUTTON_CLICK.value()),
-        POP(SoundEvents.ENTITY_ITEM_PICKUP);
+        POP(SoundEvents.ITEM_PICKUP);
 
         private final SoundEvent sound;
 

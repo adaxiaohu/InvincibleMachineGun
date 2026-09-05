@@ -1,6 +1,6 @@
 package com.codigohasta.addon.modules;
 
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.phys.Vec3;
 
 import com.codigohasta.addon.AddonTemplate;
 import meteordevelopment.meteorclient.events.world.TickEvent;
@@ -81,7 +81,7 @@ public class AutoJump extends Module {
         isCurrentlySneaking = false;
         // 强制释放潜行键，确保状态一致
         if (mc.options != null) {
-            mc.options.sneakKey.setPressed(false);
+            mc.options.keyShift.setDown(false);
         }
     }
 
@@ -89,14 +89,14 @@ public class AutoJump extends Module {
     public void onDeactivate() {
         // 模块关闭时，确保潜行键被释放，以防卡住
         if (mc.options != null) {
-            mc.options.sneakKey.setPressed(false); // 直接设置为 false
+            mc.options.keyShift.setDown(false); // 直接设置为 false
             isCurrentlySneaking = false; // 同时重置内部状态
         }
     }
 
     @EventHandler
     private void onTick(TickEvent.Pre event) {
-        if (mc.player == null || mc.world == null) return;
+        if (mc.player == null || mc.level == null) return;
 
         // --- 反复潜行逻辑 ---
         if (sneakWhileJumping.get()) {
@@ -104,12 +104,12 @@ public class AutoJump extends Module {
                 sneakActionTimer--;
             } else {
                 isCurrentlySneaking = !isCurrentlySneaking;
-                mc.options.sneakKey.setPressed(isCurrentlySneaking);
+                mc.options.keyShift.setDown(isCurrentlySneaking);
                 sneakActionTimer = isCurrentlySneaking ? sneakDuration.get() : sneakStandDelay.get();
             }
         } else {
             if (isCurrentlySneaking) {
-                mc.options.sneakKey.setPressed(false);
+                mc.options.keyShift.setDown(false);
                 isCurrentlySneaking = false;
             }
         }
@@ -118,8 +118,8 @@ public class AutoJump extends Module {
         if (jumpTimer > 0) {
             jumpTimer--;
         } else {
-            if (mc.player.isOnGround()) {
-                mc.player.jump();
+            if (mc.player.onGround()) {
+                mc.player.jumpFromGround();
                 jumpTimer = jumpDelay.get();
             }
         }

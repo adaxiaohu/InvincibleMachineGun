@@ -1,6 +1,6 @@
 package com.codigohasta.addon.modules;
 
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.phys.Vec3;
 
 import com.codigohasta.addon.AddonTemplate;
 import meteordevelopment.meteorclient.events.world.TickEvent;
@@ -8,11 +8,11 @@ import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.misc.Keybind;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.item.FireworkRocketItem;
-import net.minecraft.item.ItemStack;
-import net.minecraft.network.packet.c2s.play.PlayerInteractItemC2SPacket;
-import net.minecraft.network.packet.c2s.play.UpdateSelectedSlotC2SPacket;
-import net.minecraft.util.Hand;
+import net.minecraft.world.item.FireworkRocketItem;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.network.protocol.game.ServerboundUseItemPacket;
+import net.minecraft.network.protocol.game.ServerboundSetCarriedItemPacket;
+import net.minecraft.world.InteractionHand;
 
 public class AutoFirework extends Module {
     private final SettingGroup sgGeneral = settings.getDefaultGroup();
@@ -43,7 +43,7 @@ public class AutoFirework extends Module {
 
     @EventHandler
     private void onTick(TickEvent.Pre event) {
-        if (mc.player == null || mc.world == null) return;
+        if (mc.player == null || mc.level == null) return;
 
         // 计时器倒退
         if (timer > 0) {
@@ -51,7 +51,7 @@ public class AutoFirework extends Module {
         }
 
         // 1. 检查是否在滑翔 (1.21.4 使用 isGliding)
-        if (!mc.player.isGliding()) return;
+        if (!mc.player.isFallFlying()) return;
 
         // 2. 检查按键是否按下
         if (!keybind.get().isPressed()) return;
@@ -61,10 +61,10 @@ public class AutoFirework extends Module {
 
         // 4. 执行逻辑
         // 优先使用手上的，如果没有则去快捷栏找
-        if (isFirework(mc.player.getMainHandStack())) {
-            useFirework(Hand.MAIN_HAND);
-        } else if (isFirework(mc.player.getOffHandStack())) {
-            useFirework(Hand.OFF_HAND);
+        if (isFirework(mc.player.getMainHandItem())) {
+            useFirework(InteractionHand.MAIN_HAND);
+        } else if (isFirework(mc.player.getOffhandItem())) {
+            useFirework(InteractionHand.OFF_HAND);
         } else {
             int slot = findFireworkSlot();
             if (slot != -1) {
@@ -74,16 +74,16 @@ public class AutoFirework extends Module {
     }
 
     // 普通使用（手上已有）
-    private void useFirework(Hand hand) {
+    private void useFirework(InteractionHand hand) {
         // 1.21.4 必须传入 sequence, yaw, pitch
-        mc.getNetworkHandler().sendPacket(new PlayerInteractItemC2SPacket(
+        mc.getConnection().send(new ServerboundUseItemPacket(
             hand, 
             0, 
-            mc.player.getYaw(), 
-            mc.player.getPitch()
+            mc.player.getYRot(), 
+            mc.player.getXRot()
         ));
         
-        mc.player.swingHand(hand);
+        mc.player.swing(hand);
         timer = delay.get();
     }
 
@@ -92,28 +92,28 @@ public class AutoFirework extends Module {
         int prevSlot = ((com.codigohasta.addon.mixin.InventoryAccessor) mc.player.getInventory()).getSelectedSlot();
 
         // 1. 发包切槽位
-        mc.getNetworkHandler().sendPacket(new UpdateSelectedSlotC2SPacket(slot));
+        mc.getConnection().send(new ServerboundSetCarriedItemPacket(slot));
 
         // 2. 发包使用 (服务器认为现在主手是烟花)
-        mc.getNetworkHandler().sendPacket(new PlayerInteractItemC2SPacket(
-            Hand.MAIN_HAND, 
+        mc.getConnection().send(new ServerboundUseItemPacket(
+            InteractionHand.MAIN_HAND, 
             0, 
-            mc.player.getYaw(), 
-            mc.player.getPitch()
+            mc.player.getYRot(), 
+            mc.player.getXRot()
         ));
 
         // 3. 发包切回原槽位
-        mc.getNetworkHandler().sendPacket(new UpdateSelectedSlotC2SPacket(prevSlot));
+        mc.getConnection().send(new ServerboundSetCarriedItemPacket(prevSlot));
         
         // 如果想要完全隐蔽，可以把下面的挥手注释掉
-        // mc.player.swingHand(Hand.MAIN_HAND); 
+        // mc.player.swingHand(InteractionHand.MAIN_HAND); 
         
         timer = delay.get();
     }
 
     private int findFireworkSlot() {
         for (int i = 0; i < 9; i++) {
-            if (isFirework(mc.player.getInventory().getStack(i))) {
+            if (isFirework(mc.player.getInventory().getItem(i))) {
                 return i;
             }
         }

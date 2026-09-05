@@ -1,20 +1,20 @@
 package com.codigohasta.addon.mixin;
 
-import net.minecraft.entity.LivingEntity;
+import net.minecraft.world.entity.LivingEntity;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.gen.Accessor;
 
 @Mixin(LivingEntity.class)
 public interface LivingEntityAccessor {
-    @Accessor("leaningPitch")
+    @Accessor("swimAmount")
     float getLeaningPitch();
 
-    @Accessor("leaningPitch")
+    @Accessor("swimAmount")
     void setLeaningPitch(float value);
 
-    @Accessor("lastLeaningPitch")
+    @Accessor("swimAmountO")
     void setLastLeaningPitch(float value);
 
-    @Accessor("jumpingCooldown")
+    @Accessor("noJumpDelay")
     void setJumpingCooldown(int value);
 }

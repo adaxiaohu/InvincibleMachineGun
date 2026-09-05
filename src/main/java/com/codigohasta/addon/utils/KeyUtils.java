@@ -226,8 +226,8 @@ public final class KeyUtils {
 
     public static boolean isKeyPressed(final int n) {
         if (n <= 8) {
-            return GLFW.glfwGetMouseButton(mc.getWindow().getHandle(), n) == 1;
+            return GLFW.glfwGetMouseButton(mc.getWindow().handle(), n) == 1;
         }
-        return GLFW.glfwGetKey(mc.getWindow().getHandle(), n) == 1;
+        return GLFW.glfwGetKey(mc.getWindow().handle(), n) == 1;
     }
 }

@@ -2,10 +2,13 @@ plugins {
     alias(libs.plugins.fabric.loom)
 }
 
+val archivesBaseName = providers.gradleProperty("archives_base_name").get()
+val mavenGroup = providers.gradleProperty("maven_group").get()
+
 base {
-    archivesName = properties["archives_base_name"] as String
+    archivesName = archivesBaseName
     version = libs.versions.mod.version.get()
-    group = properties["maven_group"] as String
+    group = mavenGroup
 }
 
 repositories {
@@ -17,56 +20,64 @@ repositories {
         name = "meteor-maven-snapshots"
         url = uri("https://maven.meteordev.org/snapshots")
     }
-     // ✅ 添加这个仓库来解决 conditional-mixin 找不到的问题
     maven {
         name = "FallenBreath Maven"
         url = uri("https://maven.fallenbreath.me/releases")
     }
+    maven {
+        name = "masa"
+        url = uri("https://masa.dy.fi/maven")
+    }
+    maven {
+        name = "jitpack"
+        url = uri("https://jitpack.io")
+    }
+    maven {
+        name = "cursemaven"
+        url = uri("https://www.cursemaven.com")
+    }
     mavenCentral()
-    // ✅ Masa 官方仓库
-    maven { url = uri("https://masa.dy.fi/maven") }
-    // ✅ 必须加这个！Masa 的库强制依赖 FallenBreath 的条件混淆库
-    maven { url = uri("https://maven.fallenbreath.me/releases") }
-    
-    maven { url = uri("https://jitpack.io") }
-    maven { url = uri("https://www.cursemaven.com") }
-    // ... 其他仓库 ...
 }
 
 dependencies {
     // Fabric
     minecraft(libs.minecraft)
-    mappings(variantOf(libs.yarn) { classifier("v2") })
-    modImplementation(libs.fabric.loader)
+    implementation(libs.fabric.loader)
 
-    // Meteor Client
-    modImplementation(libs.meteor.client)
+    // Meteor
+    implementation(libs.meteor.client)
 
-    // 【关键修复】 Baritone 依赖
-    // 这行代码让你的项目能找到 BaritoneAPI，从而修复那几十个报错
-    // 即使你是在 1.21.11，使用 1.21.4-SNAPSHOT 的 API 进行编译通常也是兼容的
-    modCompileOnly("meteordevelopment:baritone:1.21.11-SNAPSHOT")
+    // Baritone (provides BaritoneAPI used by the pathfinding modules)
+    compileOnly(libs.baritone)
 
-    modCompileOnly(fileTree("libs") { include("*.jar") })
+    compileOnly(fileTree("libs") { include("*.jar") })
 }
 
 loom {
-    accessWidenerPath = file("src/main/resources/invincible-machine-gun.accesswidener")
-    mixin {
-        useLegacyMixinAp = true
-    }
+    accessWidenerPath = file("src/main/resources/invincible-machine-gun.classtweaker")
 }
 
 java {
-    sourceCompatibility = JavaVersion.VERSION_21
-    targetCompatibility = JavaVersion.VERSION_21
+    toolchain {
+        languageVersion.set(JavaLanguageVersion.of(libs.versions.jdk.get().toInt()))
+    }
+}
+
+fun toMinecraftCompat(version: String): String {
+    val match = Regex("""^(\d{2})\.([1-9]\d*)(?:\.([1-9]\d*))?$""")
+        .matchEntire(version)
+        ?: error("Invalid Minecraft version format: $version. Expected YY.D or YY.D.H")
+
+    val (year, drop, _) = match.destructured
+    return "~$year.$drop"
 }
 
 tasks {
     processResources {
         val propertyMap = mapOf(
             "version" to project.version,
-            "mc_version" to libs.versions.minecraft.get()
+            "minecraft_version" to toMinecraftCompat(libs.versions.minecraft.get()),
+            "jdk_version" to libs.versions.jdk.get(),
         )
 
         inputs.properties(propertyMap)
@@ -79,17 +90,20 @@ tasks {
     }
 
     jar {
-        inputs.property("archivesName", project.base.archivesName.get())
+        inputs.property("archivesName", archivesBaseName)
 
         from("LICENSE") {
-            rename { "${it}_${inputs.properties["archivesName"]}" }
+            rename { "${it}_$archivesBaseName" }
         }
     }
 
-    withType<JavaCompile> {
+    withType<JavaCompile>().configureEach {
         options.encoding = "UTF-8"
-        options.release.set(21)
-        options.compilerArgs.add("-Xlint:deprecation")
-        options.compilerArgs.add("-Xlint:unchecked")
+        options.compilerArgs.addAll(
+            listOf(
+                "-Xlint:deprecation",
+                "-Xlint:unchecked"
+            )
+        )
     }
 }

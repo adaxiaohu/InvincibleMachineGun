@@ -22,10 +22,10 @@ import meteordevelopment.meteorclient.systems.modules.Modules;
 import meteordevelopment.meteorclient.utils.player.ChatUtils;
 import meteordevelopment.meteorclient.utils.render.color.Color;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.text.MutableText;
-import net.minecraft.text.Style;
-import net.minecraft.text.Text;
-import net.minecraft.text.TextColor;
+import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.network.chat.Style;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.TextColor;
 import org.slf4j.Logger;
 
 public class AddonTemplate extends MeteorAddon {
@@ -224,17 +224,17 @@ public class AddonTemplate extends MeteorAddon {
         sentWelcome = false;
     }
 
-    private Text createGradientText(String text) {
+    private Component createGradientText(String text) {
         Color startColor = new Color(0, 255, 255); // 青色
         Color endColor = new Color(255, 0, 255);   // 品红色
-        MutableText result = Text.empty();
+        MutableComponent result = Component.empty();
         for (int i = 0; i < text.length(); i++) {
             float f = (float) i / (float) text.length();
             int r = (int) (startColor.r + (endColor.r - startColor.r) * f);
             int g = (int) (startColor.g + (endColor.g - startColor.g) * f);
             int b = (int) (startColor.b + (endColor.b - startColor.b) * f);
             Color stepColor = new Color(r, g, b, 255);
-            result.append(Text.literal(String.valueOf(text.charAt(i))).setStyle(Style.EMPTY.withColor(TextColor.fromRgb(stepColor.getPacked()))));
+            result.append(Component.literal(String.valueOf(text.charAt(i))).setStyle(Style.EMPTY.withColor(TextColor.fromRgb(stepColor.getPacked()))));
         }
         return result;
     }

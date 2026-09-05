@@ -1,7 +1,7 @@
 package com.codigohasta.addon.utils.bmw;
 
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.network.ClientPlayerEntity;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.player.LocalPlayer;
 
 /**
  * BMWClient-nextgen 移植：RotationManager（简化版）。
@@ -11,11 +11,11 @@ import net.minecraft.client.network.ClientPlayerEntity;
  * 2. update() 每 tick 调用，在 CHANGE_LOOK 模式下直接修改 player.yaw/pitch
  * 3. SILENT 模式下仅记录目标，由 MixinBMWClientPlayerEntity 在 sendMovementPackets 中应用
  *
- * 对应 LB 的 ClientPlayerEntity.setRotation(rotation) 扩展函数。
+ * 对应 LB 的 LocalPlayer.setRotation(rotation) 扩展函数。
  */
 public class BMWRotationManager {
 
-    private static final MinecraftClient mc = MinecraftClient.getInstance();
+    private static final Minecraft mc = Minecraft.getInstance();
 
     /** 当前旋转目标 */
     public static BMWRotation targetRotation = null;
@@ -57,13 +57,13 @@ public class BMWRotationManager {
     }
 
     /**
-     * 对应 LB ClientPlayerEntity.setRotation(rotation) 扩展函数。
+     * 对应 LB LocalPlayer.setRotation(rotation) 扩展函数。
      *
      * 直接修改 player.yaw、player.pitch，并同步 prev/render/lastRender yaw。
      */
-    public static void setPlayerRotation(ClientPlayerEntity player, BMWRotation rotation) {
+    public static void setPlayerRotation(LocalPlayer player, BMWRotation rotation) {
         BMWRotation normalized = rotation.normalize();
-        player.setYaw(normalized.yaw);
-        player.setPitch(normalized.pitch);
+        player.setYRot(normalized.yaw);
+        player.setXRot(normalized.pitch);
     }
 }

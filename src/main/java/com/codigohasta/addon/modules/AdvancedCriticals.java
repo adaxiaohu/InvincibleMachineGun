@@ -1,25 +1,24 @@
 package com.codigohasta.addon.modules;
 
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.phys.Vec3;
 
 import com.codigohasta.addon.AddonTemplate;
 import meteordevelopment.meteorclient.events.packets.PacketEvent;
-import meteordevelopment.meteorclient.mixininterface.IPlayerInteractEntityC2SPacket;
-import meteordevelopment.meteorclient.mixininterface.IPlayerMoveC2SPacket;
+import meteordevelopment.meteorclient.mixininterface.IServerboundMovePlayerPacket;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.player.FindItemResult;
 import meteordevelopment.meteorclient.utils.player.InvUtils;
 import meteordevelopment.orbit.EventHandler;
 import meteordevelopment.orbit.EventPriority;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.decoration.EndCrystalEntity;
-import net.minecraft.item.Items;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.boss.enderdragon.EndCrystal;
+import net.minecraft.world.item.Items;
 
-import net.minecraft.network.packet.c2s.play.PlayerInteractEntityC2SPacket;
-import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket;
+import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
 
 import java.lang.reflect.Field;
+import net.minecraft.network.protocol.game.ServerboundAttackPacket;
 
 public class AdvancedCriticals extends Module {
     private final SettingGroup sgGeneral = settings.getDefaultGroup();
@@ -68,7 +67,7 @@ public class AdvancedCriticals extends Module {
 
     // 内部变量
     private boolean ignore = false;
-    private PlayerInteractEntityC2SPacket lastPacket = null;
+    private ServerboundAttackPacket lastPacket = null;
     private static Field onGroundField; // 反射字段缓存
 
     public AdvancedCriticals() {
@@ -77,7 +76,7 @@ public class AdvancedCriticals extends Module {
         // 初始化反射字段 (onGround)
         try {
             // 尝试查找名为 onGround 的字段 (Yarn 映射)
-            for (Field field : PlayerMoveC2SPacket.class.getDeclaredFields()) {
+            for (Field field : ServerboundMovePlayerPacket.class.getDeclaredFields()) {
                 if (field.getType() == boolean.class && (field.getName().equals("onGround") || field.getName().equals("field_12951"))) {
                     field.setAccessible(true);
                     onGroundField = field;
@@ -91,19 +90,18 @@ public class AdvancedCriticals extends Module {
 
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onPacketSend(PacketEvent.Send event) {
-        if (mc.player == null || mc.world == null) return;
+        if (mc.player == null || mc.level == null) return;
 
         // --- Alien Vanilla Mode (核心暴力逻辑) ---
         if (mode.get() == Mode.Vanilla) {
-            if (event.packet instanceof PlayerInteractEntityC2SPacket packet) {
-                if (!(mc.player.getMainHandStack().getItem().toString().contains("mace"))) return;
-                if (!isAttack(packet)) return;
+            if (event.packet instanceof ServerboundAttackPacket packet) {
+                if (!(mc.player.getMainHandItem().getItem().toString().contains("mace"))) return;
 
                 Entity entity = getEntity(packet);
-                if (entity instanceof EndCrystalEntity) return;
+                if (entity instanceof EndCrystal) return;
 
-                if (onlyGround.get() && !mc.player.isOnGround() && !mc.player.getAbilities().flying) return;
-                if (mc.player.isInLava() || mc.player.isSubmergedInWater()) return;
+                if (onlyGround.get() && !mc.player.onGround() && !mc.player.getAbilities().flying) return;
+                if (mc.player.isInLava() || mc.player.isUnderWater()) return;
                 if (entity == null) return;
 
                 // Alien 的 4+1+1 暴力发包循环
@@ -116,7 +114,7 @@ public class AdvancedCriticals extends Module {
         } 
         // --- Alien NCP Mode (反射修复版) ---
         else if (mode.get() == Mode.NCP) {
-            if (event.packet instanceof PlayerMoveC2SPacket) {
+            if (event.packet instanceof ServerboundMovePlayerPacket) {
                 // 使用反射修改 onGround = false
                 if (onGroundField != null) {
                     try {
@@ -135,8 +133,8 @@ public class AdvancedCriticals extends Module {
             if (slot == -1) return;
             if (this.ignore) return;
 
-            if (event.packet instanceof PlayerInteractEntityC2SPacket packet && isAttack(packet)) {
-                if (this.noCrystal.get() && getEntity(packet) instanceof EndCrystalEntity) {
+            if (event.packet instanceof ServerboundAttackPacket packet) {
+                if (this.noCrystal.get() && getEntity(packet) instanceof EndCrystal) {
                     return;
                 }
 
@@ -156,7 +154,7 @@ public class AdvancedCriticals extends Module {
             if (slot != -1) {
                 int old = ((com.codigohasta.addon.mixin.InventoryAccessor) mc.player.getInventory()).getSelectedSlot();
                 this.doSwap(slot);
-                mc.getNetworkHandler().sendPacket(this.lastPacket);
+                mc.getConnection().send(this.lastPacket);
                 if (this.inventorySwap.get()) {
                     this.doSwap(slot);
                 } else {
@@ -186,26 +184,20 @@ public class AdvancedCriticals extends Module {
 
     // Alien 的 sendFakeY 逻辑 (1.21.4 构造器适配)
     private void sendFakeY(double offset) {
-        PlayerMoveC2SPacket packet = new PlayerMoveC2SPacket.PositionAndOnGround(
+        ServerboundMovePlayerPacket packet = new ServerboundMovePlayerPacket.Pos(
             mc.player.getX(), 
             mc.player.getY() + offset, 
             mc.player.getZ(), 
             false, 
             mc.player.horizontalCollision
         );
-        ((IPlayerMoveC2SPacket) packet).meteor$setTag(1337);
-        mc.getNetworkHandler().sendPacket(packet);
+        ((IServerboundMovePlayerPacket) packet).meteor$setTag(1337);
+        mc.getConnection().send(packet);
     }
 
-    // 获取实体 (使用 Meteor Mixin)
-    private Entity getEntity(PlayerInteractEntityC2SPacket packet) {
-        return ((IPlayerInteractEntityC2SPacket) packet).meteor$getEntity();
-    }
-
-    // 判断是否为攻击包 (解决 1.21.4 枚举可见性问题)
-    private boolean isAttack(PlayerInteractEntityC2SPacket packet) {
-        IPlayerInteractEntityC2SPacket accessor = (IPlayerInteractEntityC2SPacket) packet;
-        return String.valueOf(accessor.meteor$getType()).equals("ATTACK");
+    // 26.1.2: 攻击包只带实体 id，实体要回世界里查
+    private Entity getEntity(ServerboundAttackPacket packet) {
+        return mc.level == null ? null : mc.level.getEntity(packet.entityId());
     }
 
     public enum Mode {

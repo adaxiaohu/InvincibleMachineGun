@@ -1,6 +1,6 @@
 package com.codigohasta.addon.modules;
 
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.phys.Vec3;
 
 import com.codigohasta.addon.AddonTemplate;
 import meteordevelopment.meteorclient.events.render.Render2DEvent;
@@ -11,15 +11,15 @@ import meteordevelopment.meteorclient.utils.misc.Names;
 import meteordevelopment.meteorclient.utils.render.color.Color;
 import meteordevelopment.meteorclient.utils.render.color.SettingColor;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.EntityType;
-import net.minecraft.entity.ItemEntity;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.item.Item;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
-import net.minecraft.registry.RegistryKey;
-import net.minecraft.world.World;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.level.Level;
 
 import java.util.*;
 
@@ -216,7 +216,7 @@ public class xhEntityList extends Module {
 
     @EventHandler
     private void onRender2D(Render2DEvent event) {
-        if (mc.world == null || mc.player == null) return;
+        if (mc.level == null || mc.player == null) return;
 
         Map<Item, ItemStat> mapItems1 = new HashMap<>();
         Map<Item, ItemStat> mapItems2 = new HashMap<>();
@@ -228,24 +228,24 @@ public class xhEntityList extends Module {
         Set<Item> set2 = new HashSet<>(items2.get());
         Set<Item> setBlack = new HashSet<>(blackList.get());
 
-        RegistryKey<World> dimension = mc.world.getRegistryKey();
+        ResourceKey<Level> dimension = mc.level.dimension();
         
         Set<EntityType<?>> allowedTypes;
-        if (dimension == World.OVERWORLD) {
+        if (dimension == Level.OVERWORLD) {
             allowedTypes = overworldEntities.get();
-        } else if (dimension == World.NETHER) {
+        } else if (dimension == Level.NETHER) {
             allowedTypes = netherEntities.get();
         } else {
             allowedTypes = endEntities.get();
         }
 
-        for (Entity entity : mc.world.getEntities()) {
+        for (Entity entity : mc.level.entitiesForRendering()) {
             if (!entity.isAlive()) continue;
             if (entity == mc.player) continue;
 
             // 1. 物品
             if (entity instanceof ItemEntity itemEntity) {
-                ItemStack stack = itemEntity.getStack();
+                ItemStack stack = itemEntity.getItem();
                 Item item = stack.getItem();
 
                 if (setBlack.contains(item)) continue;
@@ -254,7 +254,7 @@ public class xhEntityList extends Module {
                 if (set1.contains(item)) {
                     targetMap = mapItems1;
                     if (item1Log.get() && !loggedEntities.contains(entity.getId())) {
-                        info("发现物品: " + Names.get(item) + " 坐标: " + entity.getBlockPos().toShortString());
+                        info("发现物品: " + Names.get(item) + " 坐标: " + entity.blockPosition().toShortString());
                         loggedEntities.add(entity.getId());
                     }
                 } else if (set2.contains(item)) {
@@ -276,12 +276,12 @@ public class xhEntityList extends Module {
                 EntityType<?> type = entity.getType();
 
                 if (allowedTypes.contains(type)) {
-                    if (entity instanceof PlayerEntity player) {
+                    if (entity instanceof Player player) {
                         double dist = mc.player.distanceTo(player);
                         listPlayers.add(new PlayerStat(player.getName().getString(), dist));
                         
                         if (entityLog.get() && !loggedEntities.contains(entity.getId())) {
-                            info("发现玩家: " + player.getName().getString() + " 坐标: " + entity.getBlockPos().toShortString());
+                            info("发现玩家: " + player.getName().getString() + " 坐标: " + entity.blockPosition().toShortString());
                             loggedEntities.add(entity.getId());
                         }
                     } else {
@@ -294,7 +294,7 @@ public class xhEntityList extends Module {
                         }
 
                         if (entityLog.get() && !loggedEntities.contains(entity.getId())) {
-                            info("发现实体: " + Names.get(type) + " 坐标: " + entity.getBlockPos().toShortString());
+                            info("发现实体: " + Names.get(type) + " 坐标: " + entity.blockPosition().toShortString());
                             loggedEntities.add(entity.getId());
                         }
                     }
@@ -304,7 +304,7 @@ public class xhEntityList extends Module {
 
         listPlayers.sort(Comparator.comparingDouble(p -> p.distance));
 
-        int screenWidth = mc.getWindow().getScaledWidth();
+        int screenWidth = mc.getWindow().getGuiScaledWidth();
         double currentY = yOffset.get();
         double scaleVal = scale.get();
         double scaledLineHeight = lineHeight.get() * scaleVal;

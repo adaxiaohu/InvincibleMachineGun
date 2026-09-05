@@ -11,25 +11,25 @@ import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.client.gui.screen.ChatScreen;
-import net.minecraft.client.gui.screen.ingame.CreativeInventoryScreen;
-import net.minecraft.client.gui.screen.ingame.HandledScreen;
-import net.minecraft.client.gui.screen.ingame.InventoryScreen;
-import net.minecraft.client.network.PendingUpdateManager;
-import net.minecraft.client.network.SequencedPacketCreator;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.EquipmentSlot;
-import net.minecraft.entity.projectile.FireworkRocketEntity;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
-import net.minecraft.network.packet.c2s.play.ClientCommandC2SPacket;
-import net.minecraft.network.packet.c2s.play.CloseHandledScreenC2SPacket;
-import net.minecraft.network.packet.c2s.play.PlayerInputC2SPacket;
-import net.minecraft.network.packet.c2s.play.PlayerInteractItemC2SPacket;
-import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket;
-import net.minecraft.screen.slot.SlotActionType;
-import net.minecraft.util.Hand;
-import net.minecraft.util.PlayerInput;
+import net.minecraft.client.gui.screens.ChatScreen;
+import net.minecraft.client.gui.screens.inventory.CreativeModeInventoryScreen;
+import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
+import net.minecraft.client.gui.screens.inventory.InventoryScreen;
+import net.minecraft.client.multiplayer.prediction.BlockStatePredictionHandler;
+import net.minecraft.client.multiplayer.prediction.PredictiveAction;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.projectile.FireworkRocketEntity;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.network.protocol.game.ServerboundPlayerCommandPacket;
+import net.minecraft.network.protocol.game.ServerboundContainerClosePacket;
+import net.minecraft.network.protocol.game.ServerboundPlayerInputPacket;
+import net.minecraft.network.protocol.game.ServerboundUseItemPacket;
+import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
+import net.minecraft.world.inventory.ContainerInput;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.entity.player.Input;
 
 import java.util.TimerTask;
 
@@ -162,11 +162,11 @@ public class FireworkElytraFly extends Module {
     }
     @Override
     public void onDeactivate() {
-        mc.options.jumpKey.setPressed(false);
+        mc.options.keyJump.setDown(false);
         clearInputTicks = 0;
         forceJumpInput = false;
         if (pressSneak.get()) {
-            mc.options.sneakKey.setPressed(true);
+            mc.options.keyShift.setDown(true);
         }
         if (releaseSneak.get()) {
             long delay = releaseDelay.get();
@@ -175,7 +175,7 @@ public class FireworkElytraFly extends Module {
                 @Override
                 public void run() {
                     mc.execute(() -> {
-                        mc.options.sneakKey.setPressed(false);
+                        mc.options.keyShift.setDown(false);
                     });
                 }
             }, delay);
@@ -186,7 +186,7 @@ public class FireworkElytraFly extends Module {
         if (!isFallFlying) return;
         if (mode.get() == Mode.Legit) return;
         if (!control.get()) return;
-        if (mc.currentScreen instanceof ChatScreen) {
+        if (mc.screen instanceof ChatScreen) {
             setY(fallSpeed.get());
             return;
         }
@@ -197,26 +197,26 @@ public class FireworkElytraFly extends Module {
         }
     }
     private void setY(double f) {
-        ((IVec3d) mc.player.getVelocity()).setY(f);
+        ((IVec3d) mc.player.getDeltaMovement()).setY(f);
     }
     private void setX(double f) {
-        ((IVec3d) mc.player.getVelocity()).setX(f);
+        ((IVec3d) mc.player.getDeltaMovement()).setX(f);
     }
     private void setZ(double f) {
-        ((IVec3d) mc.player.getVelocity()).setZ(f);
+        ((IVec3d) mc.player.getDeltaMovement()).setZ(f);
     }
     @Override
     public String getInfoString() {
-        if (mc.player == null || mc.world == null) return null;
+        if (mc.player == null || mc.level == null) return null;
         int fireworks = 0;
         if (inventorySwap.get()) {
             for (int i = 0; i < 45; ++i) {
-                ItemStack stack = mc.player.getInventory().getStack(i);
+                ItemStack stack = mc.player.getInventory().getItem(i);
                 if (stack.getItem() == Items.FIREWORK_ROCKET) fireworks = fireworks + stack.getCount();
             }
         } else {
             for (int i = 0; i < 9; ++i) {
-                ItemStack stack = mc.player.getInventory().getStack(i);
+                ItemStack stack = mc.player.getInventory().getItem(i);
                 if (stack.getItem() == Items.FIREWORK_ROCKET) fireworks = fireworks + stack.getCount();
             }
         }
@@ -229,26 +229,26 @@ public class FireworkElytraFly extends Module {
     @EventHandler
     public void onTick(TickEvent.Pre event){
         forceJumpInput = false;
-        if (mc.currentScreen != null && deBug.get()) info("screen" + mc.currentScreen.getTitle() + " " + mc.currentScreen.getClass().getSimpleName() + " " + mc.currentScreen.getClass().getSuperclass().getSimpleName() + " " + mc.currentScreen.getTitle());
-        if (mc.currentScreen != null && mc.currentScreen instanceof HandledScreen<?> && !(mc.currentScreen instanceof InventoryScreen || mc.currentScreen instanceof CreativeInventoryScreen)) return;
+        if (mc.screen != null && deBug.get()) info("screen" + mc.screen.getTitle() + " " + mc.screen.getClass().getSimpleName() + " " + mc.screen.getClass().getSuperclass().getSimpleName() + " " + mc.screen.getTitle());
+        if (mc.screen != null && mc.screen instanceof AbstractContainerScreen<?> && !(mc.screen instanceof InventoryScreen || mc.screen instanceof CreativeModeInventoryScreen)) return;
         int elytra = InventoryUtil.findItemInventorySlot(Items.ELYTRA);
         packetDelayInt++;
         if (mode.get() == Mode.GrimDurability && elytra != -1 && packetDelayInt == packetDealy.get().intValue()) {
             clearInputTicks = 2;
         }
-        yaw = getSprintYaw(mc.player.getYaw());
-        pitch = getPitch(mc.player.getPitch());
+        yaw = getSprintYaw(mc.player.getYRot());
+        pitch = getPitch(mc.player.getXRot());
         if (deBug.get()) info("Yaw: " + yaw + " Pitch: " + pitch);
         if (mode.get() == Mode.GrimDurability) {
             if (GlobalSetting.INSTANCE.moveFix.get()) {
                 Rotation.snapAt(yaw, pitch);
             } else {
-                mc.getNetworkHandler().sendPacket(new PlayerMoveC2SPacket.Full(mc.player.getX(), mc.player.getY(), mc.player.getZ(), yaw, pitch, mc.player.isOnGround(), mc.player.horizontalCollision));
+                mc.getConnection().send(new ServerboundMovePlayerPacket.PosRot(mc.player.getX(), mc.player.getY(), mc.player.getZ(), yaw, pitch, mc.player.onGround(), mc.player.horizontalCollision));
             }
         }
         boolean hasFirework = false;
         if (checkFirework.get()) {
-            for (Entity entity : mc.world.getEntities()) {
+            for (Entity entity : mc.level.entitiesForRendering()) {
                 if (entity instanceof FireworkRocketEntity firework) {
                     if (firework.getOwner() == mc.player) {
                         hasFirework = true;
@@ -257,16 +257,16 @@ public class FireworkElytraFly extends Module {
             }
         }
         isUsingFirework = hasFirework;
-        ItemStack chestStack = mc.player.getEquippedStack(EquipmentSlot.CHEST);
-        boolean wearingElytra = chestStack.getItem() == Items.ELYTRA && chestStack.getDamage() < chestStack.getMaxDamage() - 1;
+        ItemStack chestStack = mc.player.getItemBySlot(EquipmentSlot.CHEST);
+        boolean wearingElytra = chestStack.getItem() == Items.ELYTRA && chestStack.getDamageValue() < chestStack.getMaxDamage() - 1;
         if (mode.get() == Mode.GrimDurability) {
             if (elytra != -1 && packetDelayInt > packetDealy.get()) {
-                mc.interactionManager.clickSlot(mc.player.currentScreenHandler.syncId, elytra, 0, SlotActionType.PICKUP, mc.player);
-                mc.interactionManager.clickSlot(mc.player.currentScreenHandler.syncId, 6, 0, SlotActionType.PICKUP, mc.player);
-                mc.interactionManager.clickSlot(mc.player.currentScreenHandler.syncId, elytra, 0, SlotActionType.PICKUP, mc.player);
-                if (!mc.player.isOnGround()) {
-                    sendPacket(new ClientCommandC2SPacket(mc.player, ClientCommandC2SPacket.Mode.START_FALL_FLYING));
-                    mc.player.startGliding();
+                mc.gameMode.handleContainerInput(mc.player.containerMenu.containerId, elytra, 0, ContainerInput.PICKUP, mc.player);
+                mc.gameMode.handleContainerInput(mc.player.containerMenu.containerId, 6, 0, ContainerInput.PICKUP, mc.player);
+                mc.gameMode.handleContainerInput(mc.player.containerMenu.containerId, elytra, 0, ContainerInput.PICKUP, mc.player);
+                if (!mc.player.onGround()) {
+                    sendPacket(new ServerboundPlayerCommandPacket(mc.player, ServerboundPlayerCommandPacket.Action.START_FALL_FLYING));
+                    mc.player.startFallFlying();
                 }
                 if (!hasFirework && fireWorkMode.get() == FireWorkMode.Auto) {
                     offFirework();
@@ -275,25 +275,25 @@ public class FireworkElytraFly extends Module {
                         offFirework();
                     }
                 }
-                mc.interactionManager.clickSlot(mc.player.currentScreenHandler.syncId, elytra, 0, SlotActionType.PICKUP, mc.player);
-                mc.interactionManager.clickSlot(mc.player.currentScreenHandler.syncId, 6, 0, SlotActionType.PICKUP, mc.player);
-                mc.interactionManager.clickSlot(mc.player.currentScreenHandler.syncId, elytra, 0, SlotActionType.PICKUP, mc.player);
+                mc.gameMode.handleContainerInput(mc.player.containerMenu.containerId, elytra, 0, ContainerInput.PICKUP, mc.player);
+                mc.gameMode.handleContainerInput(mc.player.containerMenu.containerId, 6, 0, ContainerInput.PICKUP, mc.player);
+                mc.gameMode.handleContainerInput(mc.player.containerMenu.containerId, elytra, 0, ContainerInput.PICKUP, mc.player);
                 forceJumpInput = true;
                 packetDelayInt = 0;
             }
         } else {
-            if (wearingElytra && !mc.player.isGliding() && !mc.player.isOnGround()) {
-                sendPacket(new ClientCommandC2SPacket(mc.player, ClientCommandC2SPacket.Mode.START_FALL_FLYING));
-                mc.player.startGliding();
+            if (wearingElytra && !mc.player.isFallFlying() && !mc.player.onGround()) {
+                sendPacket(new ServerboundPlayerCommandPacket(mc.player, ServerboundPlayerCommandPacket.Action.START_FALL_FLYING));
+                mc.player.startFallFlying();
             }
-            if (mode.get() == Mode.Legit && wearingElytra && mc.player.isGliding() && !mc.player.isOnGround() && unbreaking.get() && swapTimer.passedMs(fakeDelay.get())) {
-                mc.interactionManager.clickSlot(mc.player.currentScreenHandler.syncId, 6, 0, SlotActionType.PICKUP, mc.player);
-                mc.interactionManager.clickSlot(mc.player.currentScreenHandler.syncId, 6, 0, SlotActionType.PICKUP, mc.player);
-                sendPacket(new ClientCommandC2SPacket(mc.player, ClientCommandC2SPacket.Mode.START_FALL_FLYING));
-                mc.player.startGliding();
+            if (mode.get() == Mode.Legit && wearingElytra && mc.player.isFallFlying() && !mc.player.onGround() && unbreaking.get() && swapTimer.passedMs(fakeDelay.get())) {
+                mc.gameMode.handleContainerInput(mc.player.containerMenu.containerId, 6, 0, ContainerInput.PICKUP, mc.player);
+                mc.gameMode.handleContainerInput(mc.player.containerMenu.containerId, 6, 0, ContainerInput.PICKUP, mc.player);
+                sendPacket(new ServerboundPlayerCommandPacket(mc.player, ServerboundPlayerCommandPacket.Action.START_FALL_FLYING));
+                mc.player.startFallFlying();
                 swapTimer.reset();
             }
-            if (wearingElytra && mc.player.isGliding()) {
+            if (wearingElytra && mc.player.isFallFlying()) {
                 if (!hasFirework && fireWorkMode.get() == FireWorkMode.Auto) {
                     offFirework();
                 } else if (fireWorkMode.get() == FireWorkMode.Delay && wantToMove()){
@@ -313,35 +313,35 @@ public class FireworkElytraFly extends Module {
     public void offFirework() {
         if (!fireworkTimer.passedMs(delay.get()) && fireWorkMode.get() == FireWorkMode.Delay) return;
         int firework;
-        if (mc.player.getMainHandStack().getItem() == Items.FIREWORK_ROCKET) {
-            sendSequencedPacket(id -> new PlayerInteractItemC2SPacket(Hand.MAIN_HAND, id, yaw, pitch));
+        if (mc.player.getMainHandItem().getItem() == Items.FIREWORK_ROCKET) {
+            sendSequencedPacket(id -> new ServerboundUseItemPacket(InteractionHand.MAIN_HAND, id, yaw, pitch));
             fireworkTimer.reset();
-        } else if (mc.player.getOffHandStack().getItem() == Items.FIREWORK_ROCKET) {
-            sendSequencedPacket(id -> new PlayerInteractItemC2SPacket(Hand.OFF_HAND, id, yaw, pitch));
+        } else if (mc.player.getOffhandItem().getItem() == Items.FIREWORK_ROCKET) {
+            sendSequencedPacket(id -> new ServerboundUseItemPacket(InteractionHand.OFF_HAND, id, yaw, pitch));
             fireworkTimer.reset();
         } else if (inventorySwap.get() && (firework = InventoryUtil.findItemInventorySlot(Items.FIREWORK_ROCKET)) != -1) {
             InventoryUtil.inventorySwap(firework, ((InventoryAccessor)mc.player.getInventory()).getSelectedSlot());
-            sendSequencedPacket(id -> new PlayerInteractItemC2SPacket(Hand.MAIN_HAND, id, yaw, pitch));
+            sendSequencedPacket(id -> new ServerboundUseItemPacket(InteractionHand.MAIN_HAND, id, yaw, pitch));
             InventoryUtil.inventorySwap(firework, ((InventoryAccessor)mc.player.getInventory()).getSelectedSlot());
-            sendPacket(new CloseHandledScreenC2SPacket(mc.player.currentScreenHandler.syncId));
+            sendPacket(new ServerboundContainerClosePacket(mc.player.containerMenu.containerId));
             fireworkTimer.reset();
         } else if ((firework = InventoryUtil.findItem(Items.FIREWORK_ROCKET)) != -1) {
             int old = ((InventoryAccessor)mc.player.getInventory()).getSelectedSlot();
             InventoryUtil.switchToSlot(firework);
-            sendSequencedPacket(id -> new PlayerInteractItemC2SPacket(Hand.MAIN_HAND, id, yaw, pitch));
+            sendSequencedPacket(id -> new ServerboundUseItemPacket(InteractionHand.MAIN_HAND, id, yaw, pitch));
             InventoryUtil.switchToSlot(old);
             fireworkTimer.reset();
         }
     }
-    public void sendSequencedPacket(SequencedPacketCreator packetCreator) {
-        if (mc.getNetworkHandler() == null || mc.world == null) return;
-        try (PendingUpdateManager pendingUpdateManager = mc.world.getPendingUpdateManager().incrementSequence()) {
-            int i = pendingUpdateManager.getSequence();
-            mc.getNetworkHandler().sendPacket(packetCreator.predict(i));
+    public void sendSequencedPacket(PredictiveAction packetCreator) {
+        if (mc.getConnection() == null || mc.level == null) return;
+        try (BlockStatePredictionHandler pendingUpdateManager = mc.level.getBlockStatePredictionHandler().startPredicting()) {
+            int i = pendingUpdateManager.currentSequence();
+            mc.getConnection().send(packetCreator.predict(i));
         }
     }
     private boolean wantToMove() {
-        return mc.options.forwardKey.isPressed() || mc.options.backKey.isPressed() || mc.options.leftKey.isPressed() || mc.options.rightKey.isPressed() || mc.options.jumpKey.isPressed() || mc.options.sneakKey.isPressed();
+        return mc.options.keyUp.isDown() || mc.options.keyDown.isDown() || mc.options.keyLeft.isDown() || mc.options.keyRight.isDown() || mc.options.keyJump.isDown() || mc.options.keyShift.isDown();
     }
     public enum Mode {
         Legit,
@@ -354,54 +354,54 @@ public class FireworkElytraFly extends Module {
     }
     public boolean isMoving() {
         if (mc.player == null) return false;
-        return mc.player.input.playerInput.forward() || mc.player.input.playerInput.backward() || mc.player.input.playerInput.left() || mc.player.input.playerInput.right();
+        return mc.player.input.keyPresses.forward() || mc.player.input.keyPresses.backward() || mc.player.input.keyPresses.left() || mc.player.input.keyPresses.right();
     }
     public float getSprintYaw(float yaw) {
-        if (mc.options.forwardKey.isPressed() && !mc.options.backKey.isPressed()) {
-            if (mc.options.leftKey.isPressed() && !mc.options.rightKey.isPressed()) {
+        if (mc.options.keyUp.isDown() && !mc.options.keyDown.isDown()) {
+            if (mc.options.keyLeft.isDown() && !mc.options.keyRight.isDown()) {
                 yaw -= 45f;
-            } else if (mc.options.rightKey.isPressed() && !mc.options.leftKey.isPressed()) {
+            } else if (mc.options.keyRight.isDown() && !mc.options.keyLeft.isDown()) {
                 yaw += 45f;
             }
-        } else if (mc.options.backKey.isPressed() && !mc.options.forwardKey.isPressed()) {
+        } else if (mc.options.keyDown.isDown() && !mc.options.keyUp.isDown()) {
             yaw += 180f;
-            if (mc.options.leftKey.isPressed() && !mc.options.rightKey.isPressed()) {
+            if (mc.options.keyLeft.isDown() && !mc.options.keyRight.isDown()) {
                 yaw += 45f;
-            } else if (mc.options.rightKey.isPressed() && !mc.options.leftKey.isPressed()) {
+            } else if (mc.options.keyRight.isDown() && !mc.options.keyLeft.isDown()) {
                 yaw -= 45f;
             }
-        } else if (mc.options.leftKey.isPressed() && !mc.options.rightKey.isPressed()) {
+        } else if (mc.options.keyLeft.isDown() && !mc.options.keyRight.isDown()) {
             yaw -= 90f;
-        } else if (mc.options.rightKey.isPressed() && !mc.options.leftKey.isPressed()) {
+        } else if (mc.options.keyRight.isDown() && !mc.options.keyLeft.isDown()) {
             yaw += 90f;
         }
         return yaw;
     }
     private float getPitch(float pitch) {
-        if (!(mc.currentScreen instanceof ChatScreen)) {
-            boolean pressingWASD = mc.options.forwardKey.isPressed() || mc.options.backKey.isPressed() || mc.options.leftKey.isPressed() || mc.options.rightKey.isPressed();
-            if (mc.options.sneakKey.isPressed() && mc.options.jumpKey.isPressed()) {
+        if (!(mc.screen instanceof ChatScreen)) {
+            boolean pressingWASD = mc.options.keyUp.isDown() || mc.options.keyDown.isDown() || mc.options.keyLeft.isDown() || mc.options.keyRight.isDown();
+            if (mc.options.keyShift.isDown() && mc.options.keyJump.isDown()) {
                 pitch = -3;
-            } else if (mc.options.jumpKey.isPressed()) {
+            } else if (mc.options.keyJump.isDown()) {
                 if (pressingWASD) {
                     pitch = -45;
                 } else {
                     pitch = -90;
                 }
-            } else if (mc.options.sneakKey.isPressed()) {
+            } else if (mc.options.keyShift.isDown()) {
                 if (pressingWASD) {
                     pitch = 45;
                 } else {
                     pitch = 90;
                 }
             }
-            if (pressingWASD && !mc.options.sneakKey.isPressed() && !mc.options.jumpKey.isPressed()) {
+            if (pressingWASD && !mc.options.keyShift.isDown() && !mc.options.keyJump.isDown()) {
                 pitch = -1.9f;
             }
         }
         return pitch;
     }
     public boolean isPhased() {
-        return mc.world.canCollide(mc.player,mc.player.getBoundingBox());
+        return mc.level.noCollision(mc.player,mc.player.getBoundingBox());
     }
 }

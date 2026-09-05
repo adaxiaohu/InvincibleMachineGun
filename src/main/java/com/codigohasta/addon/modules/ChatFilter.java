@@ -1,6 +1,6 @@
 package com.codigohasta.addon.modules;
 
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.phys.Vec3;
 
 import com.codigohasta.addon.AddonTemplate;
 import meteordevelopment.meteorclient.events.game.ReceiveMessageEvent;
@@ -10,9 +10,9 @@ import meteordevelopment.meteorclient.settings.StringListSetting;
 import meteordevelopment.meteorclient.settings.StringSetting;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.text.MutableText;
-import net.minecraft.text.Style;
-import net.minecraft.text.Text;
+import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.network.chat.Style;
+import net.minecraft.network.chat.Component;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -55,16 +55,16 @@ public class ChatFilter extends Module {
 
     @EventHandler
     private void onMessageReceive(ReceiveMessageEvent event) {
-        if (mc.world == null || mc.player == null) return;
+        if (mc.level == null || mc.player == null) return;
 
-        Text originalMessage = event.getMessage();
+        Component originalMessage = event.getMessage();
         String rawText = originalMessage.getString();
 
         if (!containsBadWord(rawText)) {
             return;
         }
 
-        MutableText cleanMessage = Text.empty();
+        MutableComponent cleanMessage = Component.empty();
 
         // 获取并排序屏蔽词列表
         // 关键逻辑：我们创建一个副本，并按长度从长到短排序
@@ -74,7 +74,7 @@ public class ChatFilter extends Module {
 
         originalMessage.visit((style, asString) -> {
             String cleanPart = filterText(asString, sortedBadWords);
-            cleanMessage.append(Text.literal(cleanPart).setStyle(style));
+            cleanMessage.append(Component.literal(cleanPart).setStyle(style));
             return Optional.empty();
         }, Style.EMPTY);
 

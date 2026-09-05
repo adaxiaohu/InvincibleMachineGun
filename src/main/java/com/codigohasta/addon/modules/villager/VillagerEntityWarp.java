@@ -2,35 +2,35 @@ package com.codigohasta.addon.modules.villager;
 
 import java.util.UUID;
 import meteordevelopment.meteorclient.utils.player.ChatUtils;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.passive.VillagerEntity;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.client.Minecraft;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.npc.villager.Villager;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.phys.Vec3;
 
 public class VillagerEntityWarp {
-   private static final MinecraftClient mc = MinecraftClient.getInstance();
+   private static final Minecraft mc = Minecraft.getInstance();
    private final UUID uuid;
    private final BlockPos operatePos;
-   private final Vec3d operatePosCenter;
+   private final Vec3 operatePosCenter;
    private long lastTradeTime;
    private long tradeTimes;
 
    public VillagerEntityWarp(UUID uuid, BlockPos operatePos) {
       this.uuid = uuid;
       this.operatePos = operatePos;
-      this.operatePosCenter = operatePos.toCenterPos();
+      this.operatePosCenter = operatePos.getCenter();
    }
 
    public UUID getUuid() {
       return this.uuid;
    }
 
-   public VillagerEntity getVillager() {
+   public Villager getVillager() {
       try {
-         for (Entity entity : mc.world.getEntities()) {
-            if (entity instanceof VillagerEntity && entity.getUuid().equals(this.uuid)) {
-               return (VillagerEntity) entity;
+         for (Entity entity : mc.level.entitiesForRendering()) {
+            if (entity instanceof Villager && entity.getUUID().equals(this.uuid)) {
+               return (Villager) entity;
             }
          }
          return null;
@@ -45,7 +45,7 @@ public class VillagerEntityWarp {
       return this.operatePos;
    }
 
-   public Vec3d getOperatePosCenter() {
+   public Vec3 getOperatePosCenter() {
       return this.operatePosCenter;
    }
 

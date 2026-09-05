@@ -1,6 +1,6 @@
 package com.codigohasta.addon.modules;
 
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.phys.Vec3;
 
 import com.codigohasta.addon.AddonTemplate;
 import meteordevelopment.meteorclient.events.packets.PacketEvent;
@@ -14,13 +14,13 @@ import meteordevelopment.meteorclient.utils.render.NametagUtils;
 import meteordevelopment.meteorclient.utils.render.color.Color;
 import meteordevelopment.meteorclient.utils.render.color.SettingColor;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.block.BlockState;
-import net.minecraft.block.Blocks;
-import net.minecraft.entity.Entity;
-import net.minecraft.network.packet.s2c.play.BlockBreakingProgressS2CPacket;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Box;
-import net.minecraft.util.math.MathHelper;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.network.protocol.game.ClientboundBlockDestructionPacket;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.util.Mth;
 import org.joml.Vector3d;
 
 import java.util.ArrayList;
@@ -148,7 +148,7 @@ public class MineESP extends Module {
 
     @EventHandler
     private void onRender(Render3DEvent event) {
-        if (mc.player == null || mc.world == null) return;
+        if (mc.player == null || mc.level == null) return;
 
         // 1. 处理队列中的更新
         while (!pendingUpdates.isEmpty()) {
@@ -190,7 +190,7 @@ public class MineESP extends Module {
             // 进度条平滑动画
             float targetProgress = (r.serverStage + 1) * 10f;
             if (smoothProgress.get()) {
-                r.animatedProgress = MathHelper.lerp(0.2f, r.animatedProgress, targetProgress);
+                r.animatedProgress = Mth.lerp(0.2f, r.animatedProgress, targetProgress);
             } else {
                 r.animatedProgress = targetProgress;
             }
@@ -211,7 +211,7 @@ public class MineESP extends Module {
             StringBuilder textToRender = new StringBuilder();
 
             if (renderName.get()) {
-                Entity entity = mc.world.getEntityById(r.id);
+                Entity entity = mc.level.getEntity(r.id);
                 if (entity != null) {
                     textToRender.append(entity.getName().getString());
                 } else {
@@ -255,11 +255,11 @@ public class MineESP extends Module {
 
     @EventHandler
     private void onReceive(PacketEvent.Receive event) {
-        if (event.packet instanceof BlockBreakingProgressS2CPacket packet) {
+        if (event.packet instanceof ClientboundBlockDestructionPacket packet) {
             BlockPos pos = packet.getPos();
             String blockName = "Unknown";
-            if (mc.world != null) {
-                BlockState state = mc.world.getBlockState(pos);
+            if (mc.level != null) {
+                BlockState state = mc.level.getBlockState(pos);
                 // 只有当方块不是空气时才获取名字，否则标记为 Air
                 if (!state.isAir()) {
                     blockName = state.getBlock().getName().getString();
@@ -268,7 +268,7 @@ public class MineESP extends Module {
                 }
             }
 
-            pendingUpdates.add(new RenderInfo(pos, packet.getEntityId(), System.currentTimeMillis(), packet.getProgress(), blockName));
+            pendingUpdates.add(new RenderInfo(pos, packet.getId(), System.currentTimeMillis(), packet.getProgress(), blockName));
         }
     }
 
@@ -280,8 +280,8 @@ public class MineESP extends Module {
         return 1 - Math.pow(1 - (delta), 5);
     }
 
-    private Box getBox(BlockPos pos, double progress) {
-        return new Box(
+    private AABB getBox(BlockPos pos, double progress) {
+        return new AABB(
             pos.getX() + 0.5 - progress / 2, pos.getY() + 0.5 - progress / 2, pos.getZ() + 0.5 - progress / 2, 
             pos.getX() + 0.5 + progress / 2, pos.getY() + 0.5 + progress / 2, pos.getZ() + 0.5 + progress / 2
         );

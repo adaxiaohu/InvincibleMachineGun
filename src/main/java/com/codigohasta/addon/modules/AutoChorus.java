@@ -1,6 +1,6 @@
 package com.codigohasta.addon.modules;
 
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.phys.Vec3;
 
 import com.codigohasta.addon.AddonTemplate;
 import meteordevelopment.meteorclient.events.render.Render3DEvent;
@@ -13,17 +13,17 @@ import meteordevelopment.meteorclient.utils.player.InvUtils;
 import meteordevelopment.meteorclient.utils.player.Rotations;
 import meteordevelopment.meteorclient.utils.render.color.SettingColor;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.block.Blocks;
-import net.minecraft.item.BowItem;
-import net.minecraft.item.CrossbowItem;
-import net.minecraft.item.Item;
-import net.minecraft.item.Items;
-import net.minecraft.util.Hand;
-import net.minecraft.util.hit.BlockHitResult;
-import net.minecraft.util.hit.HitResult;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Vec3d;
-import net.minecraft.world.RaycastContext;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.item.BowItem;
+import net.minecraft.world.item.CrossbowItem;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.HitResult;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.level.ClipContext;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -87,13 +87,13 @@ public class AutoChorus extends Module {
 
     @Override
     public void onDeactivate() {
-        mc.options.useKey.setPressed(false);
-        if (mc.player != null) mc.interactionManager.stopUsingItem(mc.player);
+        mc.options.keyUse.setDown(false);
+        if (mc.player != null) mc.gameMode.releaseUsingItem(mc.player);
     }
 
     @EventHandler
     private void onTick(TickEvent.Pre event) {
-        if (mc.player == null || mc.world == null) return;
+        if (mc.player == null || mc.level == null) return;
 
         // 1. 查找目标
         currentTarget = findTarget();
@@ -101,28 +101,28 @@ public class AutoChorus extends Module {
         if (currentTarget == null) {
             // 如果没目标且正在拉弓，松开
             if (mc.player.isUsingItem() && mc.player.getActiveItem().getItem() instanceof BowItem) {
-                mc.options.useKey.setPressed(false);
-                mc.interactionManager.stopUsingItem(mc.player);
+                mc.options.keyUse.setDown(false);
+                mc.gameMode.releaseUsingItem(mc.player);
             }
             return;
         }
 
         // 2. 武器选择
         FindItemResult weaponResult = findWeapon();
-        if (!weaponResult.found() && !isValidWeapon(mc.player.getMainHandStack().getItem())) return;
+        if (!weaponResult.found() && !isValidWeapon(mc.player.getMainHandItem().getItem())) return;
 
-        if (autoSwitch.get() && !isValidWeapon(mc.player.getMainHandStack().getItem())) {
+        if (autoSwitch.get() && !isValidWeapon(mc.player.getMainHandItem().getItem())) {
             InvUtils.swap(weaponResult.slot(), true);
         }
 
-        Item handItem = mc.player.getMainHandStack().getItem();
+        Item handItem = mc.player.getMainHandItem().getItem();
         if (!isValidWeapon(handItem)) return;
 
         // 3. 计算弹道
-        Vec3d targetPos = new Vec3d(currentTarget.getX() + 0.5, currentTarget.getY() + 0.5, currentTarget.getZ() + 0.5);
+        Vec3 targetPos = new Vec3(currentTarget.getX() + 0.5, currentTarget.getY() + 0.5, currentTarget.getZ() + 0.5);
         
         // **重点优化**：传入目标距离，让弹道计算知道我们打算用多大的力气射箭
-        double distToTarget = Math.sqrt(mc.player.squaredDistanceTo(targetPos));
+        double distToTarget = Math.sqrt(mc.player.distanceToSqr(targetPos));
         float[] rotations = solveBallistic(targetPos, handItem, distToTarget);
         
         if (rotations == null) return;
@@ -145,12 +145,12 @@ public class AutoChorus extends Module {
         // --- 弓箭逻辑 (智能蓄力优化版) ---
         if (item instanceof BowItem) {
             if (!mc.player.isUsingItem()) {
-                mc.options.useKey.setPressed(true);
-                mc.interactionManager.interactItem(mc.player, Hand.MAIN_HAND);
+                mc.options.keyUse.setDown(true);
+                mc.gameMode.useItem(mc.player, InteractionHand.MAIN_HAND);
                 return;
             }
 
-            int useTicks = mc.player.getItemUseTime();
+            int useTicks = mc.player.getTicksUsingItem();
             
             // **智能蓄力计算**
             // 获取应该蓄力多少 tick
@@ -158,31 +158,31 @@ public class AutoChorus extends Module {
 
             // 只有当蓄力时间达到要求时才发射
             if (useTicks >= targetChargeTicks) {
-                mc.interactionManager.stopUsingItem(mc.player); // 强制发送松手包
-                mc.options.useKey.setPressed(false);
+                mc.gameMode.releaseUsingItem(mc.player); // 强制发送松手包
+                mc.options.keyUse.setDown(false);
                 timer = delay.get();
             }
         } 
         
         // --- 弩逻辑 (无需改动) ---
         else if (item instanceof CrossbowItem) {
-            boolean isCharged = CrossbowItem.isCharged(mc.player.getMainHandStack());
+            boolean isCharged = CrossbowItem.isCharged(mc.player.getMainHandItem());
             if (isCharged) {
-                mc.interactionManager.interactItem(mc.player, Hand.MAIN_HAND);
-                mc.player.swingHand(Hand.MAIN_HAND);
+                mc.gameMode.useItem(mc.player, InteractionHand.MAIN_HAND);
+                mc.player.swing(InteractionHand.MAIN_HAND);
                 timer = delay.get();
             } else {
-                mc.options.useKey.setPressed(true);
+                mc.options.keyUse.setDown(true);
                 if (!mc.player.isUsingItem()) {
-                    mc.interactionManager.interactItem(mc.player, Hand.MAIN_HAND);
+                    mc.gameMode.useItem(mc.player, InteractionHand.MAIN_HAND);
                 }
             }
         } 
         
         // --- 投掷物逻辑 (无需改动) ---
         else {
-            mc.interactionManager.interactItem(mc.player, Hand.MAIN_HAND);
-            mc.player.swingHand(Hand.MAIN_HAND);
+            mc.gameMode.useItem(mc.player, InteractionHand.MAIN_HAND);
+            mc.player.swing(InteractionHand.MAIN_HAND);
             timer = delay.get();
         }
     }
@@ -204,8 +204,8 @@ public class AutoChorus extends Module {
     }
 
     // --- 核心：弹道解算 (引入距离参数来修正弓箭速度) ---
-    private float[] solveBallistic(Vec3d target, Item weapon, double distance) {
-        Vec3d playerPos = mc.player.getEyePos();
+    private float[] solveBallistic(Vec3 target, Item weapon, double distance) {
+        Vec3 playerPos = mc.player.getEyePosition();
         double dx = target.x - playerPos.x;
         double dy = target.y - playerPos.y;
         double dz = target.z - playerPos.z;
@@ -253,31 +253,31 @@ public class AutoChorus extends Module {
 
     // --- 目标查找 (保持不变) ---
     private BlockPos findTarget() {
-        BlockPos pPos = mc.player.getBlockPos();
+        BlockPos pPos = mc.player.blockPosition();
         int r = (int) Math.ceil(range.get());
         List<BlockPos> candidates = new ArrayList<>();
 
         for (int x = -r; x <= r; x++) {
             for (int z = -r; z <= r; z++) {
                 for (int y = -10; y <= r; y++) {
-                    BlockPos pos = pPos.add(x, y, z);
-                    if (pos.getSquaredDistance(pPos) > r * r) continue;
-                    if (mc.world.getBlockState(pos).getBlock() == Blocks.CHORUS_FLOWER) {
+                    BlockPos pos = pPos.offset(x, y, z);
+                    if (pos.distSqr(pPos) > r * r) continue;
+                    if (mc.level.getBlockState(pos).getBlock() == Blocks.CHORUS_FLOWER) {
                         if (canSee(pos)) candidates.add(pos);
                     }
                 }
             }
         }
         if (candidates.isEmpty()) return null;
-        candidates.sort(Comparator.comparingDouble(p -> mc.player.squaredDistanceTo(p.toCenterPos())));
+        candidates.sort(Comparator.comparingDouble(p -> mc.player.distanceToSqr(p.getCenter())));
         return candidates.get(0);
     }
 
     private boolean canSee(BlockPos pos) {
-        Vec3d start = mc.player.getEyePos();
-        Vec3d end = new Vec3d(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5);
-        RaycastContext context = new RaycastContext(start, end, RaycastContext.ShapeType.COLLIDER, RaycastContext.FluidHandling.NONE, mc.player);
-        return mc.world.raycast(context).getType() == HitResult.Type.MISS || mc.world.raycast(context).getBlockPos().equals(pos);
+        Vec3 start = mc.player.getEyePosition();
+        Vec3 end = new Vec3(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5);
+        ClipContext context = new ClipContext(start, end, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, mc.player);
+        return mc.level.clip(context).getType() == HitResult.Type.MISS || mc.level.clip(context).getBlockPos().equals(pos);
     }
 
     private FindItemResult findWeapon() { return InvUtils.find(item -> isValidWeapon(item.getItem())); }

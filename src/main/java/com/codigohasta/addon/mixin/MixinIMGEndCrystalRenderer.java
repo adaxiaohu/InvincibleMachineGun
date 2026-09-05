@@ -4,87 +4,71 @@ import com.codigohasta.addon.modules.IMGChams;
 import com.llamalad7.mixinextras.injector.v2.WrapWithCondition;
 import meteordevelopment.meteorclient.systems.modules.Modules;
 import net.minecraft.client.model.Model;
-import net.minecraft.client.render.RenderLayer;
-import net.minecraft.client.render.RenderLayers;
-import net.minecraft.client.render.command.ModelCommandRenderer;
-import net.minecraft.client.render.command.OrderedRenderCommandQueue;
-import net.minecraft.client.render.entity.EndCrystalEntityRenderer;
-import net.minecraft.client.render.entity.state.EndCrystalEntityRenderState;
-import net.minecraft.client.render.state.CameraRenderState;
-import net.minecraft.client.util.math.MatrixStack;
-import net.minecraft.util.Identifier;
-import org.spongepowered.asm.mixin.Final;
+import net.minecraft.client.renderer.SubmitNodeCollector;
+import net.minecraft.client.renderer.entity.EndCrystalRenderer;
+import net.minecraft.client.renderer.entity.state.EndCrystalRenderState;
+import net.minecraft.client.renderer.feature.ModelFeatureRenderer;
+import net.minecraft.client.renderer.rendertype.RenderTypes;
+import net.minecraft.client.renderer.state.level.CameraRenderState;
+import com.mojang.blaze3d.vertex.PoseStack;
+import net.minecraft.resources.Identifier;
 import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.Mutable;
-import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-@Mixin(EndCrystalEntityRenderer.class)
-public abstract class MixinIMGEndCrystalRenderer {
-
-    @Shadow @Final @Mutable
-    private static RenderLayer END_CRYSTAL;
-
-    @Shadow @Final
-    private static Identifier TEXTURE;
-
-    @Unique
-    private static final Identifier BLANK = Identifier.of("minecraft", "textures/blank.png");
+/**
+ * 26.1.2 no longer keeps a mutable static RenderLayer (END_CRYSTAL) on the renderer: render()
+ * became submit(), and the render type is derived from the Identifier passed to submitModel.
+ * The texture swap therefore happens inside the wrapped submitModel call instead of in a
+ * HEAD inject, which also removes the need to shadow END_CRYSTAL / TEXTURE.
+ */
+@Mixin(EndCrystalRenderer.class)
+public class MixinIMGEndCrystalRenderer {
 
     @Unique
-    private static RenderLayer END_CRYSTAL_BLANK;
+    private static final Identifier BLANK = Identifier.fromNamespaceAndPath("minecraft", "textures/blank.png");
 
     @Unique
-    private IMGChams chams;
+    private IMGChams imgChams;
 
-    @Inject(method = "<init>", at = @At("RETURN"))
-    private void onInit(CallbackInfo ci) {
-        chams = Modules.get().get(IMGChams.class);
-        END_CRYSTAL_BLANK = RenderLayers.entityTranslucent(BLANK);
+    @Unique
+    private IMGChams img$chams() {
+        if (imgChams == null && Modules.get() != null) imgChams = Modules.get().get(IMGChams.class);
+        return imgChams;
     }
 
-    // Swap texture at HEAD, so submitModel uses our END_CRYSTAL
+    // Apply additional scale alongside the built-in scale(2.0, 2.0, 2.0)
     @Inject(
-        method = "render(Lnet/minecraft/client/render/entity/state/EndCrystalEntityRenderState;Lnet/minecraft/client/util/math/MatrixStack;Lnet/minecraft/client/render/command/OrderedRenderCommandQueue;Lnet/minecraft/client/render/state/CameraRenderState;)V",
-        at = @At("HEAD")
+        method = "submit(Lnet/minecraft/client/renderer/entity/state/EndCrystalRenderState;Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/SubmitNodeCollector;Lnet/minecraft/client/renderer/state/level/CameraRenderState;)V",
+        at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/vertex/PoseStack;scale(FFF)V")
     )
-    private void onRenderHead(EndCrystalEntityRenderState state, MatrixStack matrixStack, OrderedRenderCommandQueue commandQueue, CameraRenderState cameraState, CallbackInfo ci) {
-        if (chams != null && chams.customCrystal()) {
-            END_CRYSTAL = chams.textureEnabled.get() ? RenderLayers.entityTranslucent(TEXTURE) : END_CRYSTAL_BLANK;
-        }
-    }
-
-    // Apply additional scale AFTER the built-in scale(2.0, 2.0, 2.0)
-    @Inject(
-        method = "render(Lnet/minecraft/client/render/entity/state/EndCrystalEntityRenderState;Lnet/minecraft/client/util/math/MatrixStack;Lnet/minecraft/client/render/command/OrderedRenderCommandQueue;Lnet/minecraft/client/render/state/CameraRenderState;)V",
-        at = @At(value = "INVOKE", target = "Lnet/minecraft/client/util/math/MatrixStack;scale(FFF)V")
-    )
-    private void onScale(EndCrystalEntityRenderState state, MatrixStack matrixStack, OrderedRenderCommandQueue commandQueue, CameraRenderState cameraState, CallbackInfo ci) {
+    private void onScale(EndCrystalRenderState state, PoseStack matrixStack, SubmitNodeCollector commandQueue, CameraRenderState cameraState, CallbackInfo ci) {
+        IMGChams chams = img$chams();
         if (chams != null && chams.customCrystal() && chams.scale.get() != 1.0) {
             float s = chams.scale.get().floatValue();
             matrixStack.scale(s, s, s);
         }
     }
 
-    // Intercept submitModel to apply custom color. When active, call the 10-param
-    // overload with our color packed as arg 7 (main vertex color, not outline).
+    // Intercept submitModel to apply custom color/texture. When active, call the 10-param
+    // overload with our color packed as the main vertex color (not the outline color).
     @WrapWithCondition(
-        method = "render(Lnet/minecraft/client/render/entity/state/EndCrystalEntityRenderState;Lnet/minecraft/client/util/math/MatrixStack;Lnet/minecraft/client/render/command/OrderedRenderCommandQueue;Lnet/minecraft/client/render/state/CameraRenderState;)V",
-        at = @At(value = "INVOKE", target = "Lnet/minecraft/client/render/command/OrderedRenderCommandQueue;submitModel(Lnet/minecraft/client/model/Model;Ljava/lang/Object;Lnet/minecraft/client/util/math/MatrixStack;Lnet/minecraft/client/render/RenderLayer;IIILnet/minecraft/client/render/command/ModelCommandRenderer$CrumblingOverlayCommand;)V")
+        method = "submit(Lnet/minecraft/client/renderer/entity/state/EndCrystalRenderState;Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/SubmitNodeCollector;Lnet/minecraft/client/renderer/state/level/CameraRenderState;)V",
+        at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/SubmitNodeCollector;submitModel(Lnet/minecraft/client/model/Model;Ljava/lang/Object;Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/resources/Identifier;IIILnet/minecraft/client/renderer/feature/ModelFeatureRenderer$CrumblingOverlay;)V")
     )
-    private <S> boolean onColor(OrderedRenderCommandQueue instance, Model<? super S> model, S state, MatrixStack matrixStack, RenderLayer renderLayer, int light, int overlay, int outlineColor, ModelCommandRenderer.CrumblingOverlayCommand crumblingOverlay) {
+    private <S> boolean onColor(SubmitNodeCollector instance, Model<? super S> model, S state, PoseStack matrixStack, Identifier texture, int light, int overlay, int outlineColor, ModelFeatureRenderer.CrumblingOverlay crumblingOverlay) {
+        IMGChams chams = img$chams();
         if (chams != null && chams.customCrystal()) {
             instance.submitModel(
                 model, state, matrixStack,
-                END_CRYSTAL,
+                RenderTypes.entityTranslucent(chams.textureEnabled.get() ? texture : BLANK),
                 light, overlay,
                 chams.crystalColor.get().getPacked(),
                 null,
                 outlineColor,
-                null
+                crumblingOverlay
             );
             return false;
         }

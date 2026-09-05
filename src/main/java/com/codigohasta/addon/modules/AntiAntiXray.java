@@ -1,6 +1,6 @@
 package com.codigohasta.addon.modules;
 
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.phys.Vec3;
 
 import com.codigohasta.addon.AddonTemplate;
 import meteordevelopment.meteorclient.events.packets.PacketEvent;
@@ -19,21 +19,21 @@ import baritone.api.BaritoneAPI;
 import baritone.api.pathing.goals.Goal;
 import baritone.api.pathing.goals.GoalBlock;
 // Minecraft 依赖
-import net.minecraft.block.Block;
-import net.minecraft.block.Blocks;
-import net.minecraft.item.BlockItem; 
-import net.minecraft.item.FireworkRocketItem;
-import net.minecraft.item.Item;
-import net.minecraft.item.ItemStack; // 新增
-import net.minecraft.network.packet.c2s.play.PlayerActionC2SPacket;
-import net.minecraft.network.packet.c2s.play.PlayerInteractBlockC2SPacket;
-import net.minecraft.network.packet.s2c.play.BlockUpdateS2CPacket;
-import net.minecraft.text.Text;
-import net.minecraft.util.Hand;
-import net.minecraft.util.hit.BlockHitResult;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Direction;
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.item.BlockItem; 
+import net.minecraft.world.item.FireworkRocketItem;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack; // 新增
+import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;
+import net.minecraft.network.protocol.game.ServerboundUseItemOnPacket;
+import net.minecraft.network.protocol.game.ClientboundBlockUpdatePacket;
+import net.minecraft.network.chat.Component;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.world.phys.Vec3;
 
 import java.util.*;
 import java.util.concurrent.*;
@@ -306,16 +306,16 @@ public class AntiAntiXray extends Module {
 
     @EventHandler
     private void onTick(TickEvent.Pre event) {
-        if (mc.world == null || mc.player == null) return;
+        if (mc.level == null || mc.player == null) return;
 
-        BlockPos playerPos = mc.player.getBlockPos();
+        BlockPos playerPos = mc.player.blockPosition();
 
         // 1. 自动清理失效矿石
-        if (mc.player.age % 5 == 0 && !foundOres.isEmpty()) {
+        if (mc.player.tickCount % 5 == 0 && !foundOres.isEmpty()) {
             foundOres.entrySet().removeIf(entry -> {
                 BlockPos pos = entry.getKey();
                 Block storedBlock = entry.getValue();
-                Block currentBlock = mc.world.getBlockState(pos).getBlock();
+                Block currentBlock = mc.level.getBlockState(pos).getBlock();
                 return currentBlock != storedBlock;
             });
         }
@@ -326,7 +326,7 @@ public class AntiAntiXray extends Module {
             boolean suppressAutoScan = waitingForScan || (scanWaitMode.get() && autoMine.get());
 
             if (!suppressAutoScan) {
-                boolean movedSignificantly = lastRefillPos == null || lastRefillPos.getSquaredDistance(playerPos) > 2.25;
+                boolean movedSignificantly = lastRefillPos == null || lastRefillPos.distSqr(playerPos) > 2.25;
 
                 if (movedSignificantly) {
                     if (dynamicReset.get()) {
@@ -335,7 +335,7 @@ public class AntiAntiXray extends Module {
                     lastRefillPos = playerPos;
                     refillQueue();
                 }
-                else if (isQueuesEmpty() && mc.player.age % 10 == 0) {
+                else if (isQueuesEmpty() && mc.player.tickCount % 10 == 0) {
                     if (isScanning) finishScan();
                     refillQueue();
                 }
@@ -351,13 +351,13 @@ public class AntiAntiXray extends Module {
             boolean isPressed = forceScanKey.get().isPressed();
             if (isPressed && !lastKeyPressedState) {
                 if (!isQueuesEmpty()) {
-                    mc.inGameHud.setOverlayMessage(Text.of("§c扫描正在进行中..."), false);
+                    mc.gui.setOverlayMessage(Component.literal("§c扫描正在进行中..."), false);
                 } else {
-                    mc.inGameHud.setOverlayMessage(Text.of("§a[手动] 开始扫描..."), false);
+                    mc.gui.setOverlayMessage(Component.literal("§a[手动] 开始扫描..."), false);
                     queueA.clear(); queueB.clear();
                     int clearRadius = radius.get() + 5;
                     synchronized (scannedPositions) {
-                        scannedPositions.removeIf(p -> p.isWithinDistance(playerPos, clearRadius));
+                        scannedPositions.removeIf(p -> p.closerThan(playerPos, clearRadius));
                     }
                     if (executor == null || executor.isShutdown()) executor = Executors.newFixedThreadPool(threadCount.get());
                     refillQueue();
@@ -387,12 +387,12 @@ public class AntiAntiXray extends Module {
         }
 
         // 4. 缓存清理
-        if (mc.player.age % 20 == 0) {
+        if (mc.player.tickCount % 20 == 0) {
             int cleanupThreshold = radius.get() + 8;
             synchronized (scannedPositions) {
-                scannedPositions.removeIf(pos -> !pos.isWithinDistance(playerPos, cleanupThreshold));
+                scannedPositions.removeIf(pos -> !pos.closerThan(playerPos, cleanupThreshold));
             }
-            foundOres.keySet().removeIf(pos -> !pos.isWithinDistance(playerPos, 100));
+            foundOres.keySet().removeIf(pos -> !pos.closerThan(playerPos, 100));
         }
 
         if (isQueuesEmpty()) return;
@@ -412,16 +412,16 @@ public class AntiAntiXray extends Module {
     private boolean checkToolHealth() {
         if (!isPathing()) return true; // 如果 Baritone 没在干活，就不管
         
-        ItemStack stack = mc.player.getMainHandStack();
-        if (stack.isEmpty() || !stack.isDamageable()) return true; // 手里没拿工具或物品无耐久
+        ItemStack stack = mc.player.getMainHandItem();
+        if (stack.isEmpty() || !stack.isDamageableItem()) return true; // 手里没拿工具或物品无耐久
         
         // 计算剩余耐久：最大耐久 - 已损耗耐久
-        int remainingDurability = stack.getMaxDamage() - stack.getDamage();
+        int remainingDurability = stack.getMaxDamage() - stack.getDamageValue();
         
         if (remainingDurability <= minDurability.get()) {
             // 紧急停止！
             BaritoneAPI.getProvider().getPrimaryBaritone().getPathingBehavior().cancelEverything();
-            mc.inGameHud.setOverlayMessage(Text.of("§c[警告] 工具耐久过低 (" + remainingDurability + ")，已停止自动挖掘！"), true);
+            mc.gui.setOverlayMessage(Component.literal("§c[警告] 工具耐久过低 (" + remainingDurability + ")，已停止自动挖掘！"), true);
             
             // 可选：在这里自动关闭模块，防止它下一秒又开始
             // toggle(); 
@@ -437,7 +437,7 @@ public class AntiAntiXray extends Module {
 
         int clearRadius = radius.get();
         synchronized (scannedPositions) {
-            scannedPositions.removeIf(p -> p.isWithinDistance(playerPos, clearRadius));
+            scannedPositions.removeIf(p -> p.closerThan(playerPos, clearRadius));
         }
 
         queueA.clear();
@@ -445,7 +445,7 @@ public class AntiAntiXray extends Module {
         refillQueue();
 
         waitingForScan = true;
-        mc.inGameHud.setOverlayMessage(Text.of(message), false);
+        mc.gui.setOverlayMessage(Component.literal(message), false);
     }
 
     // --- Baritone 智能调度 ---
@@ -466,7 +466,7 @@ public class AntiAntiXray extends Module {
         if (oreCount >= threshold) {
             // 找到最近的真矿
             BlockPos closest = foundOres.keySet().stream()
-                .min(Comparator.comparingDouble(pos -> pos.getSquaredDistance(playerPos)))
+                .min(Comparator.comparingDouble(pos -> pos.distSqr(playerPos)))
                 .orElse(null);
 
             // 挖矿时也按间隔扫描
@@ -532,17 +532,17 @@ public class AntiAntiXray extends Module {
         if (oreCount >= threshold) {
             // 发现足够矿物，前往挖掘
             BlockPos closest = foundOres.keySet().stream()
-                .min(Comparator.comparingDouble(pos -> pos.getSquaredDistance(playerPos)))
+                .min(Comparator.comparingDouble(pos -> pos.distSqr(playerPos)))
                 .orElse(null);
             if (closest != null) {
                 BaritoneAPI.getProvider().getPrimaryBaritone().getCustomGoalProcess().setGoalAndPath(new GoalBlock(closest));
-                mc.inGameHud.setOverlayMessage(Text.of("§a[隧道扫描] 发现 " + oreCount + " 个矿物，前往挖掘！"), false);
+                mc.gui.setOverlayMessage(Component.literal("§a[隧道扫描] 发现 " + oreCount + " 个矿物，前往挖掘！"), false);
             }
         } else {
             // 未发现足够矿物，继续挖隧道
             if (tunnelMode.get()) {
                 BaritoneAPI.getProvider().getPrimaryBaritone().getCommandManager().execute("tunnel");
-                mc.inGameHud.setOverlayMessage(Text.of("§7[隧道扫描] 未发现足够矿物，继续挖掘隧道..."), false);
+                mc.gui.setOverlayMessage(Component.literal("§7[隧道扫描] 未发现足够矿物，继续挖掘隧道..."), false);
             }
         }
 
@@ -569,7 +569,7 @@ public class AntiAntiXray extends Module {
     private void finishScan() {
         isScanning = false;
         if (showProgress.get()) {
-            mc.inGameHud.setOverlayMessage(Text.of("§a扫描完成!"), false);
+            mc.gui.setOverlayMessage(Component.literal("§a扫描完成!"), false);
         }
     }
 
@@ -583,30 +583,30 @@ public class AntiAntiXray extends Module {
     }
 
     private void processBlock(BlockPos pos) {
-        if (mc.getNetworkHandler() == null || mc.player == null) return;
+        if (mc.getConnection() == null || mc.player == null) return;
         activeScanningRender.put(pos, System.currentTimeMillis());
         try {
             boolean usePacketMine = mode.get() == Mode.PacketMine;
             if (!usePacketMine) {
-                Item mainItem = mc.player.getMainHandStack().getItem();
+                Item mainItem = mc.player.getMainHandItem().getItem();
                 if (mainItem instanceof BlockItem || mainItem instanceof FireworkRocketItem) usePacketMine = true;
             }
 
             if (usePacketMine) {
-                mc.getNetworkHandler().sendPacket(new PlayerActionC2SPacket(PlayerActionC2SPacket.Action.START_DESTROY_BLOCK, pos, Direction.UP));
-                mc.getNetworkHandler().sendPacket(new PlayerActionC2SPacket(PlayerActionC2SPacket.Action.ABORT_DESTROY_BLOCK, pos, Direction.UP));
+                mc.getConnection().send(new ServerboundPlayerActionPacket(ServerboundPlayerActionPacket.Action.START_DESTROY_BLOCK, pos, Direction.UP));
+                mc.getConnection().send(new ServerboundPlayerActionPacket(ServerboundPlayerActionPacket.Action.ABORT_DESTROY_BLOCK, pos, Direction.UP));
             } else {
-                BlockHitResult hitResult = new BlockHitResult(new Vec3d(pos.getX(), pos.getY(), pos.getZ()), Direction.UP, pos, false);
-                mc.getNetworkHandler().sendPacket(new PlayerInteractBlockC2SPacket(Hand.MAIN_HAND, hitResult, 0));
+                BlockHitResult hitResult = new BlockHitResult(new Vec3(pos.getX(), pos.getY(), pos.getZ()), Direction.UP, pos, false);
+                mc.getConnection().send(new ServerboundUseItemOnPacket(InteractionHand.MAIN_HAND, hitResult, 0));
             }
         } catch (Exception ignored) {}
     }
 
     @EventHandler
     private void onPacketReceive(PacketEvent.Receive event) {
-        if (event.packet instanceof BlockUpdateS2CPacket packet) {
+        if (event.packet instanceof ClientboundBlockUpdatePacket packet) {
             BlockPos pos = packet.getPos();
-            Block block = packet.getState().getBlock();
+            Block block = packet.getBlockState().getBlock();
             if (targetBlocks.get().contains(block)) {
                 foundOres.put(pos, block);
             } else {
@@ -650,7 +650,7 @@ public class AntiAntiXray extends Module {
         }
         bar.append("§r]");
         String msg = String.format("扫描进度: %s §e%.2f%% §7(剩余: %d)", bar, percent, remaining);
-        mc.inGameHud.setOverlayMessage(Text.of(msg), false);
+        mc.gui.setOverlayMessage(Component.literal(msg), false);
     }
 
     private boolean isQueuesEmpty() {
@@ -660,14 +660,14 @@ public class AntiAntiXray extends Module {
     private void refillQueue() {
         if (mc.player == null) return;
         int r = radius.get();
-        BlockPos pPos = mc.player.getBlockPos();
+        BlockPos pPos = mc.player.blockPosition();
         List<BlockPos> allCandidates = new ArrayList<>();
         for (int x = -r; x <= r; x++) {
             for (int y = -r; y <= r; y++) {
                 for (int z = -r; z <= r; z++) {
-                    BlockPos target = pPos.add(x, y, z);
-                    if (!target.isWithinDistance(pPos, r)) continue;
-                    if (mc.world.getBlockState(target).isAir()) continue;
+                    BlockPos target = pPos.offset(x, y, z);
+                    if (!target.closerThan(pPos, r)) continue;
+                    if (mc.level.getBlockState(target).isAir()) continue;
                     synchronized (scannedPositions) { if (scannedPositions.contains(target)) continue; }
                     if (foundOres.containsKey(target)) continue;
                     if (queueA.contains(target) || queueB.contains(target)) continue;
@@ -676,7 +676,7 @@ public class AntiAntiXray extends Module {
             }
         }
         if (allCandidates.isEmpty()) return;
-        allCandidates.sort(Comparator.comparingDouble(pos -> pos.getSquaredDistance(pPos)));
+        allCandidates.sort(Comparator.comparingDouble(pos -> pos.distSqr(pPos)));
         for (int i = 0; i < allCandidates.size(); i++) {
             if (i % 2 == 0) queueA.add(allCandidates.get(i)); else queueB.add(allCandidates.get(i));
         }

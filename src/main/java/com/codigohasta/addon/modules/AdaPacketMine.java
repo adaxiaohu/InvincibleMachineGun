@@ -17,24 +17,28 @@ import meteordevelopment.meteorclient.utils.player.Rotations;
 import meteordevelopment.meteorclient.utils.render.color.Color;
 import meteordevelopment.meteorclient.utils.render.color.SettingColor;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.block.BlockState;
-import net.minecraft.entity.EquipmentSlot;
-import net.minecraft.entity.effect.StatusEffects;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.entity.player.PlayerInventory;
-import net.minecraft.item.ItemStack;
-import net.minecraft.network.packet.c2s.play.HandSwingC2SPacket;
-import net.minecraft.network.packet.c2s.play.PlayerActionC2SPacket;
-import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket;
-import net.minecraft.network.packet.c2s.play.UpdateSelectedSlotC2SPacket;
-import net.minecraft.network.packet.s2c.play.BlockUpdateS2CPacket;
-import net.minecraft.network.packet.s2c.play.ChunkDeltaUpdateS2CPacket;
-import net.minecraft.registry.RegistryKeys;
-import net.minecraft.registry.tag.FluidTags;
-import net.minecraft.util.Hand;
-import net.minecraft.util.math.*;
-import net.minecraft.util.shape.VoxelShape;
-import net.minecraft.util.shape.VoxelShapes;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.effect.MobEffects;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.network.protocol.game.ServerboundSwingPacket;
+import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;
+import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
+import net.minecraft.network.protocol.game.ServerboundSetCarriedItemPacket;
+import net.minecraft.network.protocol.game.ClientboundBlockUpdatePacket;
+import net.minecraft.network.protocol.game.ClientboundSectionBlocksUpdatePacket;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.tags.FluidTags;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.util.Mth;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.phys.shapes.VoxelShape;
+import net.minecraft.world.phys.shapes.Shapes;
 
 import java.lang.reflect.Field;
 import java.util.*;
@@ -150,7 +154,7 @@ public class AdaPacketMine extends Module {
         resetInternalState();
         if (mc.player != null && internalOriginalSlot != -1) {
              setInvSlot(internalOriginalSlot);
-             mc.getNetworkHandler().sendPacket(new UpdateSelectedSlotC2SPacket(internalOriginalSlot));
+             mc.getConnection().send(new ServerboundSetCarriedItemPacket(internalOriginalSlot));
         }
     }
 
@@ -168,14 +172,14 @@ public class AdaPacketMine extends Module {
 
     @EventHandler
     public void onTick(TickEvent.Pre event) {
-        if (mc.player == null || mc.world == null) return;
+        if (mc.player == null || mc.level == null) return;
 
         // 1. 静默切换回退逻辑
         if (swapBackTicks > 0) {
             swapBackTicks--;
             if (swapBackTicks <= 0 && internalSwappedSlot != -1 && internalOriginalSlot != -1) {
                 setInvSlot(internalOriginalSlot);
-                mc.getNetworkHandler().sendPacket(new UpdateSelectedSlotC2SPacket(internalOriginalSlot));
+                mc.getConnection().send(new ServerboundSetCarriedItemPacket(internalOriginalSlot));
                 internalSwappedSlot = -1;
                 internalOriginalSlot = -1;
             }
@@ -201,7 +205,7 @@ public class AdaPacketMine extends Module {
                 }
 
                 // 距离检查 (使用 squaredDistanceTo)
-                double distSq = mc.player.squaredDistanceTo(data.getCenterPos());
+                double distSq = mc.player.distanceToSqr(data.getCenterPos());
                 if (distSq > rangeConfig.get() * rangeConfig.get()) {
                     toRemove.add(data);
                     continue;
@@ -268,7 +272,7 @@ public class AdaPacketMine extends Module {
         int maxQueue = doubleBreakConfig.get() ? 2 : 1;
 
         if (miningQueue.size() < maxQueue && currentTime - lastAutoMineTime >= 250L) {
-            PlayerEntity target = getClosestEnemy();
+            Player target = getClosestEnemy();
             if (target != null) {
                 BlockPos targetBlock = findBestEnemyBlock(target);
                 if (targetBlock != null && !isMiningBlock(targetBlock)) {
@@ -277,7 +281,7 @@ public class AdaPacketMine extends Module {
                     if (dir == null) dir = Direction.UP;
 
                     if (rotateConfig.get()) {
-                        performRotation(targetBlock.toCenterPos());
+                        performRotation(targetBlock.getCenter());
                     }
 
                     MiningData data = new MiningData(targetBlock, dir);
@@ -293,17 +297,17 @@ public class AdaPacketMine extends Module {
     public void onStartBreakingBlock(StartBreakingBlockEvent event) {
         if (!mc.player.isCreative() && modeConfig.get() == SpeedmineMode.PACKET) {
             event.cancel();
-            BlockState state = mc.world.getBlockState(event.blockPos);
-            if (!state.isAir() && state.getHardness(mc.world, event.blockPos) != -1.0f) {
+            BlockState state = mc.level.getBlockState(event.blockPos);
+            if (!state.isAir() && state.getDestroySpeed(mc.level, event.blockPos) != -1.0f) {
                 clickMine(new MiningData(event.blockPos, event.direction));
-                mc.player.swingHand(Hand.MAIN_HAND);
+                mc.player.swing(InteractionHand.MAIN_HAND);
             }
         }
     }
 
     @EventHandler
     public void onPacketSend(PacketEvent.Send event) {
-        if (event.packet instanceof UpdateSelectedSlotC2SPacket && modeConfig.get() == SpeedmineMode.PACKET) {
+        if (event.packet instanceof ServerboundSetCarriedItemPacket && modeConfig.get() == SpeedmineMode.PACKET) {
             // Passive sync
         }
     }
@@ -311,10 +315,10 @@ public class AdaPacketMine extends Module {
     @EventHandler
     public void onPacketReceive(PacketEvent.Receive event) {
         if (mc.player == null) return;
-        if (event.packet instanceof BlockUpdateS2CPacket packet) {
-            handleBlockUpdate(packet.getPos(), packet.getState());
-        } else if (event.packet instanceof ChunkDeltaUpdateS2CPacket packet) {
-            packet.visitUpdates(this::handleBlockUpdate);
+        if (event.packet instanceof ClientboundBlockUpdatePacket packet) {
+            handleBlockUpdate(packet.getPos(), packet.getBlockState());
+        } else if (event.packet instanceof ClientboundSectionBlocksUpdatePacket packet) {
+            packet.runUpdates(this::handleBlockUpdate);
         }
     }
 
@@ -381,13 +385,13 @@ public class AdaPacketMine extends Module {
             Color lineColor = new Color(c.r, c.g, c.b, lineAlpha);
 
             BlockPos pos = data.getPos();
-            VoxelShape shape = data.getState().getOutlineShape(mc.world, pos);
-            if (shape.isEmpty()) shape = VoxelShapes.fullCube();
-            Box box = shape.getBoundingBox().offset(pos);
+            VoxelShape shape = data.getState().getShape(mc.level, pos);
+            if (shape.isEmpty()) shape = Shapes.block();
+            AABB box = shape.bounds().move(pos);
             
             // 进度条缩放
             float total = 1.0F; 
-            float progress = MathHelper.clamp(data.getBlockDamage() / total, 0.01f, 1f);
+            float progress = Mth.clamp(data.getBlockDamage() / total, 0.01f, 1f);
             
             double centerX = box.minX + (box.maxX - box.minX) / 2;
             double centerY = box.minY + (box.maxY - box.minY) / 2;
@@ -399,7 +403,7 @@ public class AdaPacketMine extends Module {
             double dy = (box.maxY - box.minY) / 2 * scale;
             double dz = (box.maxZ - box.minZ) / 2 * scale;
             
-            Box renderBox = new Box(centerX - dx, centerY - dy, centerZ - dz, centerX + dx, centerY + dy, centerZ + dz);
+            AABB renderBox = new AABB(centerX - dx, centerY - dy, centerZ - dz, centerX + dx, centerY + dy, centerZ + dz);
             
             event.renderer.box(renderBox, boxColor, lineColor, shapeMode.get(), 0);
         }
@@ -427,23 +431,23 @@ public class AdaPacketMine extends Module {
         if (grimConfig.get()) {
             if (grimNewConfig.get()) {
                 if (!miningFix.get()) {
-                    sendAction(PlayerActionC2SPacket.Action.START_DESTROY_BLOCK, data);
-                    sendAction(PlayerActionC2SPacket.Action.ABORT_DESTROY_BLOCK, data);
-                    sendAction(PlayerActionC2SPacket.Action.STOP_DESTROY_BLOCK, data);
+                    sendAction(ServerboundPlayerActionPacket.Action.START_DESTROY_BLOCK, data);
+                    sendAction(ServerboundPlayerActionPacket.Action.ABORT_DESTROY_BLOCK, data);
+                    sendAction(ServerboundPlayerActionPacket.Action.STOP_DESTROY_BLOCK, data);
                 } else {
-                    sendAction(PlayerActionC2SPacket.Action.ABORT_DESTROY_BLOCK, data);
+                    sendAction(ServerboundPlayerActionPacket.Action.ABORT_DESTROY_BLOCK, data);
                 }
-                sendAction(PlayerActionC2SPacket.Action.START_DESTROY_BLOCK, data);
-                mc.getNetworkHandler().sendPacket(new HandSwingC2SPacket(Hand.MAIN_HAND));
+                sendAction(ServerboundPlayerActionPacket.Action.START_DESTROY_BLOCK, data);
+                mc.getConnection().send(new ServerboundSwingPacket(InteractionHand.MAIN_HAND));
             } else {
-                sendAction(PlayerActionC2SPacket.Action.ABORT_DESTROY_BLOCK, data);
-                sendAction(PlayerActionC2SPacket.Action.STOP_DESTROY_BLOCK, data);
-                sendAction(PlayerActionC2SPacket.Action.START_DESTROY_BLOCK, data);
-                sendAction(PlayerActionC2SPacket.Action.STOP_DESTROY_BLOCK, data);
+                sendAction(ServerboundPlayerActionPacket.Action.ABORT_DESTROY_BLOCK, data);
+                sendAction(ServerboundPlayerActionPacket.Action.STOP_DESTROY_BLOCK, data);
+                sendAction(ServerboundPlayerActionPacket.Action.START_DESTROY_BLOCK, data);
+                sendAction(ServerboundPlayerActionPacket.Action.STOP_DESTROY_BLOCK, data);
             }
         } else {
-            sendAction(PlayerActionC2SPacket.Action.START_DESTROY_BLOCK, data);
-            sendAction(PlayerActionC2SPacket.Action.STOP_DESTROY_BLOCK, data);
+            sendAction(ServerboundPlayerActionPacket.Action.START_DESTROY_BLOCK, data);
+            sendAction(ServerboundPlayerActionPacket.Action.STOP_DESTROY_BLOCK, data);
         }
         return true;
     }
@@ -461,7 +465,7 @@ public class AdaPacketMine extends Module {
             if (internalOriginalSlot == -1) internalOriginalSlot = currentSlot;
             
             if (swapConfig.get() == Swap.SILENT) {
-                mc.getNetworkHandler().sendPacket(new UpdateSelectedSlotC2SPacket(bestSlot));
+                mc.getConnection().send(new ServerboundSetCarriedItemPacket(bestSlot));
                 internalSwappedSlot = bestSlot;
                 swapBackTicks = 3; 
             } else if (swapConfig.get() == Swap.NORMAL) {
@@ -472,44 +476,44 @@ public class AdaPacketMine extends Module {
         }
 
         // --- Bypass Ground 关键逻辑 ---
-        // 核心思路：发送一个 PlayerMoveC2SPacket.Full 包，告诉服务器我们在地面上 (onGround=true)
+        // 核心思路：发送一个 ServerboundMovePlayerPacket.Full 包，告诉服务器我们在地面上 (onGround=true)
         boolean isFallFlying = mc.player.getPose().toString().equals("GLIDING");
         
         // 只有当 Bypass 开启，且我们可能受到惩罚时(水下或空中)，才强制发送
         if (bypassGround.get() && !isFallFlying && !data.getState().isAir()) {
-            boolean inWater = mc.player.isSubmergedIn(FluidTags.WATER);
-            boolean inAir = !mc.player.isOnGround();
+            boolean inWater = mc.player.isEyeInFluid(FluidTags.WATER);
+            boolean inAir = !mc.player.onGround();
             
             if (inWater || inAir) {
                 // 构造 1.21.11 兼容的 Full 包
-                mc.getNetworkHandler().sendPacket(new PlayerMoveC2SPacket.Full(
+                mc.getConnection().send(new ServerboundMovePlayerPacket.PosRot(
                     mc.player.getX(), 
                     mc.player.getY() + 1.0e-9, 
                     mc.player.getZ(), 
-                    mc.player.getYaw(), 
-                    mc.player.getPitch(), 
+                    mc.player.getYRot(), 
+                    mc.player.getXRot(), 
                     true,  // onGround = true (欺骗核心)
                     false  // horizontalCollision
                 ));
                 
                 // 客户端状态更新，防止本地逻辑回弹
-                mc.player.onLanding();
+                mc.player.resetFallDistance();
             }
         }
 
-        sendAction(PlayerActionC2SPacket.Action.STOP_DESTROY_BLOCK, data);
-        mc.getNetworkHandler().sendPacket(new HandSwingC2SPacket(Hand.MAIN_HAND));
+        sendAction(ServerboundPlayerActionPacket.Action.STOP_DESTROY_BLOCK, data);
+        mc.getConnection().send(new ServerboundSwingPacket(InteractionHand.MAIN_HAND));
         lastBreak = System.currentTimeMillis();
     }
 
     private void abortMining(MiningData data) {
         if (data.isStarted() && !data.isAir()) {
-            sendAction(PlayerActionC2SPacket.Action.ABORT_DESTROY_BLOCK, data);
+            sendAction(ServerboundPlayerActionPacket.Action.ABORT_DESTROY_BLOCK, data);
         }
     }
 
-    private void sendAction(PlayerActionC2SPacket.Action action, MiningData data) {
-        mc.getNetworkHandler().sendPacket(new PlayerActionC2SPacket(action, data.getPos(), data.getDirection()));
+    private void sendAction(ServerboundPlayerActionPacket.Action action, MiningData data) {
+        mc.getConnection().send(new ServerboundPlayerActionPacket(action, data.getPos(), data.getDirection()));
     }
 
     // --- 反射辅助方法 ---
@@ -535,7 +539,7 @@ public class AdaPacketMine extends Module {
 
     private Field getSlotField() {
         if (cachedSlotField != null) return cachedSlotField;
-        Class<?> clazz = PlayerInventory.class;
+        Class<?> clazz = Inventory.class;
         String[] possibleNames = {"selectedSlot", "field_7545", "c"};
         for (String name : possibleNames) {
             try {
@@ -552,16 +556,16 @@ public class AdaPacketMine extends Module {
 
     private float calcBlockBreakingDelta(BlockState state, BlockPos pos) {
         if (swapConfig.get() == Swap.OFF) {
-            return state.calcBlockBreakingDelta(mc.player, mc.world, pos);
+            return state.getDestroyProgress(mc.player, mc.level, pos);
         }
         
-        float hardness = state.getHardness(mc.world, pos);
+        float hardness = state.getDestroySpeed(mc.level, pos);
         if (hardness == -1.0f) return 0.0f;
         
         int bestSlot = getBestTool(state);
-        ItemStack stack = mc.player.getInventory().getStack(bestSlot);
+        ItemStack stack = mc.player.getInventory().getItem(bestSlot);
         
-        float speed = stack.getMiningSpeedMultiplier(state);
+        float speed = stack.getDestroySpeed(state);
         
         // 1.21.11 效率附魔检测修复
         int efficiencyLevel = getEfficiencyLevel(stack);
@@ -569,12 +573,12 @@ public class AdaPacketMine extends Module {
             speed += efficiencyLevel * efficiencyLevel + 1;
         }
 
-        if (mc.player.hasStatusEffect(StatusEffects.HASTE)) {
-             int amplifier = mc.player.getStatusEffect(StatusEffects.HASTE).getAmplifier();
+        if (mc.player.hasEffect(MobEffects.HASTE)) {
+             int amplifier = mc.player.getEffect(MobEffects.HASTE).getAmplifier();
              speed *= 1.0f + (amplifier + 1) * 0.2f;
         }
 
-        if (mc.player.hasStatusEffect(StatusEffects.MINING_FATIGUE)) {
+        if (mc.player.hasEffect(MobEffects.MINING_FATIGUE)) {
              // 简化疲劳计算
              speed *= 0.3f;
         }
@@ -583,17 +587,17 @@ public class AdaPacketMine extends Module {
         // 如果开启了 Bypass Ground，我们跳过所有的环境检查 (水下、空中)，
         // 直接使用全速计算。这配合 stopMining 中的发包欺骗，能实现水下瞬挖。
         if (!bypassGround.get()) {
-            if (mc.player.isSubmergedIn(FluidTags.WATER) && !hasAquaAffinity()) {
+            if (mc.player.isEyeInFluid(FluidTags.WATER) && !hasAquaAffinity()) {
                 speed /= 5.0f;
             }
-            if (!mc.player.isOnGround()) {
+            if (!mc.player.onGround()) {
                 speed /= 5.0f;
             }
         }
         // -----------------------------
 
         float damage = speed / hardness;
-        boolean canHarvest = !state.isToolRequired() || stack.isSuitableFor(state);
+        boolean canHarvest = !state.requiresCorrectToolForDrops() || stack.isCorrectToolForDrops(state);
         
         return damage / (canHarvest ? 30f : 100f);
     }
@@ -608,7 +612,7 @@ public class AdaPacketMine extends Module {
             if (enchantments == null) return 0;
 
             // 遍历所有附魔条目
-            for (var entry : enchantments.getEnchantmentEntries()) {
+            for (var entry : enchantments.entrySet()) {
                 // 防御性检查: entry 或其 Key 即使在遍历中也可能为 null
                 if (entry == null || entry.getKey() == null) continue;
 
@@ -618,8 +622,8 @@ public class AdaPacketMine extends Module {
                 String idStr = entry.getKey().toString().toLowerCase();
                 
                 // 方案 B: 如果能安全获取 Key (更精准，但需多重判空)
-                if (entry.getKey().getKey().isPresent()) {
-                    idStr = entry.getKey().getKey().get().getValue().toString();
+                if (entry.getKey().unwrapKey().isPresent()) {
+                    idStr = entry.getKey().unwrapKey().get().identifier().toString();
                 }
 
                 // 只要 ID 中包含 efficiency 即可判定
@@ -637,11 +641,11 @@ public class AdaPacketMine extends Module {
     // 1.21.11 兼容: 检测水下速掘
     private boolean hasAquaAffinity() {
         // 修复: 使用 getEquippedStack 替代 armor.get
-        ItemStack helmet = mc.player.getEquippedStack(EquipmentSlot.HEAD);
+        ItemStack helmet = mc.player.getItemBySlot(EquipmentSlot.HEAD);
         if (helmet.isEmpty()) return false;
         try {
-            for (var entry : helmet.getEnchantments().getEnchantmentEntries()) {
-                 String id = entry.getKey().getKey().map(k -> k.getValue().toString()).orElse("");
+            for (var entry : helmet.getEnchantments().entrySet()) {
+                 String id = entry.getKey().unwrapKey().map(k -> k.identifier().toString()).orElse("");
                  if (id.contains("aqua_affinity")) return true;
             }
         } catch (Exception ignored) {}
@@ -653,8 +657,8 @@ public class AdaPacketMine extends Module {
         float bestSpeed = 0.0f;
 
         for (int i = 0; i < 9; i++) {
-            ItemStack stack = mc.player.getInventory().getStack(i);
-            float speed = stack.getMiningSpeedMultiplier(state);
+            ItemStack stack = mc.player.getInventory().getItem(i);
+            float speed = stack.getDestroySpeed(state);
             // 简单估算效率加成
             if (speed > 1.0f) {
     int effLevel = getEfficiencyLevel(stack); // 只获取一次
@@ -672,7 +676,7 @@ public class AdaPacketMine extends Module {
     }
 
     // --- 旋转与辅助逻辑 ---
-    private void performRotation(Vec3d targetPos) {
+    private void performRotation(Vec3 targetPos) {
         if (mc.player == null) return;
         
         double diffX = targetPos.x - mc.player.getX();
@@ -686,18 +690,18 @@ public class AdaPacketMine extends Module {
         if (grimConfig.get()) {
             Rotations.rotate(yaw, pitch, 100, null); 
         } else {
-            mc.player.setYaw(yaw);
-            mc.player.setPitch(pitch);
+            mc.player.setYRot(yaw);
+            mc.player.setXRot(pitch);
         }
     }
 
-    private PlayerEntity getClosestEnemy() {
-        PlayerEntity closest = null;
+    private Player getClosestEnemy() {
+        Player closest = null;
         double closestDist = enemyRange.get() * enemyRange.get();
 
-        for (PlayerEntity player : mc.world.getPlayers()) {
+        for (Player player : mc.level.players()) {
             if (player == mc.player || Friends.get().isFriend(player)) continue;
-            double dist = mc.player.squaredDistanceTo(player);
+            double dist = mc.player.distanceToSqr(player);
             if (dist < closestDist) {
                 closestDist = dist;
                 closest = player;
@@ -706,13 +710,13 @@ public class AdaPacketMine extends Module {
         return closest;
     }
 
-    private BlockPos findBestEnemyBlock(PlayerEntity enemy) {
-        BlockPos feet = enemy.getBlockPos();
-        if (!mc.world.getBlockState(feet).isAir()) return feet; 
+    private BlockPos findBestEnemyBlock(Player enemy) {
+        BlockPos feet = enemy.blockPosition();
+        if (!mc.level.getBlockState(feet).isAir()) return feet; 
         
         BlockPos[] offsets = {feet.north(), feet.south(), feet.east(), feet.west()};
         for (BlockPos p : offsets) {
-            if (!mc.world.getBlockState(p).isAir() && mc.world.getBlockState(p).getHardness(mc.world, p) != -1) {
+            if (!mc.level.getBlockState(p).isAir() && mc.level.getBlockState(p).getDestroySpeed(mc.level, p) != -1) {
                 return p;
             }
         }
@@ -746,15 +750,15 @@ public class AdaPacketMine extends Module {
 
         public BlockPos getPos() { return pos; }
         public Direction getDirection() { return direction; }
-        public Vec3d getCenterPos() { return pos.toCenterPos(); }
+        public Vec3 getCenterPos() { return pos.getCenter(); }
         
         public boolean isAir() {
-            if (meteordevelopment.meteorclient.MeteorClient.mc.world == null) return true;
-            return meteordevelopment.meteorclient.MeteorClient.mc.world.getBlockState(pos).isAir();
+            if (meteordevelopment.meteorclient.MeteorClient.mc.level == null) return true;
+            return meteordevelopment.meteorclient.MeteorClient.mc.level.getBlockState(pos).isAir();
         }
         
         public BlockState getState() {
-            return meteordevelopment.meteorclient.MeteorClient.mc.world.getBlockState(pos);
+            return meteordevelopment.meteorclient.MeteorClient.mc.level.getBlockState(pos);
         }
 
         public void damage(float amount) { blockDamage += amount; }

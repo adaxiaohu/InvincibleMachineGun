@@ -1,6 +1,6 @@
 package com.codigohasta.addon.modules;
 
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.phys.Vec3;
 
 import com.codigohasta.addon.AddonTemplate;
 import meteordevelopment.meteorclient.events.render.Render3DEvent;
@@ -18,24 +18,25 @@ import meteordevelopment.meteorclient.utils.player.InvUtils;
 import meteordevelopment.meteorclient.utils.render.color.SettingColor;
 import meteordevelopment.meteorclient.utils.player.Rotations;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.EntityType;
-import net.minecraft.entity.passive.TameableEntity;
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.TamableAnimal;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.player.Player;
 
-import net.minecraft.network.packet.c2s.play.HandSwingC2SPacket;
-import net.minecraft.network.packet.c2s.play.PlayerInteractEntityC2SPacket;
-import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket;
-import net.minecraft.network.packet.c2s.play.UpdateSelectedSlotC2SPacket;
-import net.minecraft.util.Hand;
-import net.minecraft.util.math.BlockPos;
+import net.minecraft.network.protocol.game.ServerboundSwingPacket;
+import net.minecraft.network.protocol.game.ServerboundInteractPacket;
+import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
+import net.minecraft.network.protocol.game.ServerboundSetCarriedItemPacket;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.core.BlockPos;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Arrays;
 import java.util.stream.Collectors;
 import java.util.Set;
+import net.minecraft.network.protocol.game.ServerboundAttackPacket;
 
 public class MaceAura extends Module {
     private final SettingGroup sgGeneral = settings.getDefaultGroup();
@@ -223,7 +224,7 @@ public class MaceAura extends Module {
 
     @EventHandler
     private void onTick(TickEvent.Pre event) {
-        if (mc.player == null || mc.world == null) return;
+        if (mc.player == null || mc.level == null) return;
 
         if (timer > 0) {
             timer--;
@@ -238,14 +239,14 @@ public class MaceAura extends Module {
 
         // 安全检查
         // 如果没有开启允许飞行，并且玩家不在地面上，则不执行
-        if (!allowFlight.get() && !mc.player.isOnGround()) {
+        if (!allowFlight.get() && !mc.player.onGround()) {
             return;
         }
 
         // 武器检查与切换
         if (autoSwitch.get()) {
             if (!checkAndSwapWeapon()) return; // 如果开启自动切换但找不到Mace，则不执行后续操作
-        } else if (!(mc.player.getMainHandStack().getItem().toString().contains("mace"))) {
+        } else if (!(mc.player.getMainHandItem().getItem().toString().contains("mace"))) {
             return; // 如果不自动切换且当前没拿Mace，则不执行
         }
 
@@ -266,7 +267,7 @@ public class MaceAura extends Module {
     }
 
     private boolean checkAndSwapWeapon() {
-        if (mc.player.getMainHandStack().getItem().toString().contains("mace")) return true;
+        if (mc.player.getMainHandItem().getItem().toString().contains("mace")) return true;
 
         FindItemResult mace = InvUtils.find(itemStack -> itemStack.getItem().toString().contains("mace"), 0, 8);
         if (mace.found()) {
@@ -302,11 +303,11 @@ public class MaceAura extends Module {
         if (autoHeight.get()) {
             double safeHeight = 0;
             // 从玩家眼睛上方开始检测，这样更精确
-            BlockPos.Mutable checkPos = new BlockPos.Mutable(mc.player.getX(), mc.player.getEyeY(), mc.player.getZ());
+            BlockPos.MutableBlockPos checkPos = new BlockPos.MutableBlockPos(mc.player.getX(), mc.player.getEyeY(), mc.player.getZ());
 
             // 向上检测，直到遇到非空气方块
             for (int i = 0; i < 256; i++) {
-                if (mc.world.getBlockState(checkPos.move(0, 1, 0)).isAir()) {
+                if (mc.level.getBlockState(checkPos.move(0, 1, 0)).isAir()) {
                     safeHeight++;
                 } else {
                     break; // 遇到非空气方块，停止检测
@@ -317,15 +318,15 @@ public class MaceAura extends Module {
 
         // 关键逻辑：无论当前是否飞行，我们都必须把当前位置标记为"Ground Zero"
         // 这样服务器才会开始计算后续的 Fall Distance
-        boolean wasOnGround = mc.player.isOnGround();
+        boolean wasOnGround = mc.player.onGround();
 
         // 1. 冻结速度 (防止位置偏移)
-        mc.player.setVelocity(0, 0, 0);
+        mc.player.setDeltaMovement(0, 0, 0);
 
         // 2. 旋转朝向 (提前对准)
         double yaw = Rotations.getYaw(target);
         double pitch = Rotations.getPitch(target);
-        mc.getNetworkHandler().sendPacket(new PlayerMoveC2SPacket.LookAndOnGround(
+        mc.getConnection().send(new ServerboundMovePlayerPacket.Rot(
             (float) yaw, (float) pitch, wasOnGround, mc.player.horizontalCollision
         ));
         
@@ -367,9 +368,9 @@ public class MaceAura extends Module {
         // 1. 位置在 hitY (距离目标 < 2格，必定命中)
         // 2. onGround = false (处于空中)
         // 3. FallDistance = height (足够触发 Smash)
-        mc.getNetworkHandler().sendPacket(PlayerInteractEntityC2SPacket.attack(target, mc.player.isSneaking()));
+        mc.getConnection().send(new ServerboundAttackPacket(target.getId()));
         if (swingHand.get()) {
-            mc.getNetworkHandler().sendPacket(new HandSwingC2SPacket(Hand.MAIN_HAND));
+            mc.getConnection().send(new ServerboundSwingPacket(InteractionHand.MAIN_HAND));
         }
 
         // --- 8. 落地确认 (Land) ---
@@ -383,7 +384,7 @@ public class MaceAura extends Module {
     }
 
     private void sendPacket(double x, double y, double z, boolean onGround) {
-        mc.player.networkHandler.sendPacket(new PlayerMoveC2SPacket.PositionAndOnGround(
+        mc.player.connection.send(new ServerboundMovePlayerPacket.Pos(
             x, y, z, onGround, mc.player.horizontalCollision
         ));
     }
@@ -396,12 +397,12 @@ public class MaceAura extends Module {
         if (mc.player.distanceTo(entity) > range.get()) return false;
 
         // 视线检查
-        if (!throughWalls.get() && !mc.player.canSee(entity)) {
+        if (!throughWalls.get() && !mc.player.hasLineOfSight(entity)) {
             return false;
         }
 
         // 玩家检查
-        if (entity instanceof PlayerEntity p) {
+        if (entity instanceof Player p) {
             if (!players.get()) return false;
             if (p.isCreative()) return false;
 
@@ -431,7 +432,7 @@ public class MaceAura extends Module {
         }
 
         // 宠物检查
-        if (ignoreTamed.get() && entity instanceof TameableEntity && ((TameableEntity) entity).isTamed()) {
+        if (ignoreTamed.get() && entity instanceof TamableAnimal && ((TamableAnimal) entity).isTame()) {
             return false;
         }
 

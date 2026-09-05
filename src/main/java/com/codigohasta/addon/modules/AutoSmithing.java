@@ -1,6 +1,6 @@
 package com.codigohasta.addon.modules;
 
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.phys.Vec3;
 
 import com.codigohasta.addon.AddonTemplate;
 import meteordevelopment.meteorclient.events.world.TickEvent;
@@ -8,13 +8,13 @@ import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.player.InvUtils;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.item.Items;
-import net.minecraft.item.Item;
-import net.minecraft.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
 
-import net.minecraft.screen.ScreenHandler;
-import net.minecraft.screen.SmithingScreenHandler;
-import net.minecraft.screen.slot.SlotActionType;
+import net.minecraft.world.inventory.AbstractContainerMenu;
+import net.minecraft.world.inventory.SmithingMenu;
+import net.minecraft.world.inventory.ContainerInput;
 
 import java.util.List;
 import java.util.function.Predicate;
@@ -118,9 +118,9 @@ public class AutoSmithing extends Module {
 
     @EventHandler
     private void onTick(TickEvent.Pre event) {
-        if (mc.player == null || mc.world == null) return;
+        if (mc.player == null || mc.level == null) return;
 
-        if (!(mc.player.currentScreenHandler instanceof SmithingScreenHandler handler)) {
+        if (!(mc.player.containerMenu instanceof SmithingMenu handler)) {
             return;
         }
 
@@ -130,11 +130,11 @@ public class AutoSmithing extends Module {
         }
 
         // Slot 3: 取走成品
-        if (handler.getSlot(3).hasStack()) {
+        if (handler.getSlot(3).hasItem()) {
             if (autoDrop.get()) {
-                mc.interactionManager.clickSlot(handler.syncId, 3, 1, SlotActionType.THROW, mc.player);
+                mc.gameMode.handleContainerInput(handler.containerId, 3, 1, ContainerInput.THROW, mc.player);
             } else {
-                mc.interactionManager.clickSlot(handler.syncId, 3, 0, SlotActionType.QUICK_MOVE, mc.player);
+                mc.gameMode.handleContainerInput(handler.containerId, 3, 0, ContainerInput.QUICK_MOVE, mc.player);
             }
             timer = delay.get();
             return;
@@ -147,9 +147,9 @@ public class AutoSmithing extends Module {
         }
     }
 
-    private void handleUpgrade(SmithingScreenHandler handler) {
+    private void handleUpgrade(SmithingMenu handler) {
         // Slot 0: 升级模板
-        if (!handler.getSlot(0).hasStack()) {
+        if (!handler.getSlot(0).hasItem()) {
             int slot = findItem(item -> item == Items.NETHERITE_UPGRADE_SMITHING_TEMPLATE);
             if (slot != -1) {
                 moveToSlot(slot, 0);
@@ -159,7 +159,7 @@ public class AutoSmithing extends Module {
         }
 
         // Slot 2: 升级材料 (合金锭)
-        if (!handler.getSlot(2).hasStack()) {
+        if (!handler.getSlot(2).hasItem()) {
             int slot = findItem(item -> item == Items.NETHERITE_INGOT);
             if (slot != -1) {
                 moveToSlot(slot, 2);
@@ -169,7 +169,7 @@ public class AutoSmithing extends Module {
         }
 
         // Slot 1: 目标装备
-        if (!handler.getSlot(1).hasStack()) {
+        if (!handler.getSlot(1).hasItem()) {
             int slot = findItem(item -> upgradeTargets.get().contains(item));
             if (slot != -1) {
                 moveToSlot(slot, 1);
@@ -178,9 +178,9 @@ public class AutoSmithing extends Module {
         }
     }
 
-    private void handleTrim(SmithingScreenHandler handler) {
+    private void handleTrim(SmithingMenu handler) {
         // Slot 0: 纹饰模板 (从列表中选)
-        if (!handler.getSlot(0).hasStack()) {
+        if (!handler.getSlot(0).hasItem()) {
             int slot = findItem(item -> trimTemplates.get().contains(item));
             if (slot != -1) {
                 moveToSlot(slot, 0);
@@ -190,7 +190,7 @@ public class AutoSmithing extends Module {
         }
 
         // Slot 2: 纹饰材料 (颜色，从列表中选)
-        if (!handler.getSlot(2).hasStack()) {
+        if (!handler.getSlot(2).hasItem()) {
             int slot = findItem(item -> trimMaterials.get().contains(item));
             if (slot != -1) {
                 moveToSlot(slot, 2);
@@ -200,7 +200,7 @@ public class AutoSmithing extends Module {
         }
 
         // Slot 1: 目标盔甲
-        if (!handler.getSlot(1).hasStack()) {
+        if (!handler.getSlot(1).hasItem()) {
             int slot = findItem(item -> trimTargets.get().contains(item));
             if (slot != -1) {
                 moveToSlot(slot, 1);
@@ -210,9 +210,9 @@ public class AutoSmithing extends Module {
     }
 
     private int findItem(Predicate<Item> predicate) {
-        ScreenHandler handler = mc.player.currentScreenHandler;
+        AbstractContainerMenu handler = mc.player.containerMenu;
         for (int i = 4; i < handler.slots.size(); i++) {
-            if (handler.getSlot(i).hasStack() && predicate.test(handler.getSlot(i).getStack().getItem())) {
+            if (handler.getSlot(i).hasItem() && predicate.test(handler.getSlot(i).getItem().getItem())) {
                 return i;
             }
         }

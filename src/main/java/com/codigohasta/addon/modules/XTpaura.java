@@ -13,22 +13,23 @@ import meteordevelopment.meteorclient.utils.entity.TargetUtils;
 import meteordevelopment.meteorclient.utils.player.ChatUtils;
 import meteordevelopment.meteorclient.utils.render.color.Color;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.EntityType;
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.entity.passive.TameableEntity;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.entity.TamableAnimal;
 import meteordevelopment.meteorclient.systems.friends.Friends;
-import net.minecraft.network.packet.c2s.play.HandSwingC2SPacket;
-import net.minecraft.network.packet.c2s.play.PlayerInteractEntityC2SPacket;
-import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket;
-import net.minecraft.util.Hand;
-import net.minecraft.util.math.Box;
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.network.protocol.game.ServerboundSwingPacket;
+import net.minecraft.network.protocol.game.ServerboundInteractPacket;
+import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import net.minecraft.network.protocol.game.ServerboundAttackPacket;
 
 public class XTpaura extends Module {
 
@@ -36,7 +37,7 @@ public class XTpaura extends Module {
     private final SettingGroup sgTpOptions = settings.createGroup("TP Options");
     private final SettingGroup sgMace = settings.createGroup("Mace Exploit");
     private final SettingGroup sgRender = settings.createGroup("Render");
-    private final List<Vec3d> renderPath = new ArrayList<>();
+    private final List<Vec3> renderPath = new ArrayList<>();
 
     // ================= [ General Settings ] =================
     private final Setting<Set<EntityType<?>>> entities = sgGeneral.add(new EntityTypeListSetting.Builder()
@@ -241,7 +242,7 @@ public class XTpaura extends Module {
 
     @EventHandler
     private void onTick(TickEvent.Pre event) {
-        if (mc.player == null || mc.world == null) return;
+        if (mc.player == null || mc.level == null) return;
 
         updateTarget();
         doAura();
@@ -251,8 +252,8 @@ public class XTpaura extends Module {
 private void onRender3D(Render3DEvent event) {
     if (render.get() && !renderPath.isEmpty()) {
         for (int i = 0; i < renderPath.size() - 1; i++) {
-            event.renderer.line(renderPath.get(i).getX(), renderPath.get(i).getY(), renderPath.get(i).getZ(), 
-                               renderPath.get(i + 1).getX(), renderPath.get(i + 1).getY(), renderPath.get(i + 1).getZ(), Color.RED);
+            event.renderer.line(renderPath.get(i).x(), renderPath.get(i).y(), renderPath.get(i).z(), 
+                               renderPath.get(i + 1).x(), renderPath.get(i + 1).y(), renderPath.get(i + 1).z(), Color.RED);
         }
     }
 }
@@ -277,18 +278,18 @@ private void onRender3D(Render3DEvent event) {
         if (!(entity instanceof LivingEntity) || !entity.isAlive() || entity == mc.player) return false;
         if (!entities.get().contains(entity.getType())) return false;
         if (mc.player.distanceTo(entity) > range.get()) return false;
-        if (entity instanceof PlayerEntity p) {
+        if (entity instanceof Player p) {
             if (p.isCreative() || p.isSpectator()) return false;
             if (ignoreFriends.get() && Friends.get().isFriend(p)) return false;
         }
         if (ignoreNamed.get() && entity.hasCustomName()) return false;
-        if (ignoreTamed.get() && entity instanceof TameableEntity && ((TameableEntity) entity).isTamed()) return false;
+        if (ignoreTamed.get() && entity instanceof TamableAnimal && ((TamableAnimal) entity).isTame()) return false;
         return true;
     }
 
     private boolean isReadyToAttack() {
         if (useCooldown.get()) {
-            return mc.player.getAttackCooldownProgress(0.0f) >= useCooldownBaseTime.get();
+            return mc.player.getAttackStrengthScale(0.0f) >= useCooldownBaseTime.get();
         } else {
             return System.currentTimeMillis() - lastAttackTime >= attackDelay.get();
         }
@@ -299,28 +300,28 @@ private void onRender3D(Render3DEvent event) {
     if (!isReadyToAttack() || target == null || target.isRemoved() || !target.isAlive()) return;
 
 
-    Vec3d playerPos = new Vec3d(mc.player.getX(), mc.player.getY(), mc.player.getZ());
-    Vec3d targetBasePos = new Vec3d(target.getX(), target.getY(), target.getZ());
+    Vec3 playerPos = new Vec3(mc.player.getX(), mc.player.getY(), mc.player.getZ());
+    Vec3 targetBasePos = new Vec3(target.getX(), target.getY(), target.getZ());
 
 
     if (playerPos.distanceTo(targetBasePos) > range.get()) return;
 
   
-    Vec3d targetVec = new Vec3d(
-        targetBasePos.getX() + target.getVelocity().x * prev.get(),
-        targetBasePos.getY() + target.getVelocity().y * prev.get(),
-        targetBasePos.getZ() + target.getVelocity().z * prev.get()
+    Vec3 targetVec = new Vec3(
+        targetBasePos.x() + target.getDeltaMovement().x * prev.get(),
+        targetBasePos.y() + target.getDeltaMovement().y * prev.get(),
+        targetBasePos.z() + target.getDeltaMovement().z * prev.get()
     );
 
 
-    Vec3d attackPos = null;
+    Vec3 attackPos = null;
 
-    Vec3d[] attackTries = {
-        new Vec3d(targetVec.getX(), targetVec.getY() + target.getStandingEyeHeight() + 0.5, targetVec.getZ()),
-        new Vec3d(targetVec.getX() + 0.2, targetVec.getY(), targetVec.getZ() + 0.2),
+    Vec3[] attackTries = {
+        new Vec3(targetVec.x(), targetVec.y() + target.getEyeHeight() + 0.5, targetVec.z()),
+        new Vec3(targetVec.x() + 0.2, targetVec.y(), targetVec.z() + 0.2),
         targetVec
     };
-    for (Vec3d p : attackTries) {
+    for (Vec3 p : attackTries) {
         if (isSpaceEmpty(p)) {
             attackPos = p;
             break;
@@ -329,20 +330,20 @@ private void onRender3D(Render3DEvent event) {
     if (attackPos == null) return;
 
 
-    Vec3d vClipStart = null; 
-    Vec3d vClipEnd = null;   
+    Vec3 vClipStart = null; 
+    Vec3 vClipEnd = null;   
     boolean foundPath = false;
 
   
-    double horizontalDist = new Vec3d(playerPos.x, 0, playerPos.z).distanceTo(new Vec3d(attackPos.x, 0, attackPos.z));
+    double horizontalDist = new Vec3(playerPos.x, 0, playerPos.z).distanceTo(new Vec3(attackPos.x, 0, attackPos.z));
     
 
     double maxHeight = Math.max(playerPos.y, attackPos.y);
     double startSearchHeight = maxHeight + 3.0; 
 
     for (double yLevel = startSearchHeight; yLevel < startSearchHeight + 50.0; yLevel += 2.0) {
-        Vec3d testUp = new Vec3d(playerPos.x, yLevel, playerPos.z);
-        Vec3d testTargetUp = new Vec3d(attackPos.x, yLevel, attackPos.z);
+        Vec3 testUp = new Vec3(playerPos.x, yLevel, playerPos.z);
+        Vec3 testTargetUp = new Vec3(attackPos.x, yLevel, attackPos.z);
         
 
         if (horizontalDist < 0.8) {
@@ -389,19 +390,19 @@ private void onRender3D(Render3DEvent event) {
     lastAttackTime = System.currentTimeMillis();
 
  
-    for (int i = 0; i < 3; i++) sendC04(playerPos.getX(), playerPos.getY(), playerPos.getZ(), false);
+    for (int i = 0; i < 3; i++) sendC04(playerPos.x(), playerPos.y(), playerPos.z(), false);
 
   
-    sendC04(vClipStart.getX(), vClipStart.getY(), vClipStart.getZ(), false);
+    sendC04(vClipStart.x(), vClipStart.y(), vClipStart.z(), false);
     if (vClipStart.distanceTo(vClipEnd) > 0.1) {
-    sendC04(vClipEnd.getX(), vClipEnd.getY(), vClipEnd.getZ(), false);
+    sendC04(vClipEnd.x(), vClipEnd.y(), vClipEnd.z(), false);
     }
-    sendC04(attackPos.getX(), attackPos.getY(), attackPos.getZ(), false);
+    sendC04(attackPos.x(), attackPos.y(), attackPos.z(), false);
 
   
     if (critical.get()) {
-        sendC04(attackPos.getX(), attackPos.getY() + 0.01, attackPos.getZ(), false);
-        sendC04(attackPos.getX(), attackPos.getY(), attackPos.getZ(), false);
+        sendC04(attackPos.x(), attackPos.y() + 0.01, attackPos.z(), false);
+        sendC04(attackPos.x(), attackPos.y(), attackPos.z(), false);
     }
 
     
@@ -409,7 +410,7 @@ private void onRender3D(Render3DEvent event) {
     int maceSlot = -1;
     if (useMace.get()) {
         for (int i = 0; i < 9; i++) {
-            if (mc.player.getInventory().getStack(i).getItem().toString().contains("mace")) {
+            if (mc.player.getInventory().getItem(i).getItem().toString().contains("mace")) {
                 maceSlot = i;
                 break;
             }
@@ -418,53 +419,53 @@ private void onRender3D(Render3DEvent event) {
 
     if (maceSlot != -1) {
         ((InventoryAccessor) mc.player.getInventory()).setSelectedSlot(maceSlot);
-        mc.getNetworkHandler().sendPacket(PlayerInteractEntityC2SPacket.attack(target, mc.player.isSneaking()));
+        mc.getConnection().send(new ServerboundAttackPacket(target.getId()));
         ((InventoryAccessor) mc.player.getInventory()).setSelectedSlot(oldSlot);
     } else {
         for (int i = 0; i < attackTimes.get(); i++) {
-            mc.getNetworkHandler().sendPacket(PlayerInteractEntityC2SPacket.attack(target, mc.player.isSneaking()));
+            mc.getConnection().send(new ServerboundAttackPacket(target.getId()));
         }
     }
 
     if (swingHand.get()) {
-        mc.getNetworkHandler().sendPacket(new HandSwingC2SPacket(Hand.MAIN_HAND));
-        mc.player.swingHand(Hand.MAIN_HAND);
+        mc.getConnection().send(new ServerboundSwingPacket(InteractionHand.MAIN_HAND));
+        mc.player.swing(InteractionHand.MAIN_HAND);
     }
 
     
      if (back.get()) {
        
-        sendC04(vClipEnd.getX(), vClipEnd.getY(), vClipEnd.getZ(), false);
-        sendC04(vClipStart.getX(), vClipStart.getY(), vClipStart.getZ(), false);
+        sendC04(vClipEnd.x(), vClipEnd.y(), vClipEnd.z(), false);
+        sendC04(vClipStart.x(), vClipStart.y(), vClipStart.z(), false);
         
         
         double tinyOffset = 0.01;
-        double finalX = playerPos.getX();
-        double finalY = playerPos.getY() + tinyOffset; 
-        double finalZ = playerPos.getZ();
+        double finalX = playerPos.x();
+        double finalY = playerPos.y() + tinyOffset; 
+        double finalZ = playerPos.z();
 
       
         sendC04(finalX, finalY, finalZ, false); 
         
     
-        mc.player.setPosition(finalX, finalY, finalZ);
+        mc.player.setPos(finalX, finalY, finalZ);
         
     } else {
     
-        mc.player.setPosition(attackPos.getX(), attackPos.getY(), attackPos.getZ());
+        mc.player.setPos(attackPos.x(), attackPos.y(), attackPos.z());
     }
 
     // F. 状态清理
     mc.player.fallDistance = 0.0f; 
-    mc.player.resetTicksSinceLastAttack();
+    mc.player.resetOnlyAttackStrengthTicker();
 }
 
 
-   private boolean hasClearPath(Vec3d start, Vec3d end) {
+   private boolean hasClearPath(Vec3 start, Vec3 end) {
     double dist = start.distanceTo(end);
     int steps = (int) (dist * 2.5); // 每格检测2.5次，防止漏掉薄方块
     for (int i = 0; i <= steps; i++) {
-        Vec3d check = start.lerp(end, (double) i / steps);
+        Vec3 check = start.lerp(end, (double) i / steps);
         if (!isSpaceEmpty(check)) return false;
     }
     return true;
@@ -474,23 +475,23 @@ private void onRender3D(Render3DEvent event) {
 
     private void sendC04(double x, double y, double z, boolean onGround) {
         // 1.21.x Record Data Packet 发包规范
-        mc.getNetworkHandler().sendPacket(new PlayerMoveC2SPacket.PositionAndOnGround(x, y, z, onGround, mc.player.horizontalCollision));
+        mc.getConnection().send(new ServerboundMovePlayerPacket.Pos(x, y, z, onGround, mc.player.horizontalCollision));
     }
 
-    private boolean isSpaceEmpty(Vec3d pos) {
+    private boolean isSpaceEmpty(Vec3 pos) {
     // 模拟一个 0.6宽 x 1.8高的碰撞箱
-    Box box = new Box(pos.getX() - 0.3, pos.getY(), pos.getZ() - 0.3, pos.getX() + 0.3, pos.getY() + 1.8, pos.getZ() + 0.3);
-    return mc.world.isSpaceEmpty(box);
+    AABB box = new AABB(pos.x() - 0.3, pos.y(), pos.z() - 0.3, pos.x() + 0.3, pos.y() + 1.8, pos.z() + 0.3);
+    return mc.level.noCollision(box);
 }
 
   
-    private Vec3d findVecToAttack(Vec3d targetVec, double targetHeight) {
-        double startY = targetVec.getY();
-        double endY = targetVec.getY() + targetHeight + 1.0;
+    private Vec3 findVecToAttack(Vec3 targetVec, double targetHeight) {
+        double startY = targetVec.y();
+        double endY = targetVec.y() + targetHeight + 1.0;
 
        
-        if (isSpaceEmpty(new Vec3d(targetVec.getX(), endY, targetVec.getZ()))) {
-            return new Vec3d(targetVec.getX(), endY, targetVec.getZ());
+        if (isSpaceEmpty(new Vec3(targetVec.x(), endY, targetVec.z()))) {
+            return new Vec3(targetVec.x(), endY, targetVec.z());
         }
 
 
@@ -502,10 +503,10 @@ private void onRender3D(Render3DEvent event) {
      
         for (double y = startY; y <= endY; y += 1.0) {
             for (double[] offset : offsets) {
-                double checkX = targetVec.getX() + offset[0];
-                double checkZ = targetVec.getZ() + offset[1];
-                if (isSpaceEmpty(new Vec3d(checkX, y, checkZ))) {
-                    return new Vec3d(checkX, y, checkZ);
+                double checkX = targetVec.x() + offset[0];
+                double checkZ = targetVec.z() + offset[1];
+                if (isSpaceEmpty(new Vec3(checkX, y, checkZ))) {
+                    return new Vec3(checkX, y, checkZ);
                 }
             }
         }
@@ -514,7 +515,7 @@ private void onRender3D(Render3DEvent event) {
     }
 
     
-      private Vec3d findVClipVecToMove(Vec3d start, Vec3d end, double step, boolean allowVoid) {
+      private Vec3 findVClipVecToMove(Vec3 start, Vec3 end, double step, boolean allowVoid) {
         VClipMode mode = searchVclipMode.get();
         if (mode == VClipMode.NONE) {
             return start; 
@@ -526,9 +527,9 @@ private void onRender3D(Render3DEvent event) {
 
         if (mode == VClipMode.UP || mode == VClipMode.NORMAL) {
             for (double i = 0.0; i < maxSearchDistance; i += step) {
-                clipY = start.getY() + i;
-                Vec3d testStart = new Vec3d(start.getX(), clipY, start.getZ());
-                Vec3d testEnd = new Vec3d(end.getX(), clipY, end.getZ());
+                clipY = start.y() + i;
+                Vec3 testStart = new Vec3(start.x(), clipY, start.z());
+                Vec3 testEnd = new Vec3(end.x(), clipY, end.z());
                 
                
                 if (hasClearPath(testStart, testEnd)) {
@@ -538,11 +539,11 @@ private void onRender3D(Render3DEvent event) {
             }
         } else if (mode == VClipMode.DOWN) {
             for (double i = 0.0; i < maxSearchDistance; i += step) {
-                clipY = start.getY() - i;
-                if (!allowVoid && clipY < mc.world.getBottomY()) break; 
+                clipY = start.y() - i;
+                if (!allowVoid && clipY < mc.level.getMinY()) break; 
                 
-                Vec3d testStart = new Vec3d(start.getX(), clipY, start.getZ());
-                Vec3d testEnd = new Vec3d(end.getX(), clipY, end.getZ());
+                Vec3 testStart = new Vec3(start.x(), clipY, start.z());
+                Vec3 testEnd = new Vec3(end.x(), clipY, end.z());
 
                 if (hasClearPath(testStart, testEnd)) {
                     foundSafePath = true;
@@ -552,7 +553,7 @@ private void onRender3D(Render3DEvent event) {
         }
 
         if (foundSafePath) {
-            return new Vec3d(start.getX(), clipY, start.getZ());
+            return new Vec3(start.x(), clipY, start.z());
         }
 
         return start;

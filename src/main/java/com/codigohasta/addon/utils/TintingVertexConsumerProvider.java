@@ -1,14 +1,14 @@
 package com.codigohasta.addon.utils;
 
-import net.minecraft.client.render.RenderLayer;
-import net.minecraft.client.render.VertexConsumer;
-import net.minecraft.client.render.VertexConsumerProvider;
+import net.minecraft.client.renderer.rendertype.RenderType;
+import com.mojang.blaze3d.vertex.VertexConsumer;
+import net.minecraft.client.renderer.MultiBufferSource;
 
-public class TintingVertexConsumerProvider implements VertexConsumerProvider {
-    private final VertexConsumerProvider delegate;
+public class TintingVertexConsumerProvider implements MultiBufferSource {
+    private final MultiBufferSource delegate;
     private final float r, g, b, a;
 
-    public TintingVertexConsumerProvider(VertexConsumerProvider delegate, float r, float g, float b, float a) {
+    public TintingVertexConsumerProvider(MultiBufferSource delegate, float r, float g, float b, float a) {
         this.delegate = delegate;
         this.r = r;
         this.g = g;
@@ -17,7 +17,7 @@ public class TintingVertexConsumerProvider implements VertexConsumerProvider {
     }
 
     @Override
-    public VertexConsumer getBuffer(RenderLayer layer) {
+    public VertexConsumer getBuffer(RenderType layer) {
         return new TintingVertexConsumer(delegate.getBuffer(layer), r, g, b, a);
     }
 }

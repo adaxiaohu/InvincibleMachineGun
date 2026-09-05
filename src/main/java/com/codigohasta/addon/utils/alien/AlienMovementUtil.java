@@ -1,51 +1,51 @@
 package com.codigohasta.addon.utils.alien;
 
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.util.math.MathHelper;
+import net.minecraft.client.Minecraft;
+import net.minecraft.util.Mth;
 
 public class AlienMovementUtil {
-    private static final MinecraftClient mc = MinecraftClient.getInstance();
+    private static final Minecraft mc = Minecraft.getInstance();
 
     public static boolean isMoving() {
         if (mc.player == null) return false;
-        return mc.player.input.playerInput.forward()
-            || mc.player.input.playerInput.backward()
-            || mc.player.input.playerInput.left()
-            || mc.player.input.playerInput.right();
+        return mc.player.input.keyPresses.forward()
+            || mc.player.input.keyPresses.backward()
+            || mc.player.input.keyPresses.left()
+            || mc.player.input.keyPresses.right();
     }
 
     public static double getMotionX() {
-        return mc.player.getVelocity().x;
+        return mc.player.getDeltaMovement().x;
     }
 
     public static void setMotionX(double x) {
-        mc.player.setVelocity(x, mc.player.getVelocity().y, mc.player.getVelocity().z);
+        mc.player.setDeltaMovement(x, mc.player.getDeltaMovement().y, mc.player.getDeltaMovement().z);
     }
 
     public static double getMotionY() {
-        return mc.player.getVelocity().y;
+        return mc.player.getDeltaMovement().y;
     }
 
     public static void setMotionY(double y) {
-        mc.player.setVelocity(mc.player.getVelocity().x, y, mc.player.getVelocity().z);
+        mc.player.setDeltaMovement(mc.player.getDeltaMovement().x, y, mc.player.getDeltaMovement().z);
     }
 
     public static double getMotionZ() {
-        return mc.player.getVelocity().z;
+        return mc.player.getDeltaMovement().z;
     }
 
     public static void setMotionZ(double z) {
-        mc.player.setVelocity(mc.player.getVelocity().x, mc.player.getVelocity().y, z);
+        mc.player.setDeltaMovement(mc.player.getDeltaMovement().x, mc.player.getDeltaMovement().y, z);
     }
 
     public static double[] directionSpeed(double speed) {
         if (mc.player == null) return new double[]{0.0, 0.0};
 
-        float forward = mc.player.input.playerInput.forward() ? 1.0f
-            : (mc.player.input.playerInput.backward() ? -1.0f : 0.0f);
-        float side = mc.player.input.playerInput.left() ? 1.0f
-            : (mc.player.input.playerInput.right() ? -1.0f : 0.0f);
-        float yaw = mc.player.getYaw();
+        float forward = mc.player.input.keyPresses.forward() ? 1.0f
+            : (mc.player.input.keyPresses.backward() ? -1.0f : 0.0f);
+        float side = mc.player.input.keyPresses.left() ? 1.0f
+            : (mc.player.input.keyPresses.right() ? -1.0f : 0.0f);
+        float yaw = mc.player.getYRot();
 
         if (forward == 0.0f && side == 0.0f) return new double[]{0.0, 0.0};
 

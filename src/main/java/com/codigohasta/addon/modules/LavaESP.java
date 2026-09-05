@@ -10,11 +10,11 @@ import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.render.color.Color;
 import meteordevelopment.meteorclient.utils.render.color.SettingColor;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.fluid.FluidState;
-import net.minecraft.registry.tag.FluidTags;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Direction;
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.level.material.FluidState;
+import net.minecraft.tags.FluidTags;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.world.phys.Vec3;
 
 import java.util.*;
 
@@ -126,13 +126,13 @@ public class LavaESP extends Module {
 
     @EventHandler
     private void onTick(TickEvent.Post event) {
-        if (mc.world == null || mc.player == null) return;
+        if (mc.level == null || mc.player == null) return;
 
         tickCounter++;
         if (tickCounter % 2 != 0) return; // 每2 tick扫描一次
 
         int r = range.get();
-        BlockPos playerPos = mc.player.getBlockPos();
+        BlockPos playerPos = mc.player.blockPosition();
         dangerCache.clear();
 
         for (int dx = -r; dx <= r; dx++) {
@@ -141,20 +141,20 @@ public class LavaESP extends Module {
                     double dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
                     if (dist > r) continue;
 
-                    BlockPos checkPos = playerPos.add(dx, dy, dz);
+                    BlockPos checkPos = playerPos.offset(dx, dy, dz);
 
                     // 跳过空气和岩浆方块本身
-                    if (mc.world.isAir(checkPos)) continue;
-                    if (mc.world.getFluidState(checkPos).isIn(FluidTags.LAVA)) continue;
+                    if (mc.level.isEmptyBlock(checkPos)) continue;
+                    if (mc.level.getFluidState(checkPos).is(FluidTags.LAVA)) continue;
 
                     Set<Direction> lavaDirs = new HashSet<>();
                     int sourceCount = 0;
 
                     for (Direction dir : Direction.values()) {
-                        FluidState fluid = mc.world.getFluidState(checkPos.offset(dir));
-                        if (!fluid.isEmpty() && fluid.isIn(FluidTags.LAVA)) {
+                        FluidState fluid = mc.level.getFluidState(checkPos.relative(dir));
+                        if (!fluid.isEmpty() && fluid.is(FluidTags.LAVA)) {
                             lavaDirs.add(dir);
-                            if (fluid.isStill()) sourceCount++;
+                            if (fluid.isSource()) sourceCount++;
                         }
                     }
 
@@ -199,7 +199,7 @@ public class LavaESP extends Module {
                 int labelColor = dangerColors.get() ? getDangerTextColor(danger) : textColor.get().getPacked();
                 AlienRender3DUtil.drawText3D(
                     label,
-                    Vec3d.ofCenter(pos).add(0, 0.85, 0),
+                    Vec3.atCenterOf(pos).add(0, 0.85, 0),
                     2.0, 0.5, Double.MAX_VALUE,
                     labelColor
                 );
@@ -217,15 +217,15 @@ public class LavaESP extends Module {
     // ══════════════════════════════════════════════
 
     private void drawBlockOutline(Render3DEvent event, BlockPos pos, Color color) {
-        Vec3d c = Vec3d.ofCenter(pos);
+        Vec3 c = Vec3.atCenterOf(pos);
 
         // 6个顶点：6个面的中心
-        Vec3d top    = c.add(0,   0.5, 0);
-        Vec3d bottom = c.add(0,  -0.5, 0);
-        Vec3d north  = c.add(0,   0,  -0.5);
-        Vec3d south  = c.add(0,   0,   0.5);
-        Vec3d east   = c.add( 0.5, 0,   0);
-        Vec3d west   = c.add(-0.5, 0,   0);
+        Vec3 top    = c.add(0,   0.5, 0);
+        Vec3 bottom = c.add(0,  -0.5, 0);
+        Vec3 north  = c.add(0,   0,  -0.5);
+        Vec3 south  = c.add(0,   0,   0.5);
+        Vec3 east   = c.add( 0.5, 0,   0);
+        Vec3 west   = c.add(-0.5, 0,   0);
 
         // 上顶点 → 4个侧顶点
         event.renderer.line(top.x, top.y, top.z, north.x, north.y, north.z, color);
@@ -245,10 +245,10 @@ public class LavaESP extends Module {
     // ══════════════════════════════════════════════
 
     private void drawArrow(Render3DEvent event, BlockPos pos, Direction dir, Color color) {
-        Vec3d center = Vec3d.ofCenter(pos);
-        double dx = dir.getOffsetX();
-        double dy = dir.getOffsetY();
-        double dz = dir.getOffsetZ();
+        Vec3 center = Vec3.atCenterOf(pos);
+        double dx = dir.getStepX();
+        double dy = dir.getStepY();
+        double dz = dir.getStepZ();
 
         double shaftLen = 0.5;
         double headLen = 0.2;
@@ -266,35 +266,35 @@ public class LavaESP extends Module {
         event.renderer.line(center.x, center.y, center.z, mx, my, mz, color);
 
         // 计算垂直于箭杆方向的基向量（用于箭头锥体）
-        Vec3d dirVec = new Vec3d(dx, dy, dz);
-        Vec3d up;
+        Vec3 dirVec = new Vec3(dx, dy, dz);
+        Vec3 up;
         if (Math.abs(dy) < 0.9) {
-            up = new Vec3d(0, 1, 0).crossProduct(dirVec).normalize();
+            up = new Vec3(0, 1, 0).cross(dirVec).normalize();
         } else {
-            up = new Vec3d(1, 0, 0).crossProduct(dirVec).normalize();
+            up = new Vec3(1, 0, 0).cross(dirVec).normalize();
         }
-        Vec3d right = dirVec.crossProduct(up).normalize();
+        Vec3 right = dirVec.cross(up).normalize();
 
         // 箭头底部四角
         double hx = tx - dx * headLen;
         double hy = ty - dy * headLen;
         double hz = tz - dz * headLen;
 
-        Vec3d[] base = new Vec3d[]{
-            new Vec3d(hx + right.x * headW + up.x * headW, hy + right.y * headW + up.y * headW, hz + right.z * headW + up.z * headW),
-            new Vec3d(hx - right.x * headW + up.x * headW, hy - right.y * headW + up.y * headW, hz - right.z * headW + up.z * headW),
-            new Vec3d(hx - right.x * headW - up.x * headW, hy - right.y * headW - up.y * headW, hz - right.z * headW - up.z * headW),
-            new Vec3d(hx + right.x * headW - up.x * headW, hy + right.y * headW - up.y * headW, hz + right.z * headW - up.z * headW),
+        Vec3[] base = new Vec3[]{
+            new Vec3(hx + right.x * headW + up.x * headW, hy + right.y * headW + up.y * headW, hz + right.z * headW + up.z * headW),
+            new Vec3(hx - right.x * headW + up.x * headW, hy - right.y * headW + up.y * headW, hz - right.z * headW + up.z * headW),
+            new Vec3(hx - right.x * headW - up.x * headW, hy - right.y * headW - up.y * headW, hz - right.z * headW - up.z * headW),
+            new Vec3(hx + right.x * headW - up.x * headW, hy + right.y * headW - up.y * headW, hz + right.z * headW - up.z * headW),
         };
 
         // 箭头顶端 → 底部四角
-        for (Vec3d b : base) {
+        for (Vec3 b : base) {
             event.renderer.line(tx, ty, tz, b.x, b.y, b.z, color);
         }
         // 底部四角连线（形成菱形底面）
         for (int i = 0; i < 4; i++) {
-            Vec3d a = base[i];
-            Vec3d b = base[(i + 1) % 4];
+            Vec3 a = base[i];
+            Vec3 b = base[(i + 1) % 4];
             event.renderer.line(a.x, a.y, a.z, b.x, b.y, b.z, color);
         }
     }

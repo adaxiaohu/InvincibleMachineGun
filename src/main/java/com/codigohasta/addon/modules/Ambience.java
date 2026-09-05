@@ -8,7 +8,7 @@ import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.render.color.SettingColor;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.network.packet.s2c.play.WorldTimeUpdateS2CPacket;
+import net.minecraft.network.protocol.game.ClientboundSetTimePacket;
 
 public class Ambience extends Module {
     public static Ambience INSTANCE;
@@ -193,13 +193,13 @@ public class Ambience extends Module {
     @EventHandler
     private void onRender2D(Render2DEvent event) {
         if (filterEnabled.get()) {
-            event.drawContext.fill(0, 0, mc.getWindow().getScaledWidth(), mc.getWindow().getScaledHeight(), filterColor.get().getPacked());
+            event.graphics.fill(0, 0, mc.getWindow().getGuiScaledWidth(), mc.getWindow().getGuiScaledHeight(), filterColor.get().getPacked());
         }
     }
 
     @EventHandler
     private void onReceivePacket(PacketEvent.Receive event) {
-        if (event.packet instanceof WorldTimeUpdateS2CPacket && customTime.get()) {
+        if (event.packet instanceof ClientboundSetTimePacket && customTime.get()) {
             event.cancel();
         }
     }

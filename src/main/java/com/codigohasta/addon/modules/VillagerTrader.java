@@ -35,34 +35,34 @@ import meteordevelopment.meteorclient.utils.player.ChatUtils;
 import meteordevelopment.meteorclient.utils.player.FindItemResult;
 import meteordevelopment.meteorclient.utils.player.InvUtils;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.block.BlockState;
-import net.minecraft.block.entity.BlockEntity;
-import net.minecraft.block.entity.BlockEntityType;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.gui.screen.ingame.HandledScreen;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.EntityType;
-import net.minecraft.entity.passive.VillagerEntity;
-import net.minecraft.entity.player.PlayerInventory;
-import net.minecraft.entity.projectile.ProjectileUtil;
-import net.minecraft.item.Item;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
-import net.minecraft.network.packet.c2s.play.SelectMerchantTradeC2SPacket;
-import net.minecraft.screen.Generic3x3ContainerScreenHandler;
-import net.minecraft.screen.GenericContainerScreenHandler;
-import net.minecraft.screen.MerchantScreenHandler;
-import net.minecraft.screen.PlayerScreenHandler;
-import net.minecraft.screen.ShulkerBoxScreenHandler;
-import net.minecraft.util.ActionResult;
-import net.minecraft.util.Hand;
-import net.minecraft.util.hit.EntityHitResult;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Direction;
-import net.minecraft.util.math.Vec3d;
-import net.minecraft.village.TradeOffer;
-import net.minecraft.village.TradeOfferList;
-import net.minecraft.village.VillagerProfession;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.entity.BlockEntityType;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.npc.villager.Villager;
+import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.entity.projectile.ProjectileUtil;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.network.protocol.game.ServerboundSelectTradePacket;
+import net.minecraft.world.inventory.DispenserMenu;
+import net.minecraft.world.inventory.ChestMenu;
+import net.minecraft.world.inventory.MerchantMenu;
+import net.minecraft.world.inventory.InventoryMenu;
+import net.minecraft.world.inventory.ShulkerBoxMenu;
+import net.minecraft.world.InteractionResult;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.phys.EntityHitResult;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.item.trading.MerchantOffer;
+import net.minecraft.world.item.trading.MerchantOffers;
+import net.minecraft.world.entity.npc.villager.VillagerProfession;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -122,7 +122,7 @@ public final Setting<Integer> windowDelay = this.sgGeneral.add(new IntSetting.Bu
 
    @Override
    public void onActivate() {
-      if (mc.player != null && mc.world != null) {
+      if (mc.player != null && mc.level != null) {
          List<VillagerEntityWarp> villagerList = this.getVillagerEntity();
          if (villagerList.isEmpty()) {
             warning("附近没有合适村民");
@@ -135,25 +135,25 @@ public final Setting<Integer> windowDelay = this.sgGeneral.add(new IntSetting.Bu
             double min2 = Double.MAX_VALUE;
             double min3 = Double.MAX_VALUE;
 
-            Vec3d playerPos = new Vec3d(mc.player.getX(), mc.player.getY(), mc.player.getZ());
+            Vec3 playerPos = new Vec3(mc.player.getX(), mc.player.getY(), mc.player.getZ());
             for (BlockEntity blockEntity : Utils.blockEntities()) {
                BlockEntityType<?> type = blockEntity.getType();
                if (this.supplyStorage.get().contains(type)) {
-                  double distanceTo = playerPos.distanceTo(blockEntity.getPos().toCenterPos());
+                  double distanceTo = playerPos.distanceTo(blockEntity.getBlockPos().getCenter());
                   if (distanceTo < this.supplyRange.get() && distanceTo < min1) {
-                     moneyPos = blockEntity.getPos();
+                     moneyPos = blockEntity.getBlockPos();
                      min1 = distanceTo;
                   }
                } else if (this.putStorage.get().contains(type)) {
-                  double distanceTo = playerPos.distanceTo(blockEntity.getPos().toCenterPos());
+                  double distanceTo = playerPos.distanceTo(blockEntity.getBlockPos().getCenter());
                   if (distanceTo < this.supplyRange.get() && distanceTo < min2) {
-                     putPos = blockEntity.getPos();
+                     putPos = blockEntity.getBlockPos();
                      min2 = distanceTo;
                   }
                } else if (type == BlockEntityType.SHULKER_BOX) {
-                  double distanceTo = playerPos.distanceTo(blockEntity.getPos().toCenterPos());
+                  double distanceTo = playerPos.distanceTo(blockEntity.getBlockPos().getCenter());
                   if (distanceTo < this.supplyRange.get() && distanceTo < min3) {
-                     goodsPos = blockEntity.getPos();
+                     goodsPos = blockEntity.getBlockPos();
                      min3 = distanceTo;
                   }
                }
@@ -338,7 +338,7 @@ public final Setting<Integer> windowDelay = this.sgGeneral.add(new IntSetting.Bu
 
    private void closeScreenAndNext() {
     // 检查当前显示的 GUI 是否属于带容器的窗口
-    if (mc.currentScreen instanceof net.minecraft.client.gui.screen.ingame.HandledScreen) {
+    if (mc.screen instanceof net.minecraft.client.gui.screens.inventory.AbstractContainerScreen) {
         HeInvUtils.closeCurScreen();
     }
     this.step = this.closeScreenNextStep;
@@ -364,11 +364,11 @@ public final Setting<Integer> windowDelay = this.sgGeneral.add(new IntSetting.Bu
          }
       }
 
-      PlayerInventory playerInventory = mc.player.getInventory();
+      Inventory playerInventory = mc.player.getInventory();
       int emptyQty = 0;
 
       for (int i = 0; i < 36; i++) {
-         ItemStack itemStack = playerInventory.getStack(i);
+         ItemStack itemStack = playerInventory.getItem(i);
          if (itemStack.isEmpty()) {
             emptyQty++;
          }
@@ -378,27 +378,27 @@ public final Setting<Integer> windowDelay = this.sgGeneral.add(new IntSetting.Bu
    }
 
    private void executeTrade() {
-        if (!(mc.currentScreen instanceof net.minecraft.client.gui.screen.ingame.MerchantScreen)) {
+        if (!(mc.screen instanceof net.minecraft.client.gui.screens.inventory.MerchantScreen)) {
             this.setDelay();
             this.step = VillagerStep.OpenTrade;
             return;
         }
 
-        MerchantScreenHandler handler = (MerchantScreenHandler) mc.player.currentScreenHandler;
-        TradeOfferList tradeOfferList = handler.getRecipes();
+        MerchantMenu handler = (MerchantMenu) mc.player.containerMenu;
+        MerchantOffers tradeOfferList = handler.getOffers();
         boolean foundValidTrade = false;
 
         // 遍历村民的所有交易项
         for (int i = 0; i < tradeOfferList.size(); i++) {
-            TradeOffer trade = tradeOfferList.get(i);
+            MerchantOffer trade = tradeOfferList.get(i);
             
             // 1. 如果这个交易项被锁定了，或者次数用光了，直接跳过看下一个
-            if (trade.isDisabled() || trade.getUses() >= trade.getMaxUses()) {
+            if (trade.isOutOfStock() || trade.getUses() >= trade.getMaxUses()) {
                 continue;
             }
 
-            Item gives = trade.getSellItem().getItem(); // 村民给你的东西 (比如绿宝石)
-            Item wants = trade.getDisplayedFirstBuyItem().getItem(); // 村民要的东西 (比如铁锭)
+            Item gives = trade.getResult().getItem(); // 村民给你的东西 (比如绿宝石)
+            Item wants = trade.getCostA().getItem(); // 村民要的东西 (比如铁锭)
 
             // 2. 匹配我们需要的交易
             // 情景 A: 卖货物赚绿宝石 (wants 是我们设定的商品，gives 是绿宝石)
@@ -409,8 +409,8 @@ public final Setting<Integer> windowDelay = this.sgGeneral.add(new IntSetting.Bu
 
             if (isSellingGoods || isBuyingGoods1 || isBuyingGoods2) {
                 // 3. 检查奸商溢价 (根据你的模式设置)
-                int originCount = trade.getOriginalFirstBuyItem().getCount();
-                int currentPrice = trade.getDisplayedFirstBuyItem().getCount();
+                int originCount = trade.getBaseCostA().getCount();
+                int currentPrice = trade.getCostA().getCount();
                 
                 if (this.mode.get() == VillagerMode.仅一块钱 && currentPrice > 1) {
                     continue; // 太贵了，跳过
@@ -454,8 +454,8 @@ public final Setting<Integer> windowDelay = this.sgGeneral.add(new IntSetting.Bu
                 this.tradedThisSession = true; // <--- 核心！标记为：我们成功交易过了！
                 
                 // 点击交易槽
-                handler.setRecipeIndex(this.tradeIndex);
-                mc.getNetworkHandler().sendPacket(new SelectMerchantTradeC2SPacket(this.tradeIndex));
+                handler.setSelectionHint(this.tradeIndex);
+                mc.getConnection().send(new ServerboundSelectTradePacket(this.tradeIndex));
                 InvUtils.shiftClick().slotId(2);
                 this.setDelay(this.clickDelay.get()); 
             }
@@ -465,7 +465,7 @@ public final Setting<Integer> windowDelay = this.sgGeneral.add(new IntSetting.Bu
     
 
   private void openTrade() {
-      VillagerEntity villager = this.currentVillager.getVillager();
+      Villager villager = this.currentVillager.getVillager();
       
       // 如果村民丢失或者死了，直接把交易次数拉满，今天彻底无视他
       if (villager == null || !villager.isAlive()) {
@@ -475,8 +475,8 @@ public final Setting<Integer> windowDelay = this.sgGeneral.add(new IntSetting.Bu
          return;
       }
 
-      Vec3d villagerPos = new Vec3d(villager.getX(), villager.getY(), villager.getZ());
-      Vec3d playerPos = new Vec3d(mc.player.getX(), mc.player.getY(), mc.player.getZ());
+      Vec3 villagerPos = new Vec3(villager.getX(), villager.getY(), villager.getZ());
+      Vec3 playerPos = new Vec3(mc.player.getX(), mc.player.getY(), mc.player.getZ());
       double distance = villagerPos.distanceTo(playerPos);
       
       if (distance > this.minDistance.get() + 0.5) {
@@ -486,16 +486,16 @@ public final Setting<Integer> windowDelay = this.sgGeneral.add(new IntSetting.Bu
          this.nextVillager();
       } else {
          this.printLog("openTrade");
-         EntityHitResult entityHitResult = ProjectileUtil.raycast(
-               mc.player, playerPos, villagerPos, villager.getBoundingBox(), Entity::canHit, playerPos.squaredDistanceTo(villagerPos)
+         EntityHitResult entityHitResult = ProjectileUtil.getEntityHitResult(
+               mc.player, playerPos, villagerPos, villager.getBoundingBox(), Entity::isPickable, playerPos.distanceToSqr(villagerPos)
             );
             if (entityHitResult == null) {
                if (this.debug.get()) {
                   info("111");
                }
 
-               HeRotationUtils.rotate(villager.getEyePos());
-               mc.interactionManager.interactEntity(mc.player, villager, Hand.MAIN_HAND);
+               HeRotationUtils.rotate(villager.getEyePosition());
+               mc.gameMode.interact(mc.player, villager, new EntityHitResult(villager), InteractionHand.MAIN_HAND);
                this.tradedThisSession = false;
                this.step = VillagerStep.ExecuteTrade;
             } else {
@@ -503,10 +503,10 @@ public final Setting<Integer> windowDelay = this.sgGeneral.add(new IntSetting.Bu
                   info("222");
                }
 
-               HeRotationUtils.rotate(entityHitResult.getEntity().getEyePos());
-               ActionResult actionResult = mc.interactionManager.interactEntityAtLocation(mc.player, villager, entityHitResult, Hand.MAIN_HAND);
-               if (!actionResult.isAccepted()) {
-                  mc.interactionManager.interactEntity(mc.player, villager, Hand.MAIN_HAND);
+               HeRotationUtils.rotate(entityHitResult.getEntity().getEyePosition());
+               InteractionResult actionResult = mc.gameMode.interact(mc.player, villager, entityHitResult, InteractionHand.MAIN_HAND);
+               if (!actionResult.consumesAction()) {
+                  mc.gameMode.interact(mc.player, villager, new EntityHitResult(villager), InteractionHand.MAIN_HAND);
                    this.tradedThisSession = false;
                   this.step = VillagerStep.ExecuteTrade;
                } else {
@@ -535,7 +535,7 @@ public final Setting<Integer> windowDelay = this.sgGeneral.add(new IntSetting.Bu
       }
 
       VillagerEntityWarp best = null;
-      Vec3d pos = new Vec3d(mc.player.getX(), mc.player.getY(), mc.player.getZ());
+      Vec3 pos = new Vec3(mc.player.getX(), mc.player.getY(), mc.player.getZ());
       double minDistance = Double.MAX_VALUE;
       long currentTimeMillis = System.currentTimeMillis();
       long cooldownMs = this.checkCooldown.get() * 1000L;
@@ -569,16 +569,16 @@ public final Setting<Integer> windowDelay = this.sgGeneral.add(new IntSetting.Bu
       }
    }
     private void takeMoney() {
-        var handler = mc.player.currentScreenHandler;
+        var handler = mc.player.containerMenu;
 
-        if (handler instanceof PlayerScreenHandler) {
+        if (handler instanceof InventoryMenu) {
             info("尝试打开绿宝石木桶...");
             HeBlockUtils.open(this.moneyPos);
             this.setDelay(this.windowDelay.get());
             return;
         }
 
-        if (handler instanceof GenericContainerScreenHandler barrelHandler) {
+        if (handler instanceof ChestMenu barrelHandler) {
             FindItemResult emeralds = InvUtils.find(Items.EMERALD);
             // 钱够了，关掉，开始交易
             if (emeralds.found() && emeralds.count() >= 64 * this.supplyQty.get()) {
@@ -591,7 +591,7 @@ public final Setting<Integer> windowDelay = this.sgGeneral.add(new IntSetting.Bu
 
             // 木桶 27 格，遍历
             for (int i = 0; i < 27; i++) {
-                ItemStack stack = barrelHandler.getSlot(i).getStack();
+                ItemStack stack = barrelHandler.getSlot(i).getItem();
                 if (stack.getItem() == Items.EMERALD && !stack.isEmpty()) {
                     InvUtils.shiftClick().slotId(i);
                     this.setDelay(this.clickDelay.get());
@@ -624,10 +624,10 @@ public final Setting<Integer> windowDelay = this.sgGeneral.add(new IntSetting.Bu
     }
 
   private void takeGoods() {
-        var handler = mc.player.currentScreenHandler;
+        var handler = mc.player.containerMenu;
 
         // 状态1：未打开界面，去点潜影盒
-        if (handler instanceof PlayerScreenHandler) {
+        if (handler instanceof InventoryMenu) {
             info("尝试打开商品潜影盒...");
             HeBlockUtils.open(this.goodsPos);
             this.setDelay(this.windowDelay.get());
@@ -635,7 +635,7 @@ public final Setting<Integer> windowDelay = this.sgGeneral.add(new IntSetting.Bu
         }
 
         // 状态2：识别潜影盒界面
-        if (handler instanceof ShulkerBoxScreenHandler shulkerHandler) {
+        if (handler instanceof ShulkerBoxMenu shulkerHandler) {
             FindItemResult currentInv = InvUtils.find(this.goodsItem);
             // 身上货够了，关掉，去补钱
             if (currentInv.found() && currentInv.count() >= 64 * this.supplyQty.get()) {
@@ -648,7 +648,7 @@ public final Setting<Integer> windowDelay = this.sgGeneral.add(new IntSetting.Bu
 
             // 遍历潜影盒 27 个槽位
             for (int i = 0; i < 27; i++) {
-                ItemStack stack = shulkerHandler.getSlot(i).getStack();
+                ItemStack stack = shulkerHandler.getSlot(i).getItem();
                 if (stack.getItem() == this.goodsItem && !stack.isEmpty()) {
                     InvUtils.shiftClick().slotId(i);
                      this.setDelay(this.clickDelay.get());
@@ -677,8 +677,8 @@ public final Setting<Integer> windowDelay = this.sgGeneral.add(new IntSetting.Bu
 
    private void gotoIfNeed(BlockPos targetPos, String msg, VillagerStep nextStep) {
         // 获取当前位置
-        Vec3d currentPos = new Vec3d(mc.player.getX(), mc.player.getY(), mc.player.getZ());
-        double dist = currentPos.distanceTo(targetPos.toCenterPos());
+        Vec3 currentPos = new Vec3(mc.player.getX(), mc.player.getY(), mc.player.getZ());
+        double dist = currentPos.distanceTo(targetPos.getCenter());
         
         // 打印调试信息，看为什么不走
         if (debug.get()) info("目标距离: " + dist);
@@ -694,16 +694,16 @@ public final Setting<Integer> windowDelay = this.sgGeneral.add(new IntSetting.Bu
     }
 
    private void put() {
-        var handler = mc.player.currentScreenHandler;
+        var handler = mc.player.containerMenu;
 
-        if (handler instanceof net.minecraft.screen.PlayerScreenHandler) {
+        if (handler instanceof net.minecraft.world.inventory.InventoryMenu) {
             info("尝试打开卸货大箱子...");
             HeBlockUtils.open(this.putPos);
             this.setDelay(this.windowDelay.get());
             return;
         }
 
-        if (handler instanceof GenericContainerScreenHandler || handler instanceof net.minecraft.screen.ShulkerBoxScreenHandler) {
+        if (handler instanceof ChestMenu || handler instanceof net.minecraft.world.inventory.ShulkerBoxMenu) {
             List<Item> toDump = new ArrayList<>();
             // 正常买进的东西肯定要存
             toDump.addAll(this.buy1.get());
@@ -762,17 +762,17 @@ public final Setting<Integer> windowDelay = this.sgGeneral.add(new IntSetting.Bu
    }
 
    private long timeOfDay() {
-      return mc.world.getTimeOfDay() % 24000L;
+      return mc.level.getOverworldClockTime() % 24000L;
    }
 
    private List<VillagerEntityWarp> getVillagerEntity() {
       List<VillagerEntityWarp> villagerList = new ArrayList<>();
 
-      for (Entity entity : mc.world.getEntities()) {
-         if (entity instanceof VillagerEntity villager) {
+      for (Entity entity : mc.level.entitiesForRendering()) {
+         if (entity instanceof Villager villager) {
             double y = entity.getY() - mc.player.getY();
             if (y >= -2.0 && y <= 2.0) {
-               net.minecraft.registry.entry.RegistryEntry<VillagerProfession> profession = villager.getVillagerData().profession();
+               net.minecraft.core.Holder<VillagerProfession> profession = villager.getVillagerData().profession();
                VillagerType currentType = VillagerType.valueOf(profession);
                if (currentType != null
                   && (this.one.get() && currentType == this.type1.get() || this.two.get() && currentType == this.type2.get())) {
@@ -790,7 +790,7 @@ public final Setting<Integer> windowDelay = this.sgGeneral.add(new IntSetting.Bu
                   }
 
                   if (pos != null) {
-                     villagerList.add(new VillagerEntityWarp(villager.getUuid(), pos));
+                     villagerList.add(new VillagerEntityWarp(villager.getUUID(), pos));
                   }
                }
             }
@@ -800,12 +800,12 @@ public final Setting<Integer> windowDelay = this.sgGeneral.add(new IntSetting.Bu
       return villagerList;
    }
 
-   private BlockPos getOperatePos(VillagerEntity villager, VillagerType currentType, Direction direction) {
-      BlockPos blockPos = villager.getBlockPos().offset(direction);
-      BlockState blockState = mc.world.getBlockState(blockPos);
+   private BlockPos getOperatePos(Villager villager, VillagerType currentType, Direction direction) {
+      BlockPos blockPos = villager.blockPosition().relative(direction);
+      BlockState blockState = mc.level.getBlockState(blockPos);
       if (blockState.getBlock().asItem() == currentType.getItem()) {
-         BlockPos pos = blockPos.offset(direction);
-         if (mc.world.getBlockState(pos).isAir()) {
+         BlockPos pos = blockPos.relative(direction);
+         if (mc.level.getBlockState(pos).isAir()) {
             return pos;
          }
       }

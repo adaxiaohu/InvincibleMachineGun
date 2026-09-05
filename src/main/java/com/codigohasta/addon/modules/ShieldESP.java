@@ -1,6 +1,6 @@
 package com.codigohasta.addon.modules;
 
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.phys.Vec3;
 
 import com.codigohasta.addon.AddonTemplate;
 import meteordevelopment.meteorclient.events.render.Render3DEvent;
@@ -9,9 +9,9 @@ import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.render.color.SettingColor;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.util.math.MathHelper;
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.util.Mth;
+import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -105,9 +105,9 @@ public class ShieldESP extends Module {
 
     @EventHandler
     private void onRender3D(Render3DEvent event) {
-        if (mc.world == null || mc.player == null) return;
+        if (mc.level == null || mc.player == null) return;
 
-        for (PlayerEntity player : mc.world.getPlayers()) {
+        for (Player player : mc.level.players()) {
             // 如果玩家是自己，且“显示自己”未开启，则跳过
             if (player == mc.player && !renderSelf.get()) continue;
 
@@ -117,21 +117,21 @@ public class ShieldESP extends Module {
         }
     }
 
-    private void renderShieldArc(Render3DEvent event, PlayerEntity player) {
+    private void renderShieldArc(Render3DEvent event, Player player) {
         // 判断是自己还是别人，选择对应的颜色
         boolean isMe = (player == mc.player);
         SettingColor currentSideColor = isMe ? selfSideColor.get() : otherSideColor.get();
         SettingColor currentLineColor = isMe ? selfLineColor.get() : otherLineColor.get();
 
         // 坐标计算
-        double x = MathHelper.lerp(event.tickDelta, player.lastRenderX, player.getX());
-        double y = MathHelper.lerp(event.tickDelta, player.lastRenderY, player.getY()) + height.get();
-        double z = MathHelper.lerp(event.tickDelta, player.lastRenderZ, player.getZ());
+        double x = Mth.lerp(event.tickDelta, player.xOld, player.getX());
+        double y = Mth.lerp(event.tickDelta, player.yOld, player.getY()) + height.get();
+        double z = Mth.lerp(event.tickDelta, player.zOld, player.getZ());
 
-        float yaw = MathHelper.lerp(event.tickDelta, player.lastBodyYaw, player.bodyYaw);
+        float yaw = Mth.lerp(event.tickDelta, player.yBodyRotO, player.yBodyRot);
 
-        List<Vec3d> points = new ArrayList<>();
-        Vec3d center = new Vec3d(x, y, z);
+        List<Vec3> points = new ArrayList<>();
+        Vec3 center = new Vec3(x, y, z);
         points.add(center);
 
         int segs = segments.get();
@@ -145,14 +145,14 @@ public class ShieldESP extends Module {
             double px = x + Math.sin(radians) * r;
             double pz = z - Math.cos(radians) * r;
 
-            points.add(new Vec3d(px, y, pz));
+            points.add(new Vec3(px, y, pz));
         }
 
         // 绘制填充
         if (shapeMode.get() != ShapeMode.Lines) {
             for (int i = 1; i < points.size() - 1; i++) {
-                Vec3d p1 = points.get(i);
-                Vec3d p2 = points.get(i + 1);
+                Vec3 p1 = points.get(i);
+                Vec3 p2 = points.get(i + 1);
                 
                 // 正面
                 event.renderer.quad(
@@ -175,15 +175,15 @@ public class ShieldESP extends Module {
 
         // 绘制线条
         if (shapeMode.get() != ShapeMode.Sides) {
-            Vec3d start = points.get(1);
-            Vec3d end = points.get(points.size() - 1);
+            Vec3 start = points.get(1);
+            Vec3 end = points.get(points.size() - 1);
             
             event.renderer.line(center.x, center.y, center.z, start.x, start.y, start.z, currentLineColor);
             event.renderer.line(center.x, center.y, center.z, end.x, end.y, end.z, currentLineColor);
 
             for (int i = 1; i < points.size() - 1; i++) {
-                Vec3d p1 = points.get(i);
-                Vec3d p2 = points.get(i + 1);
+                Vec3 p1 = points.get(i);
+                Vec3 p2 = points.get(i + 1);
                 event.renderer.line(p1.x, p1.y, p1.z, p2.x, p2.y, p2.z, currentLineColor);
             }
         }

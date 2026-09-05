@@ -2,7 +2,7 @@ package com.codigohasta.addon.utils;
 
 import java.util.ArrayList;
 import meteordevelopment.meteorclient.systems.modules.Module;
-import net.minecraft.util.math.MathHelper;
+import net.minecraft.util.Mth;
 
 public class CamUtils {
     public static final ArrayList<Module> inUse = new ArrayList<>();
@@ -20,7 +20,7 @@ public class CamUtils {
         prevPitch = pitch;
         yaw = (float) ((double) yaw + deltaX);
         pitch = (float) ((double) pitch + deltaY);
-        pitch = MathHelper.clamp(pitch, -90.0F, 90.0F);
+        pitch = Mth.clamp(pitch, -90.0F, 90.0F);
     }
 
     public static void add(Module m) {
@@ -36,11 +36,11 @@ public class CamUtils {
     }
 
     public static double getYaw(float tickDelta) {
-        return MathHelper.lerp(tickDelta, prevYaw, yaw);
+        return Mth.lerp(tickDelta, prevYaw, yaw);
     }
 
     public static double getPitch(float tickDelta) {
-        return MathHelper.lerp(tickDelta, prevPitch, pitch);
+        return Mth.lerp(tickDelta, prevPitch, pitch);
     }
 
     public static float pitch() {

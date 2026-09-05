@@ -8,11 +8,12 @@ import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.player.InvUtils;
 import meteordevelopment.meteorclient.utils.player.FindItemResult;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.item.ItemStack;
-import net.minecraft.network.packet.c2s.play.PlayerInteractEntityC2SPacket;
-import net.minecraft.network.packet.c2s.play.UpdateSelectedSlotC2SPacket;
-import net.minecraft.util.Hand;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.network.protocol.game.ServerboundInteractPacket;
+import net.minecraft.network.protocol.game.ServerboundSetCarriedItemPacket;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.network.protocol.game.ServerboundAttackPacket;
 
 public class MaceBreakerPro extends Module {
     private final SettingGroup sgGeneral = settings.getDefaultGroup();
@@ -33,7 +34,7 @@ public class MaceBreakerPro extends Module {
 
     @EventHandler
     private void onAttackEntity(AttackEntityEvent event) {
-        if (event.entity == null || mc.player == null || mc.world == null) return;
+        if (event.entity == null || mc.player == null || mc.level == null) return;
 
         // 1. 目标举盾检测
         if (onlyOnShield.get()) {
@@ -46,7 +47,7 @@ public class MaceBreakerPro extends Module {
         }
 
         // 2. 检查当前手持物品 (字符串判定)
-        ItemStack handStack = mc.player.getMainHandStack();
+        ItemStack handStack = mc.player.getMainHandItem();
         String handItem = handStack.getItem().toString().toLowerCase();
         
         boolean holdingSword = handItem.contains("sword");
@@ -88,19 +89,19 @@ public class MaceBreakerPro extends Module {
         }
         
         // 视觉效果：挥手一次，不然看起来像挂
-        mc.player.swingHand(Hand.MAIN_HAND);
+        mc.player.swing(InteractionHand.MAIN_HAND);
     }
 
     /**
      * 执行单次攻击步骤：切槽 -> 攻击
      */
-    private void performAttackStep(int slot, net.minecraft.entity.Entity target) {
+    private void performAttackStep(int slot, net.minecraft.world.entity.Entity target) {
         // 1. 切换槽位
         performSlotSwitch(slot);
 
         // 2. 发送攻击包
         // 这里不需要再 swingHand，因为我们在最后统一挥手
-        mc.getNetworkHandler().sendPacket(PlayerInteractEntityC2SPacket.attack(target, mc.player.isSneaking()));
+        mc.getConnection().send(new ServerboundAttackPacket(target.getId()));
     }
 
     /**
@@ -113,7 +114,7 @@ public class MaceBreakerPro extends Module {
         if (((InventoryAccessor) mc.player.getInventory()).getSelectedSlot() == slot) return;
 
         // 1. 发送网络包 (告诉服务器我换了)
-        mc.getNetworkHandler().sendPacket(new UpdateSelectedSlotC2SPacket(slot));
+        mc.getConnection().send(new ServerboundSetCarriedItemPacket(slot));
 
         // 2. Legit 模式：强制修改客户端本地内存 (告诉 GrimAC 的模拟器我换了)
         if (legitMode.get()) {

@@ -12,18 +12,18 @@ import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.render.color.Color;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.block.Blocks;
-import net.minecraft.block.FluidBlock;
-import net.minecraft.item.Item;
-import net.minecraft.item.Items;
-import net.minecraft.network.packet.c2s.play.PlayerInteractItemC2SPacket;
-import net.minecraft.util.Hand;
-import net.minecraft.util.hit.HitResult;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Direction;
-import net.minecraft.util.math.Vec3d;
-import net.minecraft.world.RaycastContext;
-import net.minecraft.world.World;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.LiquidBlock;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.Items;
+import net.minecraft.network.protocol.game.ServerboundUseItemPacket;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.phys.HitResult;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.level.ClipContext;
+import net.minecraft.world.level.Level;
 
 import java.util.ArrayList;
 import com.codigohasta.addon.mixin.InventoryAccessor;
@@ -65,20 +65,20 @@ public class LegitNoFallLeaves extends Module {
     }
     @EventHandler
     private void onRender3d(Render3DEvent event) {
-        if (mc.world.getRegistryKey() == World.NETHER) return;
+        if (mc.level.dimension() == Level.NETHER) return;
         int old = ((InventoryAccessor)mc.player.getInventory()).getSelectedSlot();
         int water = hasPlacedWater ? findItem(Items.BUCKET) : findItem(Items.WATER_BUCKET);
         if (water != -1) {
             if (hasPlacedWater && lastPos != null) {
                 Direction clickSide = BlockUtil.getClickSide(lastPos);
                 if (clickSide != null) {
-                    Vec3d directionVec = new Vec3d(lastPos.getX() + 0.5 + clickSide.getVector().getX() * 0.5, lastPos.getY() + 0.5 + clickSide.getVector().getY() * 0.5, lastPos.getZ() + 0.5 + clickSide.getVector().getZ() * 0.5);
+                    Vec3 directionVec = new Vec3(lastPos.getX() + 0.5 + clickSide.getUnitVec3i().getX() * 0.5, lastPos.getY() + 0.5 + clickSide.getUnitVec3i().getY() * 0.5, lastPos.getZ() + 0.5 + clickSide.getUnitVec3i().getZ() * 0.5);
                     doSwap(water);
                     Color color = new Color(70, 177, 229, 80);
                     event.renderer.box(lastPos, color, color, ShapeMode.Both, 0);
                     Rotation.snapAt(directionVec);
-                    mc.player.swingHand(Hand.MAIN_HAND);
-                    mc.getNetworkHandler().sendPacket(new PlayerInteractItemC2SPacket(Hand.MAIN_HAND, 1, Rotation.getRotation(directionVec)[0], Rotation.getRotation(directionVec)[1]));
+                    mc.player.swing(InteractionHand.MAIN_HAND);
+                    mc.getConnection().send(new ServerboundUseItemPacket(InteractionHand.MAIN_HAND, 1, Rotation.getRotation(directionVec)[0], Rotation.getRotation(directionVec)[1]));
                     if (inventorySwap.get()) {
                         doSwap(water);
                     } else {
@@ -88,21 +88,21 @@ public class LegitNoFallLeaves extends Module {
                     hasPlacedWater = false;
                 }
             } else if (!hasPlacedWater) {
-                BlockPos pos = mc.player.getBlockPos().down(checkDown.get());
+                BlockPos pos = mc.player.blockPosition().below(checkDown.get());
                 double[] xzOffset = new double[]{offSet.get(), -offSet.get()};
                 for (double x : xzOffset){
                     for (double z : xzOffset){
                         BlockPos offSetPos = new BlockPosX(pos.getX() + x, pos.getY(), pos.getZ() + z);
-                        if (checkFalling() && !mc.world.isAir(offSetPos) && !mc.world.getBlockState(offSetPos).isReplaceable()) {
-                            Direction side = BlockUtil.getPlaceSide(pos.up(), null);
-                            if (side != null && !behindWall(offSetPos.up())) {
+                        if (checkFalling() && !mc.level.isEmptyBlock(offSetPos) && !mc.level.getBlockState(offSetPos).canBeReplaced()) {
+                            Direction side = BlockUtil.getPlaceSide(pos.above(), null);
+                            if (side != null && !behindWall(offSetPos.above())) {
                                 Color color = new Color(70, 177, 229, 80);
-                                event.renderer.box(offSetPos.up(), color, color, ShapeMode.Both, 0);
+                                event.renderer.box(offSetPos.above(), color, color, ShapeMode.Both, 0);
                                 doSwap(water);
-                                Rotation.snapAt(offSetPos.up().toCenterPos());
-                                lastPos = offSetPos.up();
-                                mc.player.swingHand(Hand.MAIN_HAND);
-                                mc.getNetworkHandler().sendPacket(new PlayerInteractItemC2SPacket(Hand.MAIN_HAND, 1, Rotation.getRotation(offSetPos.up().toCenterPos())[0], Rotation.getRotation(offSetPos.up().toCenterPos())[1]));
+                                Rotation.snapAt(offSetPos.above().getCenter());
+                                lastPos = offSetPos.above();
+                                mc.player.swing(InteractionHand.MAIN_HAND);
+                                mc.getConnection().send(new ServerboundUseItemPacket(InteractionHand.MAIN_HAND, 1, Rotation.getRotation(offSetPos.above().getCenter())[0], Rotation.getRotation(offSetPos.above().getCenter())[1]));
                                 if (inventorySwap.get()) {
                                     doSwap(water);
                                 } else {
@@ -119,12 +119,12 @@ public class LegitNoFallLeaves extends Module {
         }
     }
     public boolean behindWall(BlockPos pos) {
-        Vec3d testVec = new Vec3d(pos.getX() + 0.5, pos.getY() + 2 * 0.85, pos.getZ() + 0.5);
-        HitResult result = mc.world.raycast(new RaycastContext(mc.player.getEyePos(), testVec, RaycastContext.ShapeType.COLLIDER, RaycastContext.FluidHandling.NONE, mc.player));
+        Vec3 testVec = new Vec3(pos.getX() + 0.5, pos.getY() + 2 * 0.85, pos.getZ() + 0.5);
+        HitResult result = mc.level.clip(new ClipContext(mc.player.getEyePosition(), testVec, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, mc.player));
         return result != null && result.getType() != HitResult.Type.MISS;
     }
     private boolean checkFalling() {
-        return mc.player.fallDistance > 3.0f && !mc.player.isOnGround() && !mc.player.isGliding();
+        return mc.player.fallDistance > 3.0f && !mc.player.onGround() && !mc.player.isFallFlying();
     }
     private int findItem(Item item) {
         if (inventorySwap.get()) {

@@ -1,17 +1,17 @@
 package com.codigohasta.addon.utils.leaveshack;
 
-import net.minecraft.client.font.TextRenderer;
-import net.minecraft.client.gui.DrawContext;
-import net.minecraft.client.render.Camera;
-import net.minecraft.client.render.VertexConsumerProvider;
-import net.minecraft.client.util.BufferAllocator;
-import net.minecraft.client.util.math.MatrixStack;
-import net.minecraft.entity.Entity;
-import net.minecraft.text.Text;
-import net.minecraft.util.math.Box;
-import net.minecraft.util.math.MathHelper;
-import net.minecraft.util.math.RotationAxis;
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.client.gui.Font;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.Camera;
+import net.minecraft.client.renderer.MultiBufferSource;
+import com.mojang.blaze3d.vertex.ByteBufferBuilder;
+import com.mojang.blaze3d.vertex.PoseStack;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.network.chat.Component;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.util.Mth;
+import com.mojang.math.Axis;
+import net.minecraft.world.phys.Vec3;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
 import org.joml.Vector4f;
@@ -27,84 +27,84 @@ public class Render3DUtil {
     public static final Matrix4f lastWorldSpaceMatrix = new Matrix4f();
     public static long initTime = System.currentTimeMillis();
 
-    private static void drawWithShadow(MatrixStack matrices, String info, float x, float y, int color) {
-        var immediate = mc.getBufferBuilders().getEntityVertexConsumers();
-        mc.textRenderer.draw(info, x, y, color, true, matrices.peek().getPositionMatrix(), immediate, TextRenderer.TextLayerType.SEE_THROUGH, 0, 0xf000f0);
-        immediate.draw();
+    private static void drawWithShadow(PoseStack matrices, String info, float x, float y, int color) {
+        var immediate = mc.renderBuffers().bufferSource();
+        mc.font.drawInBatch(info, x, y, color, true, matrices.last().pose(), immediate, Font.DisplayMode.SEE_THROUGH, 0, 0xf000f0);
+        immediate.endBatch();
     }
 
-    public static void renderText3D(String info, Vec3d targetPos, int color) {
-        Camera camera = mc.gameRenderer.getCamera();
+    public static void renderText3D(String info, Vec3 targetPos, int color) {
+        Camera camera = mc.gameRenderer.getMainCamera();
         GL11.glDepthFunc(GL11.GL_ALWAYS);
-        MatrixStack matrixStack = new MatrixStack();
-        double x = targetPos.getX();
-        double y = targetPos.getY();
-        double z = targetPos.getZ();
-        int width = mc.textRenderer.getWidth(info);
+        PoseStack matrixStack = new PoseStack();
+        double x = targetPos.x();
+        double y = targetPos.y();
+        double z = targetPos.z();
+        int width = mc.font.width(info);
         float hwidth = width / 2.0f;
         renderInfo(info, hwidth, x, y, z, camera, matrixStack, color);
         GL11.glDepthFunc(GL11.GL_LEQUAL);
     }
 
-    public static void renderInfo(String info, float width, double x, double y, double z, Camera camera, MatrixStack matrices, int color) {
-        final Vec3d pos = camera.getCameraPos();
-        float scale = (float) (-0.025f + (pos.squaredDistanceTo(x, y, z) > (6 * 6) ? (Math.sqrt(pos.squaredDistanceTo(x, y, z)) - 6) * -0.0025f : 0));
-        matrices.push();
-        matrices.multiply(RotationAxis.POSITIVE_X.rotationDegrees(camera.getPitch()));
-        matrices.multiply(RotationAxis.POSITIVE_Y.rotationDegrees(camera.getYaw() + 180.0f));
-        matrices.translate(x - pos.getX(),
-                y - pos.getY() + (scale / -0.025f - 1) / 4,
-                z - pos.getZ());
-        matrices.multiply(RotationAxis.POSITIVE_Y.rotationDegrees(-camera.getYaw()));
-        matrices.multiply(RotationAxis.POSITIVE_X.rotationDegrees(camera.getPitch()));
+    public static void renderInfo(String info, float width, double x, double y, double z, Camera camera, PoseStack matrices, int color) {
+        final Vec3 pos = camera.position();
+        float scale = (float) (-0.025f + (pos.distanceToSqr(x, y, z) > (6 * 6) ? (Math.sqrt(pos.distanceToSqr(x, y, z)) - 6) * -0.0025f : 0));
+        matrices.pushPose();
+        matrices.mulPose(Axis.XP.rotationDegrees(camera.xRot()));
+        matrices.mulPose(Axis.YP.rotationDegrees(camera.yRot() + 180.0f));
+        matrices.translate(x - pos.x(),
+                y - pos.y() + (scale / -0.025f - 1) / 4,
+                z - pos.z());
+        matrices.mulPose(Axis.YP.rotationDegrees(-camera.yRot()));
+        matrices.mulPose(Axis.XP.rotationDegrees(camera.xRot()));
 
         matrices.scale(scale, scale, -1.0f);
 
         drawWithShadow(matrices, info, -width, 0.0f, color);
 
-        matrices.pop();
+        matrices.popPose();
     }
 
-    public static Vec3d worldSpaceToScreenSpace(Vec3d pos) {
+    public static Vec3 worldSpaceToScreenSpace(Vec3 pos) {
         Camera camera = mc.getEntityRenderDispatcher().camera;
         int displayHeight = mc.getWindow().getHeight();
         int[] viewport = new int[4];
         GL11.glGetIntegerv(GL11.GL_VIEWPORT, viewport);
         Vector3f target = new Vector3f();
 
-        double deltaX = pos.x - camera.getCameraPos().x;
-        double deltaY = pos.y - camera.getCameraPos().y;
-        double deltaZ = pos.z - camera.getCameraPos().z;
+        double deltaX = pos.x - camera.position().x;
+        double deltaY = pos.y - camera.position().y;
+        double deltaZ = pos.z - camera.position().z;
 
         Vector4f transformedCoordinates = new Vector4f((float) deltaX, (float) deltaY, (float) deltaZ, 1.f).mul(lastWorldSpaceMatrix);
         Matrix4f matrixProj = new Matrix4f(lastProjMat);
         Matrix4f matrixModel = new Matrix4f(lastModMat);
         matrixProj.mul(matrixModel).project(transformedCoordinates.x(), transformedCoordinates.y(), transformedCoordinates.z(), viewport, target);
-        return new Vec3d(target.x / mc.getWindow().getScaleFactor(), (displayHeight - target.y) / mc.getWindow().getScaleFactor(), target.z);
+        return new Vec3(target.x / mc.getWindow().getGuiScale(), (displayHeight - target.y) / mc.getWindow().getGuiScale(), target.z);
     }
 
-    public static void drawTargetBox2D(DrawContext context, Entity entity, Color color) {
+    public static void drawTargetBox2D(GuiGraphicsExtractor context, Entity entity, Color color) {
         if (entity == null) return;
 
         double x = entity.getX();
         double y = entity.getY();
         double z = entity.getZ();
 
-        var box = entity.getBoundingBox().offset(
+        var box = entity.getBoundingBox().move(
                 x - entity.getX(),
                 y - entity.getY(),
                 z - entity.getZ()
         );
 
-        Vec3d[] points = new Vec3d[]{
-                new Vec3d(box.minX, box.minY, box.minZ),
-                new Vec3d(box.minX, box.maxY, box.minZ),
-                new Vec3d(box.maxX, box.minY, box.minZ),
-                new Vec3d(box.maxX, box.maxY, box.minZ),
-                new Vec3d(box.minX, box.minY, box.maxZ),
-                new Vec3d(box.minX, box.maxY, box.maxZ),
-                new Vec3d(box.maxX, box.minY, box.maxZ),
-                new Vec3d(box.maxX, box.maxY, box.maxZ)
+        Vec3[] points = new Vec3[]{
+                new Vec3(box.minX, box.minY, box.minZ),
+                new Vec3(box.minX, box.maxY, box.minZ),
+                new Vec3(box.maxX, box.minY, box.minZ),
+                new Vec3(box.maxX, box.maxY, box.minZ),
+                new Vec3(box.minX, box.minY, box.maxZ),
+                new Vec3(box.minX, box.maxY, box.maxZ),
+                new Vec3(box.maxX, box.minY, box.maxZ),
+                new Vec3(box.maxX, box.maxY, box.maxZ)
         };
 
         float minX = Float.MAX_VALUE;
@@ -112,8 +112,8 @@ public class Render3DUtil {
         float maxX = -1;
         float maxY = -1;
 
-        for (Vec3d point : points) {
-            Vec3d screen = worldSpaceToScreenSpace(point);
+        for (Vec3 point : points) {
+            Vec3 screen = worldSpaceToScreenSpace(point);
 
             if (screen.z > 0 && screen.z < 1) {
                 minX = Math.min(minX, (float) screen.x);
@@ -128,72 +128,72 @@ public class Render3DUtil {
         drawRectOutline(context, minX, minY, maxX, maxY, color.getRGB());
     }
 
-    public static void drawRectOutline(DrawContext context, float x1, float y1, float x2, float y2, int color) {
-        context.drawHorizontalLine((int) x1, (int) x2, (int) y1, color);
-        context.drawHorizontalLine((int) x1, (int) x2, (int) y2, color);
-        context.drawVerticalLine((int) x1, (int) y1, (int) y2, color);
-        context.drawVerticalLine((int) x2, (int) y1, (int) y2, color);
+    public static void drawRectOutline(GuiGraphicsExtractor context, float x1, float y1, float x2, float y2, int color) {
+        context.horizontalLine((int) x1, (int) x2, (int) y1, color);
+        context.horizontalLine((int) x1, (int) x2, (int) y2, color);
+        context.verticalLine((int) x1, (int) y1, (int) y2, color);
+        context.verticalLine((int) x2, (int) y1, (int) y2, color);
     }
 
-    public static MatrixStack matrixFrom(double x, double y, double z) {
-        MatrixStack matrices = new MatrixStack();
+    public static PoseStack matrixFrom(double x, double y, double z) {
+        PoseStack matrices = new PoseStack();
 
-        Camera camera = mc.gameRenderer.getCamera();
-        matrices.multiply(RotationAxis.POSITIVE_X.rotationDegrees(camera.getPitch()));
-        matrices.multiply(RotationAxis.POSITIVE_Y.rotationDegrees(camera.getYaw() + 180.0F));
-        matrices.translate(x - camera.getCameraPos().x, y - camera.getCameraPos().y, z - camera.getCameraPos().z);
+        Camera camera = mc.gameRenderer.getMainCamera();
+        matrices.mulPose(Axis.XP.rotationDegrees(camera.xRot()));
+        matrices.mulPose(Axis.YP.rotationDegrees(camera.yRot() + 180.0F));
+        matrices.translate(x - camera.position().x, y - camera.position().y, z - camera.position().z);
 
         return matrices;
     }
 
-    public static void drawText3D(String text, Vec3d vec3d, Color color) {
-        drawText3D(Text.of(text), vec3d.x, vec3d.y, vec3d.z, 0, 0, 1, color.getRGB());
+    public static void drawText3D(String text, Vec3 vec3d, Color color) {
+        drawText3D(Component.literal(text), vec3d.x, vec3d.y, vec3d.z, 0, 0, 1, color.getRGB());
     }
 
-    public static void drawText3D(String text, Vec3d vec3d, int color) {
-        drawText3D(Text.of(text), vec3d.x, vec3d.y, vec3d.z, 0, 0, 1, color);
+    public static void drawText3D(String text, Vec3 vec3d, int color) {
+        drawText3D(Component.literal(text), vec3d.x, vec3d.y, vec3d.z, 0, 0, 1, color);
     }
 
-    public static void drawText3D(Text text, Vec3d vec3d, double offX, double offY, double scale, Color color) {
+    public static void drawText3D(Component text, Vec3 vec3d, double offX, double offY, double scale, Color color) {
         drawText3D(text, vec3d.x, vec3d.y, vec3d.z, offX, offY, scale, color.getRGB());
     }
 
-    public static void drawText3D(Text text, double x, double y, double z, double offX, double offY, double scale, int color) {
-        MatrixStack matrices = matrixFrom(x, y, z);
+    public static void drawText3D(Component text, double x, double y, double z, double offX, double offY, double scale, int color) {
+        PoseStack matrices = matrixFrom(x, y, z);
 
-        Camera camera = mc.gameRenderer.getCamera();
-        matrices.multiply(RotationAxis.POSITIVE_Y.rotationDegrees(-camera.getYaw()));
-        matrices.multiply(RotationAxis.POSITIVE_X.rotationDegrees(camera.getPitch()));
+        Camera camera = mc.gameRenderer.getMainCamera();
+        matrices.mulPose(Axis.YP.rotationDegrees(-camera.yRot()));
+        matrices.mulPose(Axis.XP.rotationDegrees(camera.xRot()));
 
         matrices.translate(offX, offY, 0);
         matrices.scale(-0.025f * (float) scale, -0.025f * (float) scale, 1);
 
-        int halfWidth = mc.textRenderer.getWidth(text) / 2;
+        int halfWidth = mc.font.width(text) / 2;
 
-        VertexConsumerProvider.Immediate immediate = VertexConsumerProvider.immediate(new BufferAllocator(1536));
+        MultiBufferSource.BufferSource immediate = MultiBufferSource.immediate(new ByteBufferBuilder(1536));
 
-        mc.textRenderer.draw(text.getString(), -halfWidth, 0f, color, true, matrices.peek().getPositionMatrix(), immediate, TextRenderer.TextLayerType.SEE_THROUGH, 0, 0xf000f0);
-        immediate.draw();
+        mc.font.drawInBatch(text.getString(), -halfWidth, 0f, color, true, matrices.last().pose(), immediate, Font.DisplayMode.SEE_THROUGH, 0, 0xf000f0);
+        immediate.endBatch();
     }
 
     // Stubbed - old Blaze3D rendering pipeline was removed in MC 1.21.11
-    public static void drawFill(MatrixStack matrixStack, Box bb, Color fillColor) {}
-    public static void drawBox(MatrixStack matrixStack, Box bb, Color outlineColor) {}
-    public static void drawBox(MatrixStack matrixStack, Box bb, Color outlineColor, float lineWidth) {}
-    public static void draw3DBox(MatrixStack matrixStack, Box box, Color fillColor, Color outlineColor) {}
-    public static void draw3DBox(MatrixStack matrixStack, Box box, Color fillColor, Color outlineColor, boolean outline, boolean fill) {}
-    public static void draw3DBox(MatrixStack matrixStack, Box box, Color fillColor, Color outlineColor, boolean outline, boolean fill, float lineWidth) {}
-    public static void drawFadeFill(MatrixStack stack, Box box, Color c, Color c1) {}
-    public static void drawLine(Vec3d start, Vec3d end, Color color) {}
+    public static void drawFill(PoseStack matrixStack, AABB bb, Color fillColor) {}
+    public static void drawBox(PoseStack matrixStack, AABB bb, Color outlineColor) {}
+    public static void drawBox(PoseStack matrixStack, AABB bb, Color outlineColor, float lineWidth) {}
+    public static void draw3DBox(PoseStack matrixStack, AABB box, Color fillColor, Color outlineColor) {}
+    public static void draw3DBox(PoseStack matrixStack, AABB box, Color fillColor, Color outlineColor, boolean outline, boolean fill) {}
+    public static void draw3DBox(PoseStack matrixStack, AABB box, Color fillColor, Color outlineColor, boolean outline, boolean fill, float lineWidth) {}
+    public static void drawFadeFill(PoseStack stack, AABB box, Color c, Color c1) {}
+    public static void drawLine(Vec3 start, Vec3 end, Color color) {}
     public static void drawLine(double x1, double y1, double z1, double x2, double y2, double z2, Color color, float width) {}
-    public static void drawTargetEsp(MatrixStack stack, Entity target, Color color) {}
+    public static void drawTargetEsp(PoseStack stack, Entity target, Color color) {}
     public static void drawLineToTop3D(Entity entity, Color color) {}
 
     public static Vector3f getNormal(float x1, float y1, float z1, float x2, float y2, float z2) {
         float xNormal = x2 - x1;
         float yNormal = y2 - y1;
         float zNormal = z2 - z1;
-        float normalSqrt = MathHelper.sqrt(xNormal * xNormal + yNormal * yNormal + zNormal * zNormal);
+        float normalSqrt = Mth.sqrt(xNormal * xNormal + yNormal * yNormal + zNormal * zNormal);
 
         return new Vector3f(xNormal / normalSqrt, yNormal / normalSqrt, zNormal / normalSqrt);
     }

@@ -7,10 +7,10 @@ import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.entity.effect.StatusEffects;
-import net.minecraft.util.math.MathHelper;
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.client.Minecraft;
+import net.minecraft.world.effect.MobEffects;
+import net.minecraft.util.Mth;
+import net.minecraft.world.phys.Vec3;
 
 /**
  * BMWClient-nextgen (LiquidBounce) 的 ModuleSprint 完整移植。
@@ -29,7 +29,7 @@ import net.minecraft.util.math.Vec3d;
 public class BMWSprint extends Module {
 
     public static BMWSprint INSTANCE;
-    private static final MinecraftClient mc = MinecraftClient.getInstance();
+    private static final Minecraft mc = Minecraft.getInstance();
 
     // 设置
     private final SettingGroup sgGeneral = settings.getDefaultGroup();
@@ -107,8 +107,8 @@ public class BMWSprint extends Module {
         BMWRotationUtil.shouldRotate = false;
         BMWRotationManager.clearTarget();
         if (mc.player != null) {
-            mc.player.bodyYaw = mc.player.getYaw();
-            mc.player.headYaw = mc.player.getYaw();
+            mc.player.yBodyRot = mc.player.getYRot();
+            mc.player.yHeadRot = mc.player.getYRot();
         }
         elytraChangedLookThisTick = false;
     }
@@ -122,7 +122,7 @@ public class BMWSprint extends Module {
 
     @EventHandler(priority = 150)
     private void onTickPre(TickEvent.Pre event) {
-        if (mc.player == null || mc.world == null) return;
+        if (mc.player == null || mc.level == null) return;
 
         // 每次 tick 先清除上一帧的旋转状态
         BMWRotationUtil.shouldRotate = false;
@@ -153,8 +153,8 @@ public class BMWSprint extends Module {
     @EventHandler
     private void onTickPost(TickEvent.Post event) {
         if (elytraChangedLookThisTick && mc.player != null) {
-            mc.player.setYaw(preElytraYaw);
-            mc.player.setPitch(preElytraPitch);
+            mc.player.setYRot(preElytraYaw);
+            mc.player.setXRot(preElytraPitch);
             elytraChangedLookThisTick = false;
         }
     }
@@ -177,11 +177,11 @@ public class BMWSprint extends Module {
             event.movement.x * event.movement.x + event.movement.z * event.movement.z);
         if (horizSpeed < 1.0e-7) return;
 
-        float yawRad = BMWRotationUtil.sprintYaw * MathHelper.RADIANS_PER_DEGREE;
-        double newX = -MathHelper.sin(yawRad) * horizSpeed;
-        double newZ = MathHelper.cos(yawRad) * horizSpeed;
+        float yawRad = BMWRotationUtil.sprintYaw * Mth.DEG_TO_RAD;
+        double newX = -Mth.sin(yawRad) * horizSpeed;
+        double newZ = Mth.cos(yawRad) * horizSpeed;
 
-        event.movement = new Vec3d(newX, event.movement.y, newZ);
+        event.movement = new Vec3(newX, event.movement.y, newZ);
     }
 
     // ========= 三种模式实现 =========
@@ -192,13 +192,13 @@ public class BMWSprint extends Module {
     private void handleLegit() {
         if (!canSprint()) return;
 
-        if (mc.options.forwardKey.isPressed()) {
+        if (mc.options.keyUp.isDown()) {
             mc.player.setSprinting(true);
         } else {
             if (!mc.player.isSprinting()) return;
-            if (stopOnGround.get() && mc.player.isOnGround()) {
+            if (stopOnGround.get() && mc.player.onGround()) {
                 mc.player.setSprinting(false);
-            } else if (stopOnAir.get() && !mc.player.isOnGround()) {
+            } else if (stopOnAir.get() && !mc.player.onGround()) {
                 mc.player.setSprinting(false);
             }
         }
@@ -222,13 +222,13 @@ public class BMWSprint extends Module {
         mc.player.setSprinting(true);
 
         float moveYaw = BMWPlayerUtil.getMovementDirectionOfInput(
-            mc.player.getYaw(), BMWDirectionalInput.fromPlayer());
+            mc.player.getYRot(), BMWDirectionalInput.fromPlayer());
 
         // 微小随机偏移避免 GrimAC AimModulo360 检测（精确角度倍数会被 flag）
         moveYaw += (float) ((Math.random() - 0.5) * 0.001);
 
         // SILENT: 设目标但不改 player.yaw
-        BMWRotationManager.setRotationTarget(new BMWRotation(moveYaw, mc.player.getPitch()), false);
+        BMWRotationManager.setRotationTarget(new BMWRotation(moveYaw, mc.player.getXRot()), false);
 
         // 通知 mixin 在 sendMovementPackets 时旋转 yaw
         // onPlayerMove(PlayerMoveEvent) 同时修正水平移动方向使 velocity 匹配 packet yaw
@@ -246,14 +246,14 @@ public class BMWSprint extends Module {
         if (!BMWPlayerUtil.isMoving()) return;
 
         float moveYaw = BMWPlayerUtil.getMovementDirectionOfInput(
-            mc.player.getYaw(), BMWDirectionalInput.fromPlayer());
+            mc.player.getYRot(), BMWDirectionalInput.fromPlayer());
 
         // 保存原 yaw 供恢复
-        preElytraYaw = mc.player.getYaw();
-        preElytraPitch = mc.player.getPitch();
+        preElytraYaw = mc.player.getYRot();
+        preElytraPitch = mc.player.getXRot();
 
         // CHANGE_LOOK: RotationManager.update() 会调用 setPlayerRotation
-        BMWRotationManager.setRotationTarget(new BMWRotation(moveYaw, mc.player.getPitch()), true);
+        BMWRotationManager.setRotationTarget(new BMWRotation(moveYaw, mc.player.getXRot()), true);
 
         elytraChangedLookThisTick = true;
     }
@@ -264,11 +264,11 @@ public class BMWSprint extends Module {
         if (mc.player == null) return false;
 
         // 饥饿
-        boolean isHungry = mc.player.getHungerManager().getFoodLevel() <= 6 && !mc.player.isCreative();
+        boolean isHungry = mc.player.getFoodData().getFoodLevel() <= 6 && !mc.player.isCreative();
         if (isHungry && !ignoreHunger.get()) return false;
 
         // 失明
-        if (mc.player.hasStatusEffect(StatusEffects.BLINDNESS) && !ignoreBlindness.get()) {
+        if (mc.player.hasEffect(MobEffects.BLINDNESS) && !ignoreBlindness.get()) {
             return false;
         }
 
@@ -278,9 +278,9 @@ public class BMWSprint extends Module {
         // 必须按了移动键
         if (!BMWPlayerUtil.isMoving()) return false;
 
-        if (mc.player.isSneaking()) return false;
-        if (mc.player.isRiding()) return false;
-        if (mc.player.isInFluid()) return false;
+        if (mc.player.isShiftKeyDown()) return false;
+        if (mc.player.isHandsBusy()) return false;
+        if (mc.player.isInLiquid()) return false;
 
         return true;
     }

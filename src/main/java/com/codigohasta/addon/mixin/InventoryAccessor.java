@@ -1,14 +1,14 @@
 package com.codigohasta.addon.mixin;
 
-import net.minecraft.entity.player.PlayerInventory;
+import net.minecraft.world.entity.player.Inventory;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.gen.Accessor;
 
-@Mixin(PlayerInventory.class)
+@Mixin(Inventory.class)
 public interface InventoryAccessor {
-    @Accessor("selectedSlot")
+    @Accessor("selected")
     int getSelectedSlot();
 
-    @Accessor("selectedSlot")
+    @Accessor("selected")
     void setSelectedSlot(int slot);
 }

@@ -7,20 +7,20 @@ import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.EntityType;
-import net.minecraft.entity.LightningEntity;
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.projectile.FireworkRocketEntity;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
-import net.minecraft.particle.ParticleEffect;
-import net.minecraft.particle.ParticleTypes;
-import net.minecraft.sound.SoundCategory; 
-import net.minecraft.sound.SoundEvent;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.LightningBolt;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.projectile.FireworkRocketEntity;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.core.particles.ParticleOptions;
+import net.minecraft.core.particles.ParticleTypes;
+import net.minecraft.sounds.SoundSource; 
+import net.minecraft.sounds.SoundEvent;
+import net.minecraft.resources.Identifier;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.phys.Vec3;
 
 import java.util.*;
 
@@ -109,7 +109,7 @@ public class KillFX extends Module {
         Totem(ParticleTypes.TOTEM_OF_UNDYING, "不死图腾"),
         Firework(ParticleTypes.FIREWORK, "烟花火箭"),
         EggCrack(ParticleTypes.EGG_CRACK, "鸡蛋破裂");
-        final ParticleEffect p; final String n; CombatParticle(ParticleEffect p, String n) { this.p=p; this.n=n; } @Override public String toString() { return n; }
+        final ParticleOptions p; final String n; CombatParticle(ParticleOptions p, String n) { this.p=p; this.n=n; } @Override public String toString() { return n; }
     }
     private final Setting<CombatParticle> pCombat = sgParticles.add(new EnumSetting.Builder<CombatParticle>().name("战斗粒子").defaultValue(CombatParticle.Crit).visible(() -> useParticles.get() && particleCategory.get() == ParticleCategory.Combat).build());
 
@@ -124,7 +124,7 @@ public class KillFX extends Module {
         SculkCharge(ParticleTypes.SCULK_CHARGE_POP, "幽匿充能"),
         Soul(ParticleTypes.SOUL, "灵魂出窍"),
         GlowSquidInk(ParticleTypes.GLOW_SQUID_INK, "发光鱿鱼墨");
-        final ParticleEffect p; final String n; MagicParticle(ParticleEffect p, String n) { this.p=p; this.n=n; } @Override public String toString() { return n; }
+        final ParticleOptions p; final String n; MagicParticle(ParticleOptions p, String n) { this.p=p; this.n=n; } @Override public String toString() { return n; }
     }
     private final Setting<MagicParticle> pMagic = sgParticles.add(new EnumSetting.Builder<MagicParticle>().name("魔法粒子").defaultValue(MagicParticle.EndRod).visible(() -> useParticles.get() && particleCategory.get() == ParticleCategory.Magic).build());
 
@@ -145,7 +145,7 @@ public class KillFX extends Module {
         WaxOff(ParticleTypes.WAX_OFF, "铜块脱蜡"),
         Scrape(ParticleTypes.SCRAPE, "刮除铜锈"),
         Spark(ParticleTypes.ELECTRIC_SPARK, "电火花");
-        final ParticleEffect p; final String n; FireParticle(ParticleEffect p, String n) { this.p=p; this.n=n; } @Override public String toString() { return n; }
+        final ParticleOptions p; final String n; FireParticle(ParticleOptions p, String n) { this.p=p; this.n=n; } @Override public String toString() { return n; }
     }
     private final Setting<FireParticle> pFire = sgParticles.add(new EnumSetting.Builder<FireParticle>().name("火焰粒子").defaultValue(FireParticle.Flame).visible(() -> useParticles.get() && particleCategory.get() == ParticleCategory.Fire).build());
 
@@ -172,7 +172,7 @@ public class KillFX extends Module {
         WhiteAsh(ParticleTypes.WHITE_ASH, "白色灰烬"),
         WarpedSpore(ParticleTypes.WARPED_SPORE, "诡异孢子"),
         CrimsonSpore(ParticleTypes.CRIMSON_SPORE, "绯红孢子");
-        final ParticleEffect p; final String n; NatureParticle(ParticleEffect p, String n) { this.p=p; this.n=n; } @Override public String toString() { return n; }
+        final ParticleOptions p; final String n; NatureParticle(ParticleOptions p, String n) { this.p=p; this.n=n; } @Override public String toString() { return n; }
     }
     private final Setting<NatureParticle> pNature = sgParticles.add(new EnumSetting.Builder<NatureParticle>().name("自然粒子").defaultValue(NatureParticle.Heart).visible(() -> useParticles.get() && particleCategory.get() == ParticleCategory.Nature).build());
 
@@ -182,8 +182,8 @@ public class KillFX extends Module {
         GustSmall(ParticleTypes.SMALL_GUST, "小旋风"),
         GustEmitterLarge(ParticleTypes.GUST_EMITTER_LARGE, "狂风大型发射"),
         GustEmitterSmall(ParticleTypes.GUST_EMITTER_SMALL, "狂风小型发射"),
-        Trial(ParticleTypes.TRIAL_SPAWNER_DETECTION, "试炼刷怪笼"),
-        TrialOminous(ParticleTypes.TRIAL_SPAWNER_DETECTION_OMINOUS, "不祥试炼检测"),
+        Trial(ParticleTypes.TRIAL_SPAWNER_DETECTED_PLAYER, "试炼刷怪笼"),
+        TrialOminous(ParticleTypes.TRIAL_SPAWNER_DETECTED_PLAYER_OMINOUS, "不祥试炼检测"),
         Ominous(ParticleTypes.OMINOUS_SPAWNING, "不祥之兆"),
         Vault(ParticleTypes.VAULT_CONNECTION, "宝库连接"),
         Raid(ParticleTypes.RAID_OMEN, "袭击预兆"),
@@ -191,7 +191,7 @@ public class KillFX extends Module {
         Infested(ParticleTypes.INFESTED, "寄生感染"),
         Cobweb(ParticleTypes.ITEM_COBWEB, "蜘蛛网丝"),
         DustPlume(ParticleTypes.DUST_PLUME, "陶罐尘埃");
-        final ParticleEffect p; final String n; UpdateParticle(ParticleEffect p, String n) { this.p=p; this.n=n; } @Override public String toString() { return n; }
+        final ParticleOptions p; final String n; UpdateParticle(ParticleOptions p, String n) { this.p=p; this.n=n; } @Override public String toString() { return n; }
     }
     private final Setting<UpdateParticle> pUpdate = sgParticles.add(new EnumSetting.Builder<UpdateParticle>().name("1.21粒子").defaultValue(UpdateParticle.Ominous).visible(() -> useParticles.get() && particleCategory.get() == ParticleCategory.Update121).build());
 
@@ -204,7 +204,7 @@ public class KillFX extends Module {
         Angry(ParticleTypes.ANGRY_VILLAGER, "村民生气"),
         Sneeze(ParticleTypes.SNEEZE, "打喷嚏"),
         Ink(ParticleTypes.SQUID_INK, "墨囊");
-        final ParticleEffect p; final String n; MiscParticle(ParticleEffect p, String n) { this.p=p; this.n=n; } @Override public String toString() { return n; }
+        final ParticleOptions p; final String n; MiscParticle(ParticleOptions p, String n) { this.p=p; this.n=n; } @Override public String toString() { return n; }
     }
     private final Setting<MiscParticle> pMisc = sgParticles.add(new EnumSetting.Builder<MiscParticle>().name("其他粒子").defaultValue(MiscParticle.SculkSoul).visible(() -> useParticles.get() && particleCategory.get() == ParticleCategory.Misc).build());
 
@@ -387,7 +387,7 @@ public class KillFX extends Module {
 
     @EventHandler
     private void onTick(TickEvent.Post event) {
-        if (mc.world == null || mc.player == null) return;
+        if (mc.level == null || mc.player == null) return;
 
         if (onlyTargeted.get()) {
             long threshold = (long) (targetTimeout.get() * 1000);
@@ -396,10 +396,10 @@ public class KillFX extends Module {
         }
 
         List<Entity> entities = new ArrayList<>();
-        mc.world.getEntities().forEach(entities::add);
+        mc.level.entitiesForRendering().forEach(entities::add);
         for (Entity entity : entities) {
             if (entity instanceof LivingEntity living && entity != mc.player) {
-                if (living.getHealth() <= 0.0f || living.isDead()) {
+                if (living.getHealth() <= 0.0f || living.isDeadOrDying()) {
                     
                     if (processedEntities.contains(entity.getId())) continue;
 
@@ -416,23 +416,23 @@ public class KillFX extends Module {
     }
 
     private void renderEffects(LivingEntity entity) {
-        Vec3d pos = new Vec3d(entity.getX(), entity.getY(), entity.getZ());
+        Vec3 pos = new Vec3(entity.getX(), entity.getY(), entity.getZ());
 
         // 1. 闪电
         if (useLightning.get()) {
             int amount = lightningAmount.get();
             for (int i = 0; i < amount; i++) {
-                LightningEntity lightning = new LightningEntity(EntityType.LIGHTNING_BOLT, mc.world);
+                LightningBolt lightning = new LightningBolt(EntityType.LIGHTNING_BOLT, mc.level);
                 double offsetX = (i == 0) ? 0 : (Math.random() - 0.5) * 0.5;
                 double offsetZ = (i == 0) ? 0 : (Math.random() - 0.5) * 0.5;
-                lightning.setPosition(pos.x + offsetX, pos.y, pos.z + offsetZ);
-                mc.world.addEntity(lightning);
+                lightning.setPos(pos.x + offsetX, pos.y, pos.z + offsetZ);
+                mc.level.addEntity(lightning);
             }
         }
 
         // 2. 粒子
         if (useParticles.get()) {
-            ParticleEffect effect = null;
+            ParticleOptions effect = null;
             switch (particleCategory.get()) {
                 case Combat -> effect = pCombat.get().p;
                 case Magic -> effect = pMagic.get().p;
@@ -456,38 +456,38 @@ public class KillFX extends Module {
                 case Fun -> soundId = sFun.get().id;
             }
             
-            mc.world.playSound(mc.player, BlockPos.ofFloored(pos), 
-                SoundEvent.of(Identifier.of("minecraft", soundId)), 
-                SoundCategory.PLAYERS, 
+            mc.level.playSound(mc.player, BlockPos.containing(pos), 
+                SoundEvent.createVariableRangeEvent(Identifier.fromNamespaceAndPath("minecraft", soundId)), 
+                SoundSource.PLAYERS, 
                 volume.get().floatValue(), pitch.get().floatValue());
         }
 
         // 4. 烟花
         if (useFirework.get()) {
             ItemStack itemStack = new ItemStack(Items.FIREWORK_ROCKET);
-            FireworkRocketEntity rocket = new FireworkRocketEntity(mc.world, itemStack, entity);
-            rocket.setPosition(pos.x, pos.y + 0.5, pos.z);
-            mc.world.addEntity(rocket);
-            mc.particleManager.addParticle(ParticleTypes.EXPLOSION, pos.x, pos.y + 1, pos.z, 0, 0, 0);
+            FireworkRocketEntity rocket = new FireworkRocketEntity(mc.level, itemStack, entity);
+            rocket.setPos(pos.x, pos.y + 0.5, pos.z);
+            mc.level.addEntity(rocket);
+            mc.particleEngine.createParticle(ParticleTypes.EXPLOSION, pos.x, pos.y + 1, pos.z, 0, 0, 0);
         }
 
         // 5. 爆炸烟雾
         if (useExplosion.get()) {
-            mc.particleManager.addParticle(ParticleTypes.EXPLOSION_EMITTER, pos.x, pos.y + 1, pos.z, 0, 0, 0);
+            mc.particleEngine.createParticle(ParticleTypes.EXPLOSION_EMITTER, pos.x, pos.y + 1, pos.z, 0, 0, 0);
         }
     }
 
-    private void spawnParticles(LivingEntity entity, ParticleEffect effect) {
-        Vec3d pos = new Vec3d(entity.getX(), entity.getY(), entity.getZ());
+    private void spawnParticles(LivingEntity entity, ParticleOptions effect) {
+        Vec3 pos = new Vec3(entity.getX(), entity.getY(), entity.getZ());
         int count = particleCount.get();
         double speed = particleSpeed.get();
-        double height = entity.getHeight();
-        double width = entity.getWidth();
+        double height = entity.getBbHeight();
+        double width = entity.getBbWidth();
 
         switch (particleShape.get()) {
             case Burst -> {
                 for (int i = 0; i < count; i++) {
-                    mc.particleManager.addParticle(effect, 
+                    mc.particleEngine.createParticle(effect, 
                         pos.x + (Math.random() - 0.5) * width, 
                         pos.y + Math.random() * height, 
                         pos.z + (Math.random() - 0.5) * width, 
@@ -508,7 +508,7 @@ public class KillFX extends Module {
                     double dy = r * Math.sin(phi) * Math.sin(theta);
                     double dz = r * Math.cos(phi);
                     
-                    mc.particleManager.addParticle(effect, 
+                    mc.particleEngine.createParticle(effect, 
                         pos.x + dx, pos.y + dy + height / 2, pos.z + dz, 
                         0, 0, 0
                     );
@@ -522,7 +522,7 @@ public class KillFX extends Module {
                     double dx = Math.cos(angle) * radius;
                     double dz = Math.sin(angle) * radius;
                     
-                    mc.particleManager.addParticle(effect, 
+                    mc.particleEngine.createParticle(effect, 
                         pos.x + dx, pos.y + yOffset, pos.z + dz, 
                         0, 0.05, 0 
                     );
@@ -530,7 +530,7 @@ public class KillFX extends Module {
             }
             case Column -> {
                 for (int i = 0; i < count; i++) {
-                    mc.particleManager.addParticle(effect, 
+                    mc.particleEngine.createParticle(effect, 
                         pos.x + (Math.random() - 0.5) * width, 
                         pos.y + 0.1, 
                         pos.z + (Math.random() - 0.5) * width, 
@@ -545,7 +545,7 @@ public class KillFX extends Module {
                     double dx = Math.cos(angle) * radius;
                     double dz = Math.sin(angle) * radius;
                     
-                    mc.particleManager.addParticle(effect, 
+                    mc.particleEngine.createParticle(effect, 
                         pos.x + dx, pos.y + height + 0.5, pos.z + dz, 
                         0, 0, 0
                     );
@@ -557,7 +557,7 @@ public class KillFX extends Module {
                     double hx = 16 * Math.pow(Math.sin(t), 3);
                     double hz = 13 * Math.cos(t) - 5 * Math.cos(2*t) - 2 * Math.cos(3*t) - Math.cos(4*t);
                     double scale = 0.06;
-                    mc.particleManager.addParticle(effect, 
+                    mc.particleEngine.createParticle(effect, 
                         pos.x + hx * scale, 
                         pos.y + 1.2 + (hz * scale * 0.5), 
                         pos.z + hz * scale, 
@@ -571,14 +571,14 @@ public class KillFX extends Module {
                     double angle = h * 4.0;
                     double radius = 0.6;
                     
-                    mc.particleManager.addParticle(effect, 
+                    mc.particleEngine.createParticle(effect, 
                         pos.x + Math.cos(angle) * radius, 
                         pos.y + h, 
                         pos.z + Math.sin(angle) * radius, 
                         0, 0, 0
                     );
                     
-                    mc.particleManager.addParticle(effect, 
+                    mc.particleEngine.createParticle(effect, 
                         pos.x + Math.cos(angle + Math.PI) * radius, 
                         pos.y + h, 
                         pos.z + Math.sin(angle + Math.PI) * radius, 
@@ -591,7 +591,7 @@ public class KillFX extends Module {
                     double angle = ((double) i / count) * Math.PI * 2;
                     double dx = Math.cos(angle) * 1.0;
                     double dz = Math.sin(angle) * 1.0;
-                    mc.particleManager.addParticle(effect, 
+                    mc.particleEngine.createParticle(effect, 
                         pos.x, pos.y + 0.2, pos.z, 
                         dx * speed, 0, dz * speed 
                     );
@@ -602,7 +602,7 @@ public class KillFX extends Module {
                     double angle = ((double) i / count) * Math.PI * 2;
                     double dx = Math.cos(angle);
                     double dz = Math.sin(angle);
-                    mc.particleManager.addParticle(effect, 
+                    mc.particleEngine.createParticle(effect, 
                         pos.x + dx * 0.2, 
                         pos.y + 0.1, 
                         pos.z + dz * 0.2, 

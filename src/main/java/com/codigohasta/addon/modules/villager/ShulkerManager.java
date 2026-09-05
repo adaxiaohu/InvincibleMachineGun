@@ -5,23 +5,23 @@ import com.codigohasta.addon.utils.heutil.HeInvUtils;
 import meteordevelopment.meteorclient.utils.player.InvUtils;
 import meteordevelopment.meteorclient.utils.player.FindItemResult;
 import meteordevelopment.meteorclient.utils.player.Rotations;
-import net.minecraft.block.BlockState;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.component.DataComponentTypes;
-import net.minecraft.component.type.ContainerComponent;
-import net.minecraft.item.Item;
-import net.minecraft.item.ItemStack;
-import net.minecraft.screen.PlayerScreenHandler;
-import net.minecraft.screen.slot.Slot;
-import net.minecraft.util.Hand;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Direction;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.client.Minecraft;
+import net.minecraft.core.component.DataComponents;
+import net.minecraft.world.item.component.ItemContainerContents;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.inventory.InventoryMenu;
+import net.minecraft.world.inventory.Slot;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 
 /**
  * 潜影盒满替换与仓储管理器 
  */
 public class ShulkerManager {
-    private static final MinecraftClient mc = MinecraftClient.getInstance();
+    private static final Minecraft mc = Minecraft.getInstance();
 
     private BlockPos targetBoxPos;
     private Item targetBoxItem; 
@@ -43,7 +43,7 @@ public class ShulkerManager {
             return false; 
         }
 
-        BlockState state = mc.world.getBlockState(targetBoxPos);
+        BlockState state = mc.level.getBlockState(targetBoxPos);
 
         if (state.isAir()) {
             if (isBreaking) {
@@ -62,8 +62,8 @@ public class ShulkerManager {
         }
 
         Rotations.rotate(Rotations.getYaw(targetBoxPos), Rotations.getPitch(targetBoxPos));
-        mc.interactionManager.updateBlockBreakingProgress(targetBoxPos, Direction.UP);
-        mc.player.swingHand(Hand.MAIN_HAND);
+        mc.gameMode.continueDestroyBlock(targetBoxPos, Direction.UP);
+        mc.player.swing(InteractionHand.MAIN_HAND);
         isBreaking = true;
 
         return false;
@@ -75,10 +75,10 @@ public class ShulkerManager {
             return false;
         }
 
-        var handler = mc.player.currentScreenHandler;
+        var handler = mc.player.containerMenu;
 
       
-        if (handler instanceof PlayerScreenHandler) {
+        if (handler instanceof InventoryMenu) {
             HeBlockUtils.open(dumpChestPos);
             waitTimer = 10; 
             return false;
@@ -103,10 +103,10 @@ public class ShulkerManager {
             return false;
         }
 
-        var handler = mc.player.currentScreenHandler;
+        var handler = mc.player.containerMenu;
 
        
-        if (handler instanceof PlayerScreenHandler) {
+        if (handler instanceof InventoryMenu) {
             HeBlockUtils.open(emptyBoxChestPos);
             waitTimer = 10;
             searchAttempts = 0;
@@ -125,8 +125,8 @@ public class ShulkerManager {
         for (int i = 0; i < handler.slots.size(); i++) {
             Slot slot = handler.getSlot(i);
           
-            if (slot.inventory != mc.player.getInventory()) {
-                ItemStack stack = slot.getStack();
+            if (slot.container != mc.player.getInventory()) {
+                ItemStack stack = slot.getItem();
                 if (isMatchColorEmptyShulker(stack, targetBoxItem)) {
                     InvUtils.shiftClick().slotId(i);
                     waitTimer = 5;
@@ -176,7 +176,7 @@ public class ShulkerManager {
             emptyBox.slot(), 
             true, 
             Direction.DOWN, 
-            targetBoxPos.toCenterPos()
+            targetBoxPos.getCenter()
         );
 
         if (placed) {
@@ -191,10 +191,10 @@ public class ShulkerManager {
         if (stack == null || stack.isEmpty()) return false;
         if (!stack.getItem().toString().contains("shulker_box")) return false;
 
-        ContainerComponent container = stack.get(DataComponentTypes.CONTAINER);
+        ItemContainerContents container = stack.get(DataComponents.CONTAINER);
         if (container == null) return false;
 
-        return container.iterateNonEmpty().iterator().hasNext();
+        return container.nonEmptyItems().iterator().hasNext();
     }
 
    
@@ -202,11 +202,11 @@ public class ShulkerManager {
         if (stack == null || stack.isEmpty()) return false;
         
        
-        if (!stack.isOf(targetBoxItem)) return false;
+        if (!stack.is(targetBoxItem)) return false;
 
-        ContainerComponent container = stack.get(DataComponentTypes.CONTAINER);
+        ItemContainerContents container = stack.get(DataComponents.CONTAINER);
         if (container == null) return true;
      
-        return !container.iterateNonEmpty().iterator().hasNext();
+        return !container.nonEmptyItems().iterator().hasNext();
     }
 }

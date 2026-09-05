@@ -1,6 +1,6 @@
 package com.codigohasta.addon.modules;
 
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.phys.Vec3;
 
 import com.codigohasta.addon.AddonTemplate;
 import meteordevelopment.meteorclient.events.packets.PacketEvent;
@@ -19,14 +19,14 @@ import baritone.api.pathing.goals.Goal;
 import baritone.api.pathing.goals.GoalBlock;
 import meteordevelopment.meteorclient.pathing.BaritoneUtils;
 // Minecraft 依赖
-import net.minecraft.block.Block;
-import net.minecraft.block.Blocks;
-import net.minecraft.network.packet.s2c.play.BlockUpdateS2CPacket;
-import net.minecraft.network.packet.s2c.play.ChunkDeltaUpdateS2CPacket;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.ChunkPos;
-import net.minecraft.util.math.Direction;
-import net.minecraft.world.chunk.WorldChunk;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.network.protocol.game.ClientboundBlockUpdatePacket;
+import net.minecraft.network.protocol.game.ClientboundSectionBlocksUpdatePacket;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.core.Direction;
+import net.minecraft.world.level.chunk.LevelChunk;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -165,7 +165,7 @@ public class OreVeinESP extends Module {
 
     @EventHandler
     private void onTick(TickEvent.Post event) {
-        if (mc.world == null || mc.player == null) return;
+        if (mc.level == null || mc.player == null) return;
 
         // 1. 扫描逻辑
         timer++;
@@ -187,7 +187,7 @@ public class OreVeinESP extends Module {
 
     // --- Baritone 核心联动逻辑 (智能抢单版) ---
     private void handleBaritoneLogic() {
-        BlockPos playerPos = mc.player.getBlockPos();
+        BlockPos playerPos = mc.player.blockPosition();
         BlockPos closestVisiblePos = null;
         double closestVisibleDistSq = Double.MAX_VALUE;
         double maxDistSq = Math.pow(autoMineRange.get(), 2);
@@ -197,7 +197,7 @@ public class OreVeinESP extends Module {
             if (list == null || list.isEmpty()) continue;
             
             for (RenderBlock rb : list) {
-                double distSq = rb.pos.getSquaredDistance(playerPos);
+                double distSq = rb.pos.distSqr(playerPos);
                 if (distSq <= maxDistSq && distSq < closestVisibleDistSq) {
                     closestVisibleDistSq = distSq;
                     closestVisiblePos = rb.pos;
@@ -225,7 +225,7 @@ public class OreVeinESP extends Module {
             // 如果是在挖别的矿 (GoalBlock)
             else {
                 BlockPos currentTarget = ((GoalBlock) currentGoal).getGoalPos();
-                double currentTargetDistSq = currentTarget.getSquaredDistance(playerPos);
+                double currentTargetDistSq = currentTarget.distSqr(playerPos);
                 
                 // 比较距离：如果我发现的可见矿 比 他正在挖的矿 更近 -> 抢！
                 // (加个 2.0 的缓冲，避免两块矿距离差不多时来回抽搐)
@@ -258,10 +258,10 @@ public class OreVeinESP extends Module {
 
     @EventHandler
     private void onBlockUpdate(PacketEvent.Receive event) {
-        if (event.packet instanceof BlockUpdateS2CPacket packet) {
+        if (event.packet instanceof ClientboundBlockUpdatePacket packet) {
             removeBlockFromCache(packet.getPos());
-        } else if (event.packet instanceof ChunkDeltaUpdateS2CPacket packet) {
-            packet.visitUpdates((pos, state) -> {
+        } else if (event.packet instanceof ClientboundSectionBlocksUpdatePacket packet) {
+            packet.runUpdates((pos, state) -> {
                 if (!blocks.get().contains(state.getBlock())) {
                     removeBlockFromCache(pos);
                 }
@@ -270,9 +270,9 @@ public class OreVeinESP extends Module {
     }
 
     private void scanSurroundings() {
-        if (mc.player == null || mc.world == null) return;
+        if (mc.player == null || mc.level == null) return;
 
-        ChunkPos center = new ChunkPos(mc.player.getBlockPos());
+        ChunkPos center = mc.player.chunkPosition();
         int r = radius.get();
         int minY = yMin.get();
         int maxY = yMax.get();
@@ -281,25 +281,25 @@ public class OreVeinESP extends Module {
         if (targetBlocks.isEmpty()) return;
 
         cachedChunks.keySet().removeIf(pos -> 
-            Math.abs(pos.x - center.x) > r + 2 || Math.abs(pos.z - center.z) > r + 2
+            Math.abs(pos.x() - center.x()) > r + 2 || Math.abs(pos.z() - center.z()) > r + 2
         );
 
         for (int x = -r; x <= r; x++) {
             for (int z = -r; z <= r; z++) {
-                ChunkPos chunkPos = new ChunkPos(center.x + x, center.z + z);
+                ChunkPos chunkPos = new ChunkPos(center.x() + x, center.z() + z);
 
                 if (cachedChunks.containsKey(chunkPos)) continue;
                 if (!isChunkAndNeighborsLoaded(chunkPos)) continue;
 
-                WorldChunk chunk = mc.world.getChunk(chunkPos.x, chunkPos.z);
+                LevelChunk chunk = mc.level.getChunk(chunkPos.x(), chunkPos.z());
                 if (chunk == null) continue;
 
                 List<RenderBlock> found = new ArrayList<>();
-                int startX = chunkPos.getStartX();
-                int startZ = chunkPos.getStartZ();
+                int startX = chunkPos.getMinBlockX();
+                int startZ = chunkPos.getMinBlockZ();
 
-                int chunkTopY = chunk.getBottomY() + chunk.getHeight();
-                int actualMinY = Math.max(minY, chunk.getBottomY());
+                int chunkTopY = chunk.getMinY() + chunk.getHeight();
+                int actualMinY = Math.max(minY, chunk.getMinY());
                 int actualMaxY = Math.min(maxY, chunkTopY);
 
                 for (int bx = 0; bx < 16; bx++) {
@@ -328,21 +328,21 @@ public class OreVeinESP extends Module {
     }
 
     private boolean isChunkAndNeighborsLoaded(ChunkPos center) {
-        return mc.world.getChunkManager().isChunkLoaded(center.x, center.z) &&
-               mc.world.getChunkManager().isChunkLoaded(center.x + 1, center.z) &&
-               mc.world.getChunkManager().isChunkLoaded(center.x - 1, center.z) &&
-               mc.world.getChunkManager().isChunkLoaded(center.x, center.z + 1) &&
-               mc.world.getChunkManager().isChunkLoaded(center.x, center.z - 1);
+        return mc.level.getChunkSource().hasChunk(center.x(), center.z()) &&
+               mc.level.getChunkSource().hasChunk(center.x() + 1, center.z()) &&
+               mc.level.getChunkSource().hasChunk(center.x() - 1, center.z()) &&
+               mc.level.getChunkSource().hasChunk(center.x(), center.z() + 1) &&
+               mc.level.getChunkSource().hasChunk(center.x(), center.z() - 1);
     }
 
     private boolean isExposed(BlockPos pos) {
-        int bottomY = mc.world.getBottomY();
-        int topY = bottomY + mc.world.getHeight();
+        int bottomY = mc.level.getMinY();
+        int topY = bottomY + mc.level.getHeight();
 
         for (Direction dir : Direction.values()) {
-            BlockPos neighbor = pos.offset(dir);
+            BlockPos neighbor = pos.relative(dir);
             if (neighbor.getY() < bottomY || neighbor.getY() >= topY) continue;
-            if (!mc.world.getBlockState(neighbor).isSideSolidFullSquare(mc.world, neighbor, dir.getOpposite())) {
+            if (!mc.level.getBlockState(neighbor).isFaceSturdy(mc.level, neighbor, dir.getOpposite())) {
                 return true;
             }
         }
@@ -350,7 +350,7 @@ public class OreVeinESP extends Module {
     }
 
     private void removeBlockFromCache(BlockPos pos) {
-        ChunkPos chunkPos = new ChunkPos(pos);
+        ChunkPos chunkPos = new ChunkPos(pos.getX() >> 4, pos.getZ() >> 4);
         List<RenderBlock> blocks = cachedChunks.get(chunkPos);
         if (blocks != null && !blocks.isEmpty()) {
             try {
@@ -375,7 +375,7 @@ public class OreVeinESP extends Module {
             if (b == Blocks.COAL_ORE || b == Blocks.DEEPSLATE_COAL_ORE) return new Color(30, 30, 30);
             if (b == Blocks.NETHER_QUARTZ_ORE) return new Color(220, 220, 220);
 
-            int mapColor = b.getDefaultMapColor().color;
+            int mapColor = b.defaultMapColor().col;
             if (mapColor == 0) return new Color(255, 0, 255);
             return new Color((mapColor >> 16) & 0xFF, (mapColor >> 8) & 0xFF, mapColor & 0xFF, 255);
         });

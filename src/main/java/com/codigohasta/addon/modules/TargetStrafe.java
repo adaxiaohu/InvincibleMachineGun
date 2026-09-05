@@ -1,6 +1,6 @@
 package com.codigohasta.addon.modules;
 
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.phys.Vec3;
 
 import com.codigohasta.addon.AddonTemplate;
 import meteordevelopment.meteorclient.events.entity.player.PlayerMoveEvent;
@@ -12,11 +12,11 @@ import meteordevelopment.meteorclient.utils.entity.SortPriority;
 import meteordevelopment.meteorclient.utils.entity.TargetUtils;
 import meteordevelopment.meteorclient.utils.player.Rotations;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.client.network.PlayerListEntry;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.util.math.Vec3d;
-import net.minecraft.world.GameMode;
+import net.minecraft.client.multiplayer.PlayerInfo;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.level.GameType;
 
 public class TargetStrafe extends Module {
 
@@ -109,21 +109,21 @@ public class TargetStrafe extends Module {
         .visible(damageBoost::get)
         .build());
 
-    private PlayerEntity target;
+    private Player target;
     private int direction = 1;
 
     @EventHandler
     private void onTick(TickEvent.Pre event) {
         // 使用自定义逻辑查找目标
-        target = (PlayerEntity) TargetUtils.get(this::isValidTarget, SortPriority.ClosestAngle);
+        target = (Player) TargetUtils.get(this::isValidTarget, SortPriority.ClosestAngle);
 
         // 如果没有找到有效目标，直接返回
         if (target == null) return;
 
-        if (mc.player.isOnGround()) mc.player.jump();
+        if (mc.player.onGround()) mc.player.jumpFromGround();
 
-        if (mc.options.leftKey.isPressed()) direction = 1;
-        else if (mc.options.rightKey.isPressed()) direction = -1;
+        if (mc.options.keyLeft.isDown()) direction = 1;
+        else if (mc.options.keyRight.isDown()) direction = -1;
 
         if (mc.player.horizontalCollision) direction *= -1;
 
@@ -131,9 +131,9 @@ public class TargetStrafe extends Module {
             double currentSpeed = speed.get() + (damageBoost.get() && mc.player.hurtTime > 0 ? boost.get() : 0);
             double forward = mc.player.distanceTo(target) > radius.get() ? 1 : 0;
             float yaw = (float) Rotations.getYaw(target);
-            mc.player.bodyYaw = yaw;
-            mc.player.headYaw = yaw;
-            mc.player.setVelocity(applySpeed(yaw, currentSpeed, forward, direction));
+            mc.player.yBodyRot = yaw;
+            mc.player.yHeadRot = yaw;
+            mc.player.setDeltaMovement(applySpeed(yaw, currentSpeed, forward, direction));
         }
     }
 
@@ -145,42 +145,42 @@ public class TargetStrafe extends Module {
         double currentSpeed = speed.get() + (damageBoost.get() && mc.player.hurtTime > 0 ? boost.get() : 0);
         double forward = mc.player.distanceTo(target) > radius.get() ? 1 : 0;
         float yaw = (float) Rotations.getYaw(target);
-        Vec3d newVelocity = applySpeed(yaw, currentSpeed, forward, direction);
-        event.movement = new Vec3d(newVelocity.x, event.movement.y, newVelocity.z);
+        Vec3 newVelocity = applySpeed(yaw, currentSpeed, forward, direction);
+        event.movement = new Vec3(newVelocity.x, event.movement.y, newVelocity.z);
     }
 
     // 判断实体是否为有效目标的逻辑
     private boolean isValidTarget(Entity entity) {
-        if (!(entity instanceof PlayerEntity player)) return false;
+        if (!(entity instanceof Player player)) return false;
         if (player == mc.player) return false;
-        if (player.isDead() || !player.isAlive()) return false;
+        if (player.isDeadOrDying() || !player.isAlive()) return false;
         if (player.distanceTo(mc.player) > targetRange.get()) return false;
         if (Friends.get().isFriend(player)) return false;
 
-        GameMode gm = getGameMode(player);
+        GameType gm = getGameMode(player);
         
         // 观察者模式永远不打
-        if (gm == GameMode.SPECTATOR) return false;
+        if (gm == GameType.SPECTATOR) return false;
         
         // 创造模式：根据开关决定
-        if (gm == GameMode.CREATIVE && !targetCreative.get()) return false;
+        if (gm == GameType.CREATIVE && !targetCreative.get()) return false;
         
         // 冒险模式：根据开关决定
-        if (gm == GameMode.ADVENTURE && !targetAdventure.get()) return false;
+        if (gm == GameType.ADVENTURE && !targetAdventure.get()) return false;
 
         // 生存模式默认返回 true
         return true;
     }
 
     // 获取玩家游戏模式的辅助方法
-    private GameMode getGameMode(PlayerEntity player) {
+    private GameType getGameMode(Player player) {
         if (player == null) return null;
-        if (mc.getNetworkHandler() == null) return null;
-        PlayerListEntry entry = mc.getNetworkHandler().getPlayerListEntry(player.getUuid());
+        if (mc.getConnection() == null) return null;
+        PlayerInfo entry = mc.getConnection().getPlayerInfo(player.getUUID());
         return entry == null ? null : entry.getGameMode();
     }
 
-    private Vec3d applySpeed(float yaw, double speed, double forward, double direction) {
+    private Vec3 applySpeed(float yaw, double speed, double forward, double direction) {
         if (forward != 0.0D) {
             if (direction > 0.0D) {
                 yaw += (float) (forward > 0.0D ? -45 : 45);
@@ -195,6 +195,6 @@ public class TargetStrafe extends Module {
         double cos = Math.cos(Math.toRadians((yaw + 90.0F)));
         double sin = Math.sin(Math.toRadians((yaw + 90.0F)));
 
-        return new Vec3d(forward * speed * cos + direction * speed * sin, mc.player.getVelocity().y, forward * speed * sin - direction * speed * cos);
+        return new Vec3(forward * speed * cos + direction * speed * sin, mc.player.getDeltaMovement().y, forward * speed * sin - direction * speed * cos);
     }
 }

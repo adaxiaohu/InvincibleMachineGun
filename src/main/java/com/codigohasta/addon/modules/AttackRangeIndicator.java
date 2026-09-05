@@ -1,6 +1,6 @@
 package com.codigohasta.addon.modules;
 
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.phys.Vec3;
 
 import com.codigohasta.addon.AddonTemplate;
 import meteordevelopment.meteorclient.events.render.Render3DEvent;
@@ -9,9 +9,9 @@ import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.render.color.SettingColor;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.util.math.MathHelper;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.util.Mth;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -145,7 +145,7 @@ public class AttackRangeIndicator extends Module {
 
     @EventHandler
     private void onRender(Render3DEvent event) {
-        if (mc.player == null || mc.world == null) return;
+        if (mc.player == null || mc.level == null) return;
 
         // 1. 渲染自身圆环
         if (renderSelf.get()) {
@@ -154,7 +154,7 @@ public class AttackRangeIndicator extends Module {
 
         // 2. 收集并筛选实体
         List<Entity> targets = new ArrayList<>();
-        for (Entity entity : mc.world.getEntities()) {
+        for (Entity entity : mc.level.entitiesForRendering()) {
             if (entity instanceof LivingEntity && entity != mc.player) {
                 targets.add(entity);
             }
@@ -190,14 +190,14 @@ public class AttackRangeIndicator extends Module {
     }
 
     private void drawEntityBox(Render3DEvent event, Entity entity, SettingColor sideColor, SettingColor lineColor) {
-        double x = MathHelper.lerp(event.tickDelta, entity.lastRenderX, entity.getX());
-        double y = MathHelper.lerp(event.tickDelta, entity.lastRenderY, entity.getY());
-        double z = MathHelper.lerp(event.tickDelta, entity.lastRenderZ, entity.getZ());
+        double x = Mth.lerp(event.tickDelta, entity.xOld, entity.getX());
+        double y = Mth.lerp(event.tickDelta, entity.yOld, entity.getY());
+        double z = Mth.lerp(event.tickDelta, entity.zOld, entity.getZ());
 
-        float w = entity.getWidth() / 2.0f;
-        float h = entity.getHeight();
+        float w = entity.getBbWidth() / 2.0f;
+        float h = entity.getBbHeight();
 
-        net.minecraft.util.math.Box interpolatedBox = new net.minecraft.util.math.Box(
+        net.minecraft.world.phys.AABB interpolatedBox = new net.minecraft.world.phys.AABB(
             x - w, y, z - w, 
             x + w, y + h, z + w
         );
@@ -212,18 +212,18 @@ public class AttackRangeIndicator extends Module {
     }
     
     private void drawTargetFeetCircle(Render3DEvent event, Entity entity, SettingColor color) {
-        double x = MathHelper.lerp(event.tickDelta, entity.lastRenderX, entity.getX());
-        double y = MathHelper.lerp(event.tickDelta, entity.lastRenderY, entity.getY());
-        double z = MathHelper.lerp(event.tickDelta, entity.lastRenderZ, entity.getZ());
-        double radius = entity.getWidth() * 0.8;
+        double x = Mth.lerp(event.tickDelta, entity.xOld, entity.getX());
+        double y = Mth.lerp(event.tickDelta, entity.yOld, entity.getY());
+        double z = Mth.lerp(event.tickDelta, entity.zOld, entity.getZ());
+        double radius = entity.getBbWidth() * 0.8;
         
         renderCircleManual(event, x, y, z, radius, color, color, shapeMode.get());
     }
 
     private void drawSelfCircle(Render3DEvent event) {
-        double x = MathHelper.lerp(event.tickDelta, mc.player.lastRenderX, mc.player.getX());
-        double y = MathHelper.lerp(event.tickDelta, mc.player.lastRenderY, mc.player.getY());
-        double z = MathHelper.lerp(event.tickDelta, mc.player.lastRenderZ, mc.player.getZ());
+        double x = Mth.lerp(event.tickDelta, mc.player.xOld, mc.player.getX());
+        double y = Mth.lerp(event.tickDelta, mc.player.yOld, mc.player.getY());
+        double z = Mth.lerp(event.tickDelta, mc.player.zOld, mc.player.getZ());
 
         renderCircleManual(event, x, y, z, attackRange.get(), selfSideColor.get(), selfLineColor.get(), shapeMode.get());
     }

@@ -1,6 +1,6 @@
 package com.codigohasta.addon.modules;
 
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.phys.Vec3;
 
 import com.codigohasta.addon.AddonTemplate;
 import meteordevelopment.meteorclient.events.render.Render3DEvent;
@@ -9,10 +9,10 @@ import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.render.color.SettingColor;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.util.math.Box;
-import net.minecraft.util.math.MathHelper;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.util.Mth;
 
 public class HitboxESP extends Module {
 
@@ -65,9 +65,9 @@ public class HitboxESP extends Module {
 
     @EventHandler
     private void onRender3D(Render3DEvent event) {
-        if (mc.world == null) return;
+        if (mc.level == null) return;
 
-        for (PlayerEntity player : mc.world.getPlayers()) {
+        for (Player player : mc.level.players()) {
             // 过滤自己
             if (ignoreSelf.get() && player == mc.player) continue;
             
@@ -78,20 +78,20 @@ public class HitboxESP extends Module {
         }
     }
 
-    private void renderHitbox(Render3DEvent event, PlayerEntity entity) {
+    private void renderHitbox(Render3DEvent event, Player entity) {
         // --- 核心逻辑：插值计算 ---
         // Minecraft 的逻辑运行在 20 TPS (每0.05秒一次)，但渲染FPS通常远高于此。
         // 直接用 entity.getX() 会导致画面看起来一卡一卡的。
         // 我们必须使用 lastRenderX 和 当前X 结合 tickDelta 进行插值，算出当前帧的“平滑位置”。
         
-        double x = MathHelper.lerp(event.tickDelta, entity.lastRenderX, entity.getX());
-        double y = MathHelper.lerp(event.tickDelta, entity.lastRenderY, entity.getY());
-        double z = MathHelper.lerp(event.tickDelta, entity.lastRenderZ, entity.getZ());
+        double x = Mth.lerp(event.tickDelta, entity.xOld, entity.getX());
+        double y = Mth.lerp(event.tickDelta, entity.yOld, entity.getY());
+        double z = Mth.lerp(event.tickDelta, entity.zOld, entity.getZ());
 
         // 获取实体的长宽
         // getBoundingBox() 获取的是 Tick 结束时的静态框，我们需要自己根据长宽构造一个动态框
-        float width = entity.getWidth();
-        float height = entity.getHeight();
+        float width = entity.getBbWidth();
+        float height = entity.getBbHeight();
 
         // 构造碰撞箱坐标
         // 实体坐标通常是脚底中心，所以 x 和 z 需要减去宽度的一半

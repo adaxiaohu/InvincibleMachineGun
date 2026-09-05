@@ -6,7 +6,7 @@ import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.item.ItemStack;
+import net.minecraft.world.item.ItemStack;
 import java.util.concurrent.ThreadLocalRandom;
 
 public class adaManualCrystal extends Module {
@@ -37,8 +37,8 @@ public class adaManualCrystal extends Module {
         if (mc.player == null) return;
 
         // 1.21.11 字符串判定：是否手持水晶
-        boolean holdingCrystal = mc.player.getMainHandStack().getItem().toString().contains("end_crystal") 
-                              || mc.player.getOffHandStack().getItem().toString().contains("end_crystal");
+        boolean holdingCrystal = mc.player.getMainHandItem().getItem().toString().contains("end_crystal") 
+                              || mc.player.getOffhandItem().getItem().toString().contains("end_crystal");
 
         if (!holdingCrystal) return;
 
@@ -55,14 +55,14 @@ public class adaManualCrystal extends Module {
         // 如果当前冷却比我们要的高（比如原版刚设为 4）
         if (currentCooldown > targetDelay) {
             // 只有在同时按住左右键，或者右键按住时才提速
-            if (mc.options.useKey.isPressed()) {
+            if (mc.options.keyUse.isDown()) {
                 ((MinecraftClientAccessor) mc).setItemUseCooldown(targetDelay);
             }
         }
         
         // 解决“左键快导致放不出”：
         // 如果左键按下导致原版逻辑尝试阻塞右键，我们强行让冷却保持在可放置范围内
-        if (mc.options.attackKey.isPressed() && mc.options.useKey.isPressed()) {
+        if (mc.options.keyAttack.isDown() && mc.options.keyUse.isDown()) {
             if (currentCooldown > targetDelay) {
                 ((MinecraftClientAccessor) mc).setItemUseCooldown(targetDelay);
             }

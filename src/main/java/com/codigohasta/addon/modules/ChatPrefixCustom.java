@@ -1,6 +1,6 @@
 package com.codigohasta.addon.modules;
 
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.phys.Vec3;
 
 import com.codigohasta.addon.AddonTemplate;
 import meteordevelopment.meteorclient.events.world.TickEvent;
@@ -9,10 +9,10 @@ import meteordevelopment.meteorclient.systems.config.Config;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.render.color.SettingColor;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.text.MutableText;
-import net.minecraft.text.Style;
-import net.minecraft.text.Text;
-import net.minecraft.util.Formatting;
+import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.network.chat.Style;
+import net.minecraft.network.chat.Component;
+import net.minecraft.ChatFormatting;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
@@ -91,7 +91,7 @@ public class ChatPrefixCustom extends Module {
         } catch (Exception ignored) {}
 
         // 构造复杂的富文本对象
-        MutableText customPrefix = Text.literal("[").formatted(Formatting.GRAY);
+        MutableComponent customPrefix = Component.literal("[").withStyle(ChatFormatting.GRAY);
         
         String text = prefixText.get();
         if (text.isEmpty()) text = "IMG";
@@ -99,7 +99,7 @@ public class ChatPrefixCustom extends Module {
         // 逐字处理渐变和样式
         for (int i = 0; i < text.length(); i++) {
             char c = text.charAt(i);
-            MutableText charText = Text.literal(String.valueOf(c));
+            MutableComponent charText = Component.literal(String.valueOf(c));
             
             // 计算颜色
             int color;
@@ -114,14 +114,14 @@ public class ChatPrefixCustom extends Module {
             Style style = Style.EMPTY.withColor(color)
                 .withBold(bold.get())
                 .withItalic(italic.get())
-                .withUnderline(underline.get())
+                .withUnderlined(underline.get())
                 .withStrikethrough(strikethrough.get());
             
             charText.setStyle(style);
             customPrefix.append(charText);
         }
 
-        customPrefix.append(Text.literal("] ").formatted(Formatting.GRAY));
+        customPrefix.append(Component.literal("] ").withStyle(ChatFormatting.GRAY));
 
         // 反射修改 Lotus
         String[] chatUtilClasses = {
@@ -155,7 +155,7 @@ public class ChatPrefixCustom extends Module {
         return (int) (start + (end - start) * progress);
     }
 
-    private boolean modifyPrefixField(Class<?> clazz, Text newPrefix) {
+    private boolean modifyPrefixField(Class<?> clazz, Component newPrefix) {
         try {
             for (Field field : clazz.getDeclaredFields()) {
                 if ((field.getName().equalsIgnoreCase("PREFIX") || field.getName().equalsIgnoreCase("prefix")) 

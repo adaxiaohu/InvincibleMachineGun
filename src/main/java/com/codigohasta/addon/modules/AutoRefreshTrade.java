@@ -15,25 +15,29 @@ import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.render.color.Color;
 import meteordevelopment.meteorclient.utils.world.BlockUtils;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.component.type.ItemEnchantmentsComponent;
-import net.minecraft.enchantment.Enchantment;
-import net.minecraft.enchantment.EnchantmentHelper;
-import net.minecraft.enchantment.Enchantments;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.passive.VillagerEntity;
-import net.minecraft.entity.projectile.ProjectileUtil;
-import net.minecraft.item.*;
-import net.minecraft.network.packet.c2s.play.CloseHandledScreenC2SPacket;
-import net.minecraft.registry.RegistryKey;
-import net.minecraft.registry.entry.RegistryEntry;
-import net.minecraft.screen.MerchantScreenHandler;
-import net.minecraft.text.Text;
-import net.minecraft.util.ActionResult;
-import net.minecraft.util.Hand;
-import net.minecraft.util.hit.EntityHitResult;
-import net.minecraft.util.math.*;
-import net.minecraft.village.TradeOffer;
-import net.minecraft.village.TradeOfferList;
+import net.minecraft.world.item.enchantment.ItemEnchantments;
+import net.minecraft.world.item.enchantment.Enchantment;
+import net.minecraft.world.item.enchantment.EnchantmentHelper;
+import net.minecraft.world.item.enchantment.Enchantments;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.npc.villager.Villager;
+import net.minecraft.world.entity.projectile.ProjectileUtil;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.network.protocol.game.ServerboundContainerClosePacket;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.core.Holder;
+import net.minecraft.world.inventory.MerchantMenu;
+import net.minecraft.network.chat.Component;
+import net.minecraft.world.InteractionResult;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.phys.EntityHitResult;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.item.trading.MerchantOffer;
+import net.minecraft.world.item.trading.MerchantOffers;
 
 import java.util.List;
 import java.util.Set;
@@ -68,7 +72,7 @@ public class AutoRefreshTrade extends Module {
             .sliderMax(10000)
             .build()
     );
-    private final Setting<Set<RegistryKey<Enchantment>>> enchantmentList = sgGeneral.add(new EnchantmentListSetting.Builder()
+    private final Setting<Set<ResourceKey<Enchantment>>> enchantmentList = sgGeneral.add(new EnchantmentListSetting.Builder()
             .name("EnchantmentsList")
             .description("目标附魔列表")
             .build()
@@ -94,11 +98,11 @@ public class AutoRefreshTrade extends Module {
     @EventHandler
     public void onTick(TickEvent.Pre event){
         if (!timer.passedMs(waitMine.get())) return;
-        if (mc.options.backKey.isPressed()) {
+        if (mc.options.keyDown.isDown()) {
             toggle();
             return;
         }
-        if (pos != null && mc.world.isAir(pos)) {
+        if (pos != null && mc.level.isEmptyBlock(pos)) {
             int slot = findItem(Items.LECTERN);
             int old = ((InventoryAccessor)mc.player.getInventory()).getSelectedSlot();
             if (slot != -1) {
@@ -112,96 +116,98 @@ public class AutoRefreshTrade extends Module {
             }
             return;
         }
-        VillagerEntity target = getTarget();
+        Villager target = getTarget();
         if (target == null) return;
-        Rotation.snapAt(target.getEyePos());
-        Vec3d playerPos = mc.player.getEyePos();
-        Vec3d villagerPos = target.getEyePos();
-        EntityHitResult hitResult = ProjectileUtil.raycast(
+        Rotation.snapAt(target.getEyePosition());
+        Vec3 playerPos = mc.player.getEyePosition();
+        Vec3 villagerPos = target.getEyePosition();
+        EntityHitResult hitResult = ProjectileUtil.getEntityHitResult(
                 mc.player,
                 playerPos,
                 villagerPos,
                 target.getBoundingBox(),
-                Entity::canHit,
-                playerPos.squaredDistanceTo(villagerPos)
+                Entity::isPickable,
+                playerPos.distanceToSqr(villagerPos)
         );
         if (hitResult == null) {
-            mc.interactionManager.interactEntity(
+            mc.gameMode.interact(
                     mc.player,
                     target,
-                    Hand.MAIN_HAND
+                    new EntityHitResult(target),
+                    InteractionHand.MAIN_HAND
             );
         } else {
-            ActionResult result = mc.interactionManager.interactEntityAtLocation(
+            InteractionResult result = mc.gameMode.interact(
                     mc.player,
                     target,
                     hitResult,
-                    Hand.MAIN_HAND
+                    InteractionHand.MAIN_HAND
             );
-            if (!result.isAccepted()) {
-                mc.interactionManager.interactEntity(
+            if (!result.consumesAction()) {
+                mc.gameMode.interact(
                         mc.player,
                         target,
-                        Hand.MAIN_HAND
+                        new EntityHitResult(target),
+                        InteractionHand.MAIN_HAND
                 );
             }
         }
-        if (mc.player.currentScreenHandler instanceof MerchantScreenHandler handler) {
-            TradeOfferList list = handler.getRecipes();
+        if (mc.player.containerMenu instanceof MerchantMenu handler) {
+            MerchantOffers list = handler.getOffers();
             AtomicBoolean find = new AtomicBoolean(false);
             boolean findBook = false;
             for (int size = 0; size < list.size(); ++size) {
-                TradeOffer tradeOffer = list.get(size);
-                ItemStack sellStack = tradeOffer.getSellItem();
+                MerchantOffer tradeOffer = list.get(size);
+                ItemStack sellStack = tradeOffer.getResult();
                 Item item = sellStack.getItem();
                 if (item == Items.ENCHANTED_BOOK) {
                     findBook = true;
-                    ItemEnchantmentsComponent enchantments = sellStack.getOrDefault(net.minecraft.component.DataComponentTypes.STORED_ENCHANTMENTS, ItemEnchantmentsComponent.DEFAULT);
-                    enchantments.getEnchantments().forEach(entry -> {
+                    ItemEnchantments enchantments = sellStack.getOrDefault(net.minecraft.core.component.DataComponents.STORED_ENCHANTMENTS, ItemEnchantments.EMPTY);
+                    enchantments.keySet().forEach(entry -> {
                         int level = enchantments.getLevel(entry);
                         int maxLevel = entry.value().getMaxLevel();
-                        String name = Enchantment.getName(entry, level).getString();
-                        mc.player.sendMessage(Text.of("[LeavesHack]本次结果 " + name), false);
-                        for (RegistryKey<Enchantment> enchantmentKey : enchantmentList.get()){
+                        String name = Enchantment.getFullname(entry, level).getString();
+                        mc.player.sendSystemMessage(Component.literal("[LeavesHack]本次结果 " + name));
+                        for (ResourceKey<Enchantment> enchantmentKey : enchantmentList.get()){
                             if (hasEnchantments(sellStack, enchantmentKey) && (level >= enchantmentLevel.get() || level == maxLevel)) {
                                 find.set(true);
-                                mc.player.sendMessage(Text.of("[LeavesHack]:已找到所需附魔"), false);
+                                mc.player.sendSystemMessage(Component.literal("[LeavesHack]:已找到所需附魔"));
                                 return;
                             }
                         }
                     });
                 }
             }
-            if (!findBook) mc.player.sendMessage(Text.of("[LeavesHack]:本次未找到附魔书"), false);
-            mc.getNetworkHandler().sendPacket(new CloseHandledScreenC2SPacket(mc.player.currentScreenHandler.syncId));
-            mc.currentScreen.close();
+            if (!findBook) mc.player.sendSystemMessage(Component.literal("[LeavesHack]:本次未找到附魔书"));
+            mc.getConnection().send(new ServerboundContainerClosePacket(mc.player.containerMenu.containerId));
+            mc.screen.onClose();
             if (find.get()) {
                 toggle();
                 return;
             }
-            Direction facing1 = mc.player.getHorizontalFacing();
+            Direction facing1 = mc.player.getDirection();
             switch (facing1) {
-                case NORTH -> pos = mc.player.getBlockPos().north();
-                case SOUTH -> pos = mc.player.getBlockPos().south();
-                case EAST -> pos = mc.player.getBlockPos().east();
-                case WEST -> pos = mc.player.getBlockPos().west();
-                default -> pos = mc.player.getBlockPos();
+                case NORTH -> pos = mc.player.blockPosition().north();
+                case SOUTH -> pos = mc.player.blockPosition().south();
+                case EAST -> pos = mc.player.blockPosition().east();
+                case WEST -> pos = mc.player.blockPosition().west();
+                default -> pos = mc.player.blockPosition();
             }
-            Rotation.snapAt(pos.toCenterPos());
-            mc.interactionManager.attackBlock(pos, BlockUtils.getClosestPlaceSide(pos));
+            Rotation.snapAt(pos.getCenter());
+            mc.gameMode.startDestroyBlock(pos, BlockUtils.getClosestPlaceSide(pos));
             timer.reset();
         }
     }
     public int findItem(Item input) {
         for (int i = 0; i < 9; ++i) {
             Item item = getStackInSlot(i).getItem();
-            if (Item.getRawId(item) != Item.getRawId(input)) continue;
+            if (Item.getId(item) != Item.getId(input)) continue;
             return i;
         }
         return -1;
     }
     public ItemStack getStackInSlot(int i) {
-        return mc.player.getInventory().getStack(i);
+        return mc.player.getInventory().getItem(i);
     }
     @EventHandler
     private void onRender3d(Render3DEvent event) {
@@ -209,12 +215,12 @@ public class AutoRefreshTrade extends Module {
         Color color = new Color(50, 232, 252, 80);
         event.renderer.box(pos,color,color, ShapeMode.Both,0);
     }
-    private VillagerEntity getTarget() {
+    private Villager getTarget() {
         Entity target = null;
         double distance = range.get();
-        for (Entity entity : mc.world.getEntities()) {
-            if (!(entity instanceof VillagerEntity)) continue;
-            if (!mc.player.canSee(entity) && mc.player.distanceTo(entity) > wallRange.get()) {
+        for (Entity entity : mc.level.entitiesForRendering()) {
+            if (!(entity instanceof Villager)) continue;
+            if (!mc.player.hasLineOfSight(entity) && mc.player.distanceTo(entity) > wallRange.get()) {
                 continue;
             }
             if (target == null) {
@@ -227,21 +233,21 @@ public class AutoRefreshTrade extends Module {
                 }
             }
         }
-        return (VillagerEntity)(target);
+        return (Villager)(target);
     }
-    public static boolean hasEnchantments(ItemStack itemStack, RegistryKey<Enchantment>... enchantments) {
+    public static boolean hasEnchantments(ItemStack itemStack, ResourceKey<Enchantment>... enchantments) {
         if (itemStack.isEmpty()) return false;
-        Object2IntMap<RegistryEntry<Enchantment>> itemEnchantments = new Object2IntArrayMap<>();
+        Object2IntMap<Holder<Enchantment>> itemEnchantments = new Object2IntArrayMap<>();
         getEnchantments(itemStack, itemEnchantments);
 
-        for (RegistryKey<Enchantment> enchantment : enchantments) {
+        for (ResourceKey<Enchantment> enchantment : enchantments) {
             if (!hasEnchantment(itemEnchantments, enchantment)) return false;
         }
         return true;
     }
-    private static boolean hasEnchantment(Object2IntMap<RegistryEntry<Enchantment>> itemEnchantments, RegistryKey<Enchantment> enchantmentKey) {
-        for (RegistryEntry<Enchantment> enchantment : itemEnchantments.keySet()) {
-            if (enchantment.matchesKey(enchantmentKey)) return true;
+    private static boolean hasEnchantment(Object2IntMap<Holder<Enchantment>> itemEnchantments, ResourceKey<Enchantment> enchantmentKey) {
+        for (Holder<Enchantment> enchantment : itemEnchantments.keySet()) {
+            if (enchantment.is(enchantmentKey)) return true;
         }
         return false;
     }

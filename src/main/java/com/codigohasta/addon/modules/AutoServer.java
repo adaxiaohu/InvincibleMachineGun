@@ -5,7 +5,7 @@ import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.client.network.ServerInfo;
+import net.minecraft.client.multiplayer.ServerData;
 
 import java.util.List;
 
@@ -177,7 +177,7 @@ public class AutoServer extends Module {
 
         // --- 2. 发送逻辑 ---
         if (!isSending || currentCmdList == null) return;
-        if (mc.player == null || mc.world == null) return;
+        if (mc.player == null || mc.level == null) return;
 
         if (timer > 0) {
             timer--;
@@ -240,13 +240,13 @@ public class AutoServer extends Module {
      * 获取当前连接的唯一标识 (IP地址)
      */
     private String getSessionID() {
-        if (mc.isInSingleplayer()) return "SINGLEPLAYER";
+        if (mc.isLocalServer()) return "SINGLEPLAYER";
         
-        ServerInfo info = mc.getCurrentServerEntry();
+        ServerData info = mc.getCurrentServer();
         if (info == null) return "NONE"; // 代表未连接或在主菜单
         
         // 返回小写的 IP 地址
-        return info.address.toLowerCase();
+        return info.ip.toLowerCase();
     }
 
     private void sendCommand(String cmd) {
@@ -254,8 +254,8 @@ public class AutoServer extends Module {
         if (cleanCmd.startsWith("/")) {
             cleanCmd = cleanCmd.substring(1);
         }
-        if (mc.player != null && mc.player.networkHandler != null) {
-            mc.player.networkHandler.sendChatCommand(cleanCmd);
+        if (mc.player != null && mc.player.connection != null) {
+            mc.player.connection.sendCommand(cleanCmd);
         }
     }
 }
