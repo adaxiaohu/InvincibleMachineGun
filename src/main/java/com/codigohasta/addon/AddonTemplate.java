@@ -18,14 +18,15 @@ import meteordevelopment.meteorclient.events.game.GameLeftEvent;
 import meteordevelopment.meteorclient.systems.hud.Hud;
 import meteordevelopment.meteorclient.systems.hud.HudGroup;
 import meteordevelopment.meteorclient.systems.modules.Category;
+import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.systems.modules.Modules;
 import meteordevelopment.meteorclient.utils.player.ChatUtils;
 import meteordevelopment.meteorclient.utils.render.color.Color;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.text.MutableText;
-import net.minecraft.text.Style;
-import net.minecraft.text.Text;
-import net.minecraft.text.TextColor;
+import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.network.chat.Style;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.TextColor;
 import org.slf4j.Logger;
 
 public class AddonTemplate extends MeteorAddon {
@@ -118,14 +119,14 @@ public class AddonTemplate extends MeteorAddon {
          modules.add(new Follower());
          modules.add(new ArrowDmg());
          modules.add(new Pitcher());
-         modules.add(new VillagerTrader());
          modules.add(new IMGWorldStats());
          modules.add(new XTpaura());
          modules.add(new XCarry());
          modules.add(new EntityTags());
          modules.add(new TpBowAura());
          modules.add(new TpMachineGun());
-         modules.add(new AutoLibrarian());
+         // AutoLibrarian 与 VillagerTrader 依赖 Baritone，缺失时跳过，见 addBaritoneModules
+         addBaritoneModules(modules);
          modules.add(new SpearKill()); 
          modules.add(new AntiLag());
          modules.add(new SprintStatusModule());
@@ -193,6 +194,40 @@ public class AddonTemplate extends MeteorAddon {
         MeteorClient.EVENT_BUS.subscribe(this);
     }
 
+    /**
+     * 注册依赖 Baritone 的模块。
+     *
+     * AutoLibrarian 与 VillagerTrader 在类签名上实现了 Baritone 的
+     * AbstractGameEventListener，若在本类里直接 new，字节码校验阶段就会去解析
+     * baritone.api.*。Baritone 缺失时这会抛 NoClassDefFoundError，导致整个附属
+     * 初始化失败、游戏起不来，所以改成反射注册，并在 Baritone 不可用时跳过。
+     */
+    private void addBaritoneModules(Modules modules) {
+        if (!isBaritoneAvailable()) {
+            LOG.info("Baritone not found, skipping AutoLibrarian and VillagerTrader");
+            return;
+        }
+
+        for (String name : new String[]{"VillagerTrader", "AutoLibrarian"}) {
+            try {
+                Class<?> clazz = Class.forName("com.codigohasta.addon.modules." + name);
+                modules.add((Module) clazz.getDeclaredConstructor().newInstance());
+            } catch (Throwable t) {
+                LOG.warn("Failed to register Baritone module {}: {}", name, t.toString());
+            }
+        }
+    }
+
+    /** 检测 baritone.api 是否在类路径上。只加载不初始化，本方法不引用任何 Baritone 类型。 */
+    private static boolean isBaritoneAvailable() {
+        try {
+            Class.forName("baritone.api.BaritoneAPI", false, AddonTemplate.class.getClassLoader());
+            return true;
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
     @Override
     public void onRegisterCategories() {
         Modules.registerCategory(CATEGORY);
@@ -225,17 +260,17 @@ public class AddonTemplate extends MeteorAddon {
         sentWelcome = false;
     }
 
-    private Text createGradientText(String text) {
+    private Component createGradientText(String text) {
         Color startColor = new Color(0, 255, 255); // 青色
         Color endColor = new Color(255, 0, 255);   // 品红色
-        MutableText result = Text.empty();
+        MutableComponent result = Component.empty();
         for (int i = 0; i < text.length(); i++) {
             float f = (float) i / (float) text.length();
             int r = (int) (startColor.r + (endColor.r - startColor.r) * f);
             int g = (int) (startColor.g + (endColor.g - startColor.g) * f);
             int b = (int) (startColor.b + (endColor.b - startColor.b) * f);
             Color stepColor = new Color(r, g, b, 255);
-            result.append(Text.literal(String.valueOf(text.charAt(i))).setStyle(Style.EMPTY.withColor(TextColor.fromRgb(stepColor.getPacked()))));
+            result.append(Component.literal(String.valueOf(text.charAt(i))).setStyle(Style.EMPTY.withColor(TextColor.fromRgb(stepColor.getPacked()))));
         }
         return result;
     }

@@ -1,14 +1,14 @@
 package com.codigohasta.addon.utils.leaveshack.events;
 
 import meteordevelopment.meteorclient.events.Cancellable;
-import net.minecraft.entity.MovementType;
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.entity.MoverType;
+import net.minecraft.world.phys.Vec3;
 
 public class MoveEvent extends Cancellable {
     private double x;
     private double y;
     private double z;
-    public Vec3d movement;
+    public Vec3 movement;
     public MoveEvent(double x, double y, double z) {
         this.x = x;
         this.y = y;

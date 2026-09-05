@@ -2,41 +2,41 @@ package com.codigohasta.addon.utils.alien;
 
 import java.util.HashMap;
 import java.util.Map;
-import net.minecraft.block.Block;
-import net.minecraft.client.MinecraftClient;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.client.Minecraft;
 import com.codigohasta.addon.mixin.InventoryAccessor;
-import net.minecraft.component.DataComponentTypes;
-import net.minecraft.component.type.PotionContentsComponent;
-import net.minecraft.entity.effect.StatusEffect;
-import net.minecraft.entity.effect.StatusEffectInstance;
-import net.minecraft.item.BlockItem;
-import net.minecraft.item.Item;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
-import net.minecraft.network.packet.c2s.play.UpdateSelectedSlotC2SPacket;
-import net.minecraft.screen.slot.SlotActionType;
+import net.minecraft.core.component.DataComponents;
+import net.minecraft.world.item.alchemy.PotionContents;
+import net.minecraft.world.effect.MobEffect;
+import net.minecraft.world.effect.MobEffectInstance;
+import net.minecraft.world.item.BlockItem;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.network.protocol.game.ServerboundSetCarriedItemPacket;
+import net.minecraft.world.inventory.ContainerInput;
 
 public class AlienInventoryUtil {
-   private static final MinecraftClient mc = MinecraftClient.getInstance();
+   private static final Minecraft mc = Minecraft.getInstance();
 
    public static void switchToSlot(int slot) {
       if (slot < 0 || slot > 8) return;
       ((InventoryAccessor) mc.player.getInventory()).setSelectedSlot(slot);
-      mc.getNetworkHandler().sendPacket(new UpdateSelectedSlotC2SPacket(slot));
+      mc.getConnection().send(new ServerboundSetCarriedItemPacket(slot));
    }
 
    public static void inventorySwap(int slot, int selectedSlot) {
       if (slot - 36 != selectedSlot) {
          if (AlienEntityUtil.inInventory()) {
-            mc.interactionManager.clickSlot(mc.player.currentScreenHandler.syncId, slot, selectedSlot, SlotActionType.SWAP, mc.player);
+            mc.gameMode.handleContainerInput(mc.player.containerMenu.containerId, slot, selectedSlot, ContainerInput.SWAP, mc.player);
          }
       }
    }
 
    public static int findItem(Item input) {
       for (int i = 0; i < 9; i++) {
-         Item item = mc.player.getInventory().getStack(i).getItem();
-         if (Item.getRawId(item) == Item.getRawId(input)) {
+         Item item = mc.player.getInventory().getItem(i).getItem();
+         if (Item.getId(item) == Item.getId(input)) {
             return i;
          }
       }
@@ -45,7 +45,7 @@ public class AlienInventoryUtil {
 
    public static int findBlock(Block blockIn) {
       for (int i = 0; i < 9; i++) {
-         ItemStack stack = mc.player.getInventory().getStack(i);
+         ItemStack stack = mc.player.getInventory().getItem(i);
          if (stack != ItemStack.EMPTY && stack.getItem() instanceof BlockItem && ((BlockItem) stack.getItem()).getBlock() == blockIn) {
             return i;
          }
@@ -59,7 +59,7 @@ public class AlienInventoryUtil {
 
    public static int findItemInventorySlot(Item item) {
       for (int i = 35; i >= 0; i--) {
-         ItemStack stack = mc.player.getInventory().getStack(i);
+         ItemStack stack = mc.player.getInventory().getItem(i);
          if (stack.getItem() == item) {
             return i < 9 ? i + 36 : i;
          }
@@ -70,21 +70,21 @@ public class AlienInventoryUtil {
    public static Map<Integer, ItemStack> getInventoryAndHotbarSlots() {
       HashMap<Integer, ItemStack> fullInventorySlots = new HashMap<>();
       for (int current = 0; current <= 35; current++) {
-         fullInventorySlots.put(current, mc.player.getInventory().getStack(current));
+         fullInventorySlots.put(current, mc.player.getInventory().getItem(current));
       }
       return fullInventorySlots;
    }
 
-   public static int getPotionCount(StatusEffect targetEffect) {
+   public static int getPotionCount(MobEffect targetEffect) {
       int count = 0;
       for (int i = 35; i >= 0; i--) {
-         ItemStack itemStack = mc.player.getInventory().getStack(i);
-         if (Item.getRawId(itemStack.getItem()) == Item.getRawId(Items.SPLASH_POTION)) {
-            PotionContentsComponent potionContentsComponent = itemStack.getOrDefault(
-               DataComponentTypes.POTION_CONTENTS, PotionContentsComponent.DEFAULT
+         ItemStack itemStack = mc.player.getInventory().getItem(i);
+         if (Item.getId(itemStack.getItem()) == Item.getId(Items.SPLASH_POTION)) {
+            PotionContents potionContentsComponent = itemStack.getOrDefault(
+               DataComponents.POTION_CONTENTS, PotionContents.EMPTY
             );
-            for (StatusEffectInstance effect : potionContentsComponent.getEffects()) {
-               if (effect.getEffectType().value() == targetEffect) {
+            for (MobEffectInstance effect : potionContentsComponent.getAllEffects()) {
+               if (effect.getEffect().value() == targetEffect) {
                   count += itemStack.getCount();
                }
             }

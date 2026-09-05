@@ -9,10 +9,10 @@ import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.render.color.SettingColor;
 import meteordevelopment.orbit.EventHandler;
 import meteordevelopment.orbit.EventPriority;
-import net.minecraft.entity.Entity;
-import net.minecraft.network.listener.ClientPlayPacketListener;
-import net.minecraft.network.packet.Packet;
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.network.protocol.game.ClientGamePacketListener;
+import net.minecraft.network.protocol.Packet;
+import net.minecraft.world.phys.Vec3;
 
 import java.lang.reflect.Method;
 import java.util.HashMap;
@@ -125,13 +125,13 @@ public class Backtrack extends Module {
     // ================== [ 3D Rendering (Meteor 1.21.11 API) ] ==================
     @EventHandler
     private void onRender3D(Render3DEvent event) {
-        if (!renderEsp.get() || mc.world == null) return;
+        if (!renderEsp.get() || mc.level == null) return;
 
         for (BacktrackData data : packetData) {
             // 如果数据里没有缓存包，或者位置为 null 则不渲染
             if (data.actualPosition == null || data.movements.isEmpty()) continue;
 
-            Entity entity = mc.world.getEntityById(data.entityId);
+            Entity entity = mc.level.getEntity(data.entityId);
             if (entity == null) continue;
 
             double x = data.actualPosition.x;
@@ -139,8 +139,8 @@ public class Backtrack extends Module {
             double z = data.actualPosition.z;
 
             // 获取实体在 1.21 中的真实宽高
-            double width = entity.getWidth() / 2.0;
-            double height = entity.getHeight();
+            double width = entity.getBbWidth() / 2.0;
+            double height = entity.getBbHeight();
 
             // 使用 Meteor 自带的 Renderer3D 绘制 Box，完美兼容光影和管线
             event.renderer.box(
@@ -154,14 +154,14 @@ public class Backtrack extends Module {
 
     @EventHandler(priority = EventPriority.HIGHEST)
     private void onTick(TickEvent.Pre event) {
-        if (mc.player == null || mc.world == null) return;
+        if (mc.player == null || mc.level == null) return;
 
         long currentTime = System.currentTimeMillis();
 
         if (smart.get()) {
             double closestDist = 999999.0;
             for (BacktrackData data : packetData) {
-                Entity entity = mc.world.getEntityById(data.entityId);
+                Entity entity = mc.level.getEntity(data.entityId);
                 if (entity != null) {
                     double dist = mc.player.distanceTo(entity);
                     if (dist < closestDist) closestDist = dist;
@@ -191,7 +191,7 @@ public class Backtrack extends Module {
                         boolean outOfReach = false;
                         for (BacktrackData data : packetData) {
                             if (data.actualPosition == null) continue;
-                            Vec3d playerPos = new Vec3d(mc.player.getX(), mc.player.getY(), mc.player.getZ());
+                            Vec3 playerPos = new Vec3(mc.player.getX(), mc.player.getY(), mc.player.getZ());
                             if (data.actualPosition.distanceTo(playerPos) >= maxReach.get()) {
                                 outOfReach = true;
                                 break;
@@ -252,7 +252,7 @@ public class Backtrack extends Module {
 
     @EventHandler(priority = EventPriority.HIGHEST)
     private void onPacketReceive(PacketEvent.Receive event) {
-        if (mc.player == null || mc.world == null) return;
+        if (mc.player == null || mc.level == null) return;
 
         Packet<?> packet = event.packet;
         String name = packet.getClass().getSimpleName();
@@ -261,14 +261,14 @@ public class Backtrack extends Module {
             int entityId = extractEntityIdSafely(packet);
             if (entityId == -1 || entityId == mc.player.getId()) return;
 
-            Entity entity = mc.world.getEntityById(entityId);
+            Entity entity = mc.level.getEntity(entityId);
             if (entity == null) return;
 
             double dist = mc.player.distanceTo(entity);
             if (dist < minRange.get() || dist > maxRange.get()) return;
 
             BacktrackData data = retrieveData(entityId);
-            data.actualPosition = new Vec3d(entity.getX(), entity.getY(), entity.getZ());
+            data.actualPosition = new Vec3(entity.getX(), entity.getY(), entity.getZ());
             
             if (data.movements.size() > maxPacketData.get()) return;
 
@@ -292,15 +292,15 @@ public class Backtrack extends Module {
 
     @SuppressWarnings("unchecked")
     private void applyInbound(Packet<?> packet) {
-        if (mc.getNetworkHandler() != null) {
-            try { ((Packet<ClientPlayPacketListener>) packet).apply(mc.getNetworkHandler()); } catch (Exception ignored) { }
+        if (mc.getConnection() != null) {
+            try { ((Packet<ClientGamePacketListener>) packet).handle(mc.getConnection()); } catch (Exception ignored) { }
         }
     }
 
     private void sendOutbound(Packet<?> packet) {
-        if (mc.getNetworkHandler() != null) {
+        if (mc.getConnection() != null) {
             isSending = true;
-            mc.getNetworkHandler().sendPacket(packet);
+            mc.getConnection().send(packet);
             isSending = false;
         }
     }
@@ -357,7 +357,7 @@ public class Backtrack extends Module {
 
     private static class BacktrackData {
         public final int entityId;
-        public Vec3d actualPosition = null; // 修正初始值
+        public Vec3 actualPosition = null; // 修正初始值
         public final List<Packet<?>> movements = new CopyOnWriteArrayList<>();
         public BacktrackData(int entityId) { this.entityId = entityId; }
     }

@@ -3,13 +3,13 @@ package com.codigohasta.addon.modules;
 import com.codigohasta.addon.AddonTemplate;
 import meteordevelopment.meteorclient.events.packets.PacketEvent;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.network.packet.c2s.play.CloseHandledScreenC2SPacket;
+import net.minecraft.network.protocol.game.ServerboundContainerClosePacket;
 import meteordevelopment.meteorclient.systems.modules.Module;
 
 /**
  * XCarry - 合成栏储物
  *
- * 原理：拦截 CloseHandledScreenC2SPacket（syncId == 0 即玩家背包），
+ * 原理：拦截 ServerboundContainerClosePacket（syncId == 0 即玩家背包），
  * 让服务器认为背包未关闭，从而不会弹出合成栏中的物品，
  * 实现白嫖 4 格额外储存空间。
  */
@@ -20,8 +20,8 @@ public class XCarry extends Module {
 
     @EventHandler
     private void onPacketSend(PacketEvent.Send event) {
-        if (event.packet instanceof CloseHandledScreenC2SPacket packet) {
-            if (packet.getSyncId() == 0) {
+        if (event.packet instanceof ServerboundContainerClosePacket packet) {
+            if (packet.getContainerId() == 0) {
                 event.cancel();
             }
         }

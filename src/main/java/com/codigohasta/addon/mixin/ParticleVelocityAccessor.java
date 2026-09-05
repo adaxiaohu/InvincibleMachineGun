@@ -6,12 +6,12 @@ import org.spongepowered.asm.mixin.gen.Accessor;
 
 @Mixin(Particle.class)
 public interface ParticleVelocityAccessor {
-    @Accessor("velocityX")
+    @Accessor("xd")
     void setVelocityX(double velocityX);
 
-    @Accessor("velocityY")
+    @Accessor("yd")
     void setVelocityY(double velocityY);
 
-    @Accessor("velocityZ")
+    @Accessor("zd")
     void setVelocityZ(double velocityZ);
 }

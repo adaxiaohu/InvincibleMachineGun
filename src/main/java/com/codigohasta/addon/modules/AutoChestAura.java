@@ -1,6 +1,6 @@
 package com.codigohasta.addon.modules;
 
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.phys.Vec3;
 
 import com.codigohasta.addon.AddonTemplate;
 import meteordevelopment.meteorclient.MeteorClient;
@@ -12,19 +12,19 @@ import meteordevelopment.meteorclient.utils.Utils;
 import meteordevelopment.meteorclient.utils.player.Rotations;
 import meteordevelopment.orbit.EventHandler;
 import meteordevelopment.orbit.EventPriority;
-import net.minecraft.block.BlockState;
-import net.minecraft.block.ChestBlock;
-import net.minecraft.block.entity.BlockEntity;
-import net.minecraft.block.entity.BlockEntityType;
-import net.minecraft.network.packet.c2s.play.CloseHandledScreenC2SPacket;
-import net.minecraft.network.packet.s2c.play.InventoryS2CPacket;
-import net.minecraft.network.packet.s2c.play.OpenScreenS2CPacket;
-import net.minecraft.screen.ScreenHandler;
-import net.minecraft.util.Hand;
-import net.minecraft.util.hit.BlockHitResult;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Direction;
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.ChestBlock;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.entity.BlockEntityType;
+import net.minecraft.network.protocol.game.ServerboundContainerClosePacket;
+import net.minecraft.network.protocol.game.ClientboundContainerSetContentPacket;
+import net.minecraft.network.protocol.game.ClientboundOpenScreenPacket;
+import net.minecraft.world.inventory.AbstractContainerMenu;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.world.phys.Vec3;
 
 import java.util.HashMap;
 import java.util.List;
@@ -113,7 +113,7 @@ public class AutoChestAura extends Module {
 
     @EventHandler
     private void onTick(TickEvent.Pre event) {
-        if (mc.world == null || mc.player == null) return;
+        if (mc.level == null || mc.player == null) return;
 
         // --- 1. 卡死检测与状态维护 ---
         
@@ -122,7 +122,7 @@ public class AutoChestAura extends Module {
             stuckTimer++;
             
             // 如果玩家手动关闭了界面，或者因为距离太远界面自动关了
-            if (mc.currentScreen == null && stuckTimer > 5) {
+            if (mc.screen == null && stuckTimer > 5) {
                 // 重置状态，准备开下一个
                 resetState();
                 return;
@@ -155,19 +155,19 @@ public class AutoChestAura extends Module {
         }
 
         // 只有当前没打开任何界面时才操作
-        if (mc.currentScreen != null) return;
+        if (mc.screen != null) return;
 
         for (BlockEntity block : Utils.blockEntities()) {
             if (!blocks.get().contains(block.getType())) continue;
             
-            if (mc.player.getEyePos().distanceTo(Vec3d.ofCenter(block.getPos())) >= range.get()) continue;
+            if (mc.player.getEyePosition().distanceTo(Vec3.atCenterOf(block.getBlockPos())) >= range.get()) continue;
 
-            BlockPos pos = block.getPos();
+            BlockPos pos = block.getBlockPos();
             if (openedBlocks.containsKey(pos)) continue;
 
             // --- 3. 执行开启 ---
             
-            Runnable click = () -> mc.interactionManager.interactBlock(mc.player, Hand.MAIN_HAND, new BlockHitResult(new Vec3d(pos.getX(), pos.getY(), pos.getZ()), Direction.UP, pos, false));
+            Runnable click = () -> mc.gameMode.useItemOn(mc.player, InteractionHand.MAIN_HAND, new BlockHitResult(new Vec3(pos.getX(), pos.getY(), pos.getZ()), Direction.UP, pos, false));
             
             if (rotate.get()) {
                 Rotations.rotate(Rotations.getYaw(pos), Rotations.getPitch(pos), click);
@@ -191,21 +191,21 @@ public class AutoChestAura extends Module {
     private void markOpened(BlockEntity block, BlockPos pos) {
         openedBlocks.put(pos, System.currentTimeMillis());
         
-        BlockState state = block.getCachedState();
-        if (state.contains(ChestBlock.CHEST_TYPE)) {
-            Direction direction = state.get(ChestBlock.FACING);
-            switch (state.get(ChestBlock.CHEST_TYPE)) {
-                case LEFT -> openedBlocks.put(pos.offset(direction.rotateYClockwise()), System.currentTimeMillis());
-                case RIGHT -> openedBlocks.put(pos.offset(direction.rotateYCounterclockwise()), System.currentTimeMillis());
+        BlockState state = block.getBlockState();
+        if (state.hasProperty(ChestBlock.TYPE)) {
+            Direction direction = state.getValue(ChestBlock.FACING);
+            switch (state.getValue(ChestBlock.TYPE)) {
+                case LEFT -> openedBlocks.put(pos.relative(direction.getClockWise()), System.currentTimeMillis());
+                case RIGHT -> openedBlocks.put(pos.relative(direction.getCounterClockWise()), System.currentTimeMillis());
             }
         }
     }
 
     private void forceClose() {
         if (mc.player != null) {
-            mc.player.closeHandledScreen();
-            if (mc.player.currentScreenHandler != null) {
-                mc.getNetworkHandler().sendPacket(new CloseHandledScreenC2SPacket(mc.player.currentScreenHandler.syncId));
+            mc.player.closeContainer();
+            if (mc.player.containerMenu != null) {
+                mc.getConnection().send(new ServerboundContainerClosePacket(mc.player.containerMenu.containerId));
             }
         }
         resetState();
@@ -222,18 +222,18 @@ public class AutoChestAura extends Module {
         private void onPacket(PacketEvent.Receive event) {
             if (!isPending) return;
 
-            // 监听 InventoryS2CPacket (箱子内容包)
+            // 监听 ClientboundContainerSetContentPacket (箱子内容包)
             // ChestTracker 依赖这个包来记录数据
-            if (event.packet instanceof InventoryS2CPacket packet) {
-                ScreenHandler handler = mc.player.currentScreenHandler;
-                if (handler != null && packet.syncId() == handler.syncId) {
+            if (event.packet instanceof ClientboundContainerSetContentPacket packet) {
+                AbstractContainerMenu handler = mc.player.containerMenu;
+                if (handler != null && packet.containerId() == handler.containerId) {
                     // 收到数据了！设置关闭倒计时
                     // 如果 waitTime 是 2，那就等 2 个 tick 后关闭
                     packetTimer = waitTime.get();
                 }
             }
             // 备用：有时候箱子是空的或者 lag，只发了 OpenScreen
-            else if (event.packet instanceof OpenScreenS2CPacket packet) {
+            else if (event.packet instanceof ClientboundOpenScreenPacket packet) {
                 // 如果已经过了一半的超时时间还没收到内容包，就开始倒计时关闭
                 // 防止箱子打开了但因为没物品包而一直挂着
                 if (packetTimer == 0) { 

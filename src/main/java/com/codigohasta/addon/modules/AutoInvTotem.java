@@ -10,11 +10,11 @@ import meteordevelopment.meteorclient.settings.Setting;
 import meteordevelopment.meteorclient.settings.SettingGroup;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.client.gui.screen.ingame.InventoryScreen;
-import net.minecraft.item.ItemStack;
-import net.minecraft.network.packet.s2c.play.EntityStatusS2CPacket;
-import net.minecraft.entity.Entity;
-import net.minecraft.screen.slot.SlotActionType;
+import net.minecraft.client.gui.screens.inventory.InventoryScreen;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.network.protocol.game.ClientboundEntityEventPacket;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.inventory.ContainerInput;
 
 public class AutoInvTotem extends Module {
     private final SettingGroup sgGeneral = settings.getDefaultGroup();
@@ -87,16 +87,16 @@ public class AutoInvTotem extends Module {
 private void onPacketReceive(PacketEvent.Receive event) {
     if (mc.player == null) return;
 
-    if (event.packet instanceof EntityStatusS2CPacket packet) {
+    if (event.packet instanceof ClientboundEntityEventPacket packet) {
         // 修复编译错误：根据报错，你的映射可能需要 getStatus() 和 getEntityId()
-        // 或者在 1.21.11 中，EntityStatusS2CPacket 依然通过 getEntity 方法访问
+        // 或者在 1.21.11 中，ClientboundEntityEventPacket 依然通过 getEntity 方法访问
         
         // 【1.21.11 安全写法】：尝试兼容 Record 和 旧版映射
         // 如果 packet.status() 报错，说明映射名为 getStatus()
-        if (packet.getStatus() == 35) { 
+        if (packet.getEventId() == 35) { 
             // 同样，如果 entityId() 报错，尝试 getEntityId() 或通过 world 查找
             // 在 1.21.11 中，最稳妥的判断是：
-            Entity entity = packet.getEntity(mc.world);
+            Entity entity = packet.getEntity(mc.level);
             if (entity != null && entity.getId() == mc.player.getId()) {
                 needsTotem = true;
                 long humanJitter = minDelay.get() + (long)(Math.random() * (maxDelay.get() - minDelay.get() + 1));
@@ -122,7 +122,7 @@ private void onPacketReceive(PacketEvent.Receive event) {
         hadTotemInOffhand = currentlyHasTotem;
 
         // 执行拿图腾动作：必须处于打开背包的状态，并且到达了仿生延迟时间
-        if (needsTotem && mc.currentScreen instanceof InventoryScreen) {
+        if (needsTotem && mc.screen instanceof InventoryScreen) {
             if (System.currentTimeMillis() >= executeTime) {
                 executeSafeSwap();
             }
@@ -146,14 +146,14 @@ private void onPacketReceive(PacketEvent.Receive event) {
             int containerSlot = totemSlot < 9 ? totemSlot + 36 : totemSlot;
             
             // 【安全强化】直接获取 playerScreenHandler 的同步ID，确保是玩家自身背包的 ID (通常为 0)
-            int syncId = mc.player.playerScreenHandler.syncId; 
+            int syncId = mc.player.inventoryMenu.containerId; 
 
             // 发送原版的 SWAP(40) 数据包，模拟玩家按下副手切换键
-            mc.interactionManager.clickSlot(
+            mc.gameMode.handleContainerInput(
                 syncId, 
                 containerSlot, 
                 40, 
-                SlotActionType.SWAP, 
+                ContainerInput.SWAP, 
                 mc.player
             );
 
@@ -174,12 +174,12 @@ private void onPacketReceive(PacketEvent.Receive event) {
     private int findTotemSlot() {
         // 优先搜寻主背包 (9-35)
         for (int i = 9; i < 36; i++) {
-            if (isTotem(mc.player.getInventory().getStack(i))) return i;
+            if (isTotem(mc.player.getInventory().getItem(i))) return i;
         }
         // 如果开启了快捷栏搜寻 (0-8)
         if (moveFromHotbar.get()) {
             for (int i = 0; i < 9; i++) {
-                if (isTotem(mc.player.getInventory().getStack(i))) return i;
+                if (isTotem(mc.player.getInventory().getItem(i))) return i;
             }
         }
         return -1;
@@ -187,7 +187,7 @@ private void onPacketReceive(PacketEvent.Receive event) {
 
     private boolean hasTotemInOffhand() {
         if (mc.player == null) return false;
-        return isTotem(mc.player.getOffHandStack());
+        return isTotem(mc.player.getOffhandItem());
     }
 
     // 【1.21.11 准则】彻底废弃 Items.TOTEM_OF_UNDYING 的直接调用，改用安全的 String 校验

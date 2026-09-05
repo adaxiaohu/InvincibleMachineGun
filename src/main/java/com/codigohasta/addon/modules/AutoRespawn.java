@@ -6,7 +6,7 @@ import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.player.ChatUtils;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.network.packet.c2s.play.ClientStatusC2SPacket;
+import net.minecraft.network.protocol.game.ServerboundClientCommandPacket;
 
 import java.util.Arrays;
 import java.util.List;
@@ -85,10 +85,10 @@ public class AutoRespawn extends Module {
         if (mc.player == null) return;
 
         // 1. 检查死亡状态（边缘触发，仅在刚死的那一刻执行一次）
-        if (mc.player.isDead()) {
+        if (mc.player.isDeadOrDying()) {
             if (!wasDead) {
                 // 向服务器发送重生请求
-                mc.player.networkHandler.sendPacket(new ClientStatusC2SPacket(ClientStatusC2SPacket.Mode.PERFORM_RESPAWN));
+                mc.player.connection.send(new ServerboundClientCommandPacket(ServerboundClientCommandPacket.Action.PERFORM_RESPAWN));
 
                 if (showMessage.get()) {
                     info("已自动复活。");

@@ -7,9 +7,9 @@ import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.player.FindItemResult;
 import meteordevelopment.meteorclient.utils.player.InvUtils;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.item.Item;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -206,7 +206,7 @@ public class adaAutoHotbar extends Module {
         sb.append("已保存 [").append(activePreset.get().name()).append("] 到配置文件: ");
 
         for (int i = 0; i < 9; i++) {
-            ItemStack stack = mc.player.getInventory().getStack(i);
+            ItemStack stack = mc.player.getInventory().getItem(i);
             Item item = stack.getItem();
             
             // 将当前物品写入 Setting
@@ -216,7 +216,7 @@ public class adaAutoHotbar extends Module {
                 sb.append("空, ");
             } else {
                 setting.set(Collections.singletonList(item)); // 存入物品
-                sb.append(item.getName().getString()).append(", ");
+                sb.append(new ItemStack(item).getHoverName().getString()).append(", ");
             }
         }
         info(sb.toString());
@@ -229,7 +229,7 @@ public class adaAutoHotbar extends Module {
         info("--- 预览 " + activePreset.get().name() + " ---");
         for (int i = 0; i < 9; i++) {
             List<Item> items = targetSlotSettings.get(i).get();
-            String itemName = (items.isEmpty() || items.get(0) == Items.AIR) ? "空" : items.get(0).getName().getString();
+            String itemName = (items.isEmpty() || items.get(0) == Items.AIR) ? "空" : new ItemStack(items.get(0)).getHoverName().getString();
             info("槽位 " + (i + 1) + ": " + itemName);
         }
     }
@@ -248,11 +248,11 @@ public class adaAutoHotbar extends Module {
     // --- 匹配逻辑 ---
 
     private boolean isSlotCorrectExact(int slot, Item targetItem) {
-        return mc.player.getInventory().getStack(slot).getItem() == targetItem;
+        return mc.player.getInventory().getItem(slot).getItem() == targetItem;
     }
 
     private boolean isSlotCorrectFuzzy(int slot, Item targetItem) {
-        ItemStack stack = mc.player.getInventory().getStack(slot);
+        ItemStack stack = mc.player.getInventory().getItem(slot);
         if (stack.isEmpty()) return false;
         String currentName = stack.getItem().toString();
         String targetName = targetItem.toString();

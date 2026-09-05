@@ -6,7 +6,7 @@ import com.codigohasta.addon.modules.TpAura.AttackMode;
 import com.codigohasta.addon.modules.TpAura.Mode;
 import com.codigohasta.addon.utils.leaveshack.InventoryUtil;
 
-import meteordevelopment.meteorclient.mixininterface.IPlayerMoveC2SPacket;
+import meteordevelopment.meteorclient.mixininterface.IServerboundMovePlayerPacket;
 import meteordevelopment.meteorclient.renderer.ShapeMode;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.friends.Friends;
@@ -21,25 +21,28 @@ import meteordevelopment.meteorclient.utils.world.TickRate;
 import meteordevelopment.orbit.EventHandler;
 import meteordevelopment.meteorclient.events.render.Render3DEvent;
 import meteordevelopment.meteorclient.events.world.TickEvent;
-import net.minecraft.block.BlockState;
-import net.minecraft.block.Blocks;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.EntityType;
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.ai.TargetPredicate;
-import net.minecraft.entity.passive.TameableEntity;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.item.*;
-import net.minecraft.network.packet.c2s.play.*;
-import net.minecraft.screen.slot.SlotActionType;
-import net.minecraft.util.Hand;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Box;
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.ai.targeting.TargetingConditions;
+import net.minecraft.world.entity.TamableAnimal;
+import net.minecraft.world.entity.player.Player;
+
+import net.minecraft.network.protocol.game.ServerboundContainerClosePacket;
+import net.minecraft.network.protocol.game.ServerboundInteractPacket;
+import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
+import net.minecraft.world.inventory.ContainerInput;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
 
 
 import java.util.*;
 import java.util.stream.Collectors;
+import net.minecraft.network.protocol.game.ServerboundAttackPacket;
 
 public class TpAura extends Module {
     private final SettingGroup sgGeneral = settings.getDefaultGroup();
@@ -106,7 +109,7 @@ public class TpAura extends Module {
     private final Setting<Integer> totemHeightIncrease = sgTotem.add(new IntSetting.Builder().name("递增高度").description("每次额外攻击增加的下落高度").defaultValue(9).min(1).sliderRange(1, 100).visible(() -> totemBypass.get()).build());
 
     private final List<Entity> targets = new ArrayList<>();
-    private final List<Vec3d> renderPathNodes = new ArrayList<>();
+    private final List<Vec3> renderPathNodes = new ArrayList<>();
     private Entity currentTarget;
     private int originalSlot = -1;
     private int silentSwapSlot = -1;
@@ -139,7 +142,7 @@ public class TpAura extends Module {
 
     private int findWeaponInventorySlot() {
         for (int i = 0; i < 45; i++) {
-            String name = mc.player.getInventory().getStack(i).getItem().toString().toLowerCase();
+            String name = mc.player.getInventory().getItem(i).getItem().toString().toLowerCase();
             if (name.contains("sword") || name.contains("mace") || name.contains("axe")) {
                 return i < 9 ? i + 36 : i;
             }
@@ -148,7 +151,7 @@ public class TpAura extends Module {
     }
 
     private boolean checkAndSwapWeapon() {
-        String itemMain = mc.player.getMainHandStack().getItem().toString().toLowerCase();
+        String itemMain = mc.player.getMainHandItem().getItem().toString().toLowerCase();
         boolean isWeapon = itemMain.contains("sword") || itemMain.contains("mace") || itemMain.contains("axe");
         if (isWeapon && !(requireMace.get() && !itemMain.contains("mace"))) return true;
 
@@ -160,7 +163,7 @@ public class TpAura extends Module {
                 if (slot >= 36) {
                     InventoryUtil.switchToSlot(slot - 36);
                 } else {
-                    mc.interactionManager.clickSlot(mc.player.currentScreenHandler.syncId, slot, 0, SlotActionType.SWAP, mc.player);
+                    mc.gameMode.handleContainerInput(mc.player.containerMenu.containerId, slot, 0, ContainerInput.SWAP, mc.player);
                     InventoryUtil.switchToSlot(0);
                 }
                 return true;
@@ -184,9 +187,9 @@ public class TpAura extends Module {
         if (silentSwapSlot >= 36) {
             InventoryUtil.switchToSlot(silentSwapPrevSlot);
         } else {
-            mc.interactionManager.clickSlot(mc.player.currentScreenHandler.syncId, silentSwapSlot, 0, SlotActionType.SWAP, mc.player);
+            mc.gameMode.handleContainerInput(mc.player.containerMenu.containerId, silentSwapSlot, 0, ContainerInput.SWAP, mc.player);
             InventoryUtil.switchToSlot(silentSwapPrevSlot);
-            mc.player.networkHandler.sendPacket(new CloseHandledScreenC2SPacket(mc.player.currentScreenHandler.syncId));
+            mc.player.connection.send(new ServerboundContainerClosePacket(mc.player.containerMenu.containerId));
         }
         silentSwapSlot = -1;
         silentSwapPrevSlot = -1;
@@ -194,7 +197,7 @@ public class TpAura extends Module {
 
     @EventHandler
     private void onTick(TickEvent.Pre event) {
-        if (mc.player == null || mc.world == null) return;
+        if (mc.player == null || mc.level == null) return;
 
         // 1. 武器切换
         if (autoSwitch.get()) {
@@ -203,7 +206,7 @@ public class TpAura extends Module {
 
         // 2. 蓄力检查
         if (attackMode.get() == AttackMode.Smart) {
-            if (mc.player.getAttackCooldownProgress(0.5f) < cooldownThreshold.get()) {
+            if (mc.player.getAttackStrengthScale(0.5f) < cooldownThreshold.get()) {
                 return;
             }
         }
@@ -234,15 +237,15 @@ public class TpAura extends Module {
     }
 
     private void executeTrouserAttack(Entity target) {
-        Vec3d startPos = new Vec3d(mc.player.getX(), mc.player.getY(), mc.player.getZ());
-        Vec3d targetPos = new Vec3d(target.getX(), target.getY(), target.getZ());
+        Vec3 startPos = new Vec3(mc.player.getX(), mc.player.getY(), mc.player.getZ());
+        Vec3 targetPos = new Vec3(target.getX(), target.getY(), target.getZ());
         double reach = maxRange.get();
 
-        Vec3d finalPos = !invalid(targetPos) ? targetPos : findNearestPos(targetPos);
+        Vec3 finalPos = !invalid(targetPos) ? targetPos : findNearestPos(targetPos);
         if (finalPos == null) return;
 
-        Vec3d highStart = startPos.add(0, reach, 0);
-        Vec3d highTarget = finalPos.add(0, reach, 0);
+        Vec3 highStart = startPos.add(0, reach, 0);
+        Vec3 highTarget = finalPos.add(0, reach, 0);
 
         renderPathNodes.clear();
         renderPathNodes.add(startPos);
@@ -255,7 +258,7 @@ public class TpAura extends Module {
         // A. 垫包预热
         int spam = mode.get() == Mode.Paper ? paperPackets.get() : 4;
         for (int i = 0; i < spam; i++) {
-            mc.player.networkHandler.sendPacket(new PlayerMoveC2SPacket.OnGroundOnly(false, mc.player.horizontalCollision));
+            mc.player.connection.send(new ServerboundMovePlayerPacket.StatusOnly(false, mc.player.horizontalCollision));
         }
 
         boolean totemMode = totemBypass.get() && mode.get() == Mode.Paper;
@@ -269,20 +272,20 @@ public class TpAura extends Module {
             for (int i = 0; i < attackCount; i++) {
                 int blocks = (i == 0) ? (int) reach : currentHeight;
 
-                if (mc.world != null) {
-                    int worldTop = mc.world.getTopYInclusive() - 1;
+                if (mc.level != null) {
+                    int worldTop = mc.level.getMaxY() - 1;
                     if (finalPos.y + blocks > worldTop) {
                         blocks = (int) (worldTop - finalPos.y);
                         if (blocks < 1) break;
                     }
                 }
 
-                Vec3d progressiveAbove = finalPos.add(0, blocks, 0);
+                Vec3 progressiveAbove = finalPos.add(0, blocks, 0);
                 if (goUp.get()) sendMove(progressiveAbove);
                 sendMove(finalPos);
 
-                if (swingHand.get()) mc.player.swingHand(Hand.MAIN_HAND);
-                mc.player.networkHandler.sendPacket(PlayerInteractEntityC2SPacket.attack(target, mc.player.isSneaking()));
+                if (swingHand.get()) mc.player.swing(InteractionHand.MAIN_HAND);
+                mc.player.connection.send(new ServerboundAttackPacket(target.getId()));
 
                 currentHeight += totemHeightIncrease.get();
             }
@@ -294,8 +297,8 @@ public class TpAura extends Module {
             }
             sendMove(finalPos);
 
-            if (swingHand.get()) mc.player.swingHand(Hand.MAIN_HAND);
-            mc.player.networkHandler.sendPacket(PlayerInteractEntityC2SPacket.attack(target, mc.player.isSneaking()));
+            if (swingHand.get()) mc.player.swing(InteractionHand.MAIN_HAND);
+            mc.player.connection.send(new ServerboundAttackPacket(target.getId()));
         }
 
         // C. 瞬间回传
@@ -307,27 +310,27 @@ public class TpAura extends Module {
             sendMove(startPos);
 
             if (offsetFix.get()) {
-                Vec3d offset = getOffset(startPos);
+                Vec3 offset = getOffset(startPos);
                 sendMove(offset);
-                mc.player.setPosition(offset.x, offset.y, offset.z);
+                mc.player.setPos(offset.x, offset.y, offset.z);
             } else {
-                mc.player.setPosition(startPos.x, startPos.y, startPos.z);
+                mc.player.setPos(startPos.x, startPos.y, startPos.z);
             }
         } else {
             if (offsetFix.get()) {
-                Vec3d offset = getOffset(finalPos);
+                Vec3 offset = getOffset(finalPos);
                 sendMove(offset);
-                mc.player.setPosition(offset.x, offset.y, offset.z);
+                mc.player.setPos(offset.x, offset.y, offset.z);
             } else {
-                mc.player.setPosition(finalPos.x, finalPos.y, finalPos.z);
+                mc.player.setPos(finalPos.x, finalPos.y, finalPos.z);
             }
         }
     }
 
-    private void sendMove(Vec3d pos) {
-        PlayerMoveC2SPacket packet = new PlayerMoveC2SPacket.PositionAndOnGround(pos.x, pos.y, pos.z, false, false);
-        ((IPlayerMoveC2SPacket) packet).meteor$setTag(1337);
-        mc.player.networkHandler.sendPacket(packet);
+    private void sendMove(Vec3 pos) {
+        ServerboundMovePlayerPacket packet = new ServerboundMovePlayerPacket.Pos(pos.x, pos.y, pos.z, false, false);
+        ((IServerboundMovePlayerPacket) packet).meteor$setTag(1337);
+        mc.player.connection.send(packet);
     }
 
     @EventHandler
@@ -337,39 +340,39 @@ public class TpAura extends Module {
         }
         if (renderPath.get() && !renderPathNodes.isEmpty()) {
             for (int i = 0; i < renderPathNodes.size() - 1; i++) {
-                Vec3d n1 = renderPathNodes.get(i);
-                Vec3d n2 = renderPathNodes.get(i+1);
+                Vec3 n1 = renderPathNodes.get(i);
+                Vec3 n2 = renderPathNodes.get(i+1);
                 event.renderer.line(n1.x, n1.y + 1, n1.z, n2.x, n2.y + 1, n2.z, pathColor.get());
-                event.renderer.box(new Box(n1.x - 0.2, n1.y, n1.z - 0.2, n1.x + 0.2, n1.y + 2, n1.z + 0.2), pathColor.get(), pathColor.get(), ShapeMode.Lines, 0);
+                event.renderer.box(new AABB(n1.x - 0.2, n1.y, n1.z - 0.2, n1.x + 0.2, n1.y + 2, n1.z + 0.2), pathColor.get(), pathColor.get(), ShapeMode.Lines, 0);
             }
         }
     }
 
-    private Vec3d getOffset(Vec3d base) {
+    private Vec3 getOffset(Vec3 base) {
         double dx = 0.05, dy = 0.01;
-        List<Vec3d> offsets = Arrays.asList(base.add(dx, dy, 0), base.add(-dx, dy, 0), base.add(0, dy, dx), base.add(0, dy, -dx));
+        List<Vec3> offsets = Arrays.asList(base.add(dx, dy, 0), base.add(-dx, dy, 0), base.add(0, dy, dx), base.add(0, dy, -dx));
         Collections.shuffle(offsets);
-        for (Vec3d pos : offsets) { if (!invalid(pos)) return pos; }
+        for (Vec3 pos : offsets) { if (!invalid(pos)) return pos; }
         return base.add(0, dy, 0);
     }
 
-    private boolean invalid(Vec3d pos) {
-        if (mc.world == null) return true;
-        BlockPos bp = BlockPos.ofFloored(pos.x, pos.y, pos.z);
-        if (mc.world.getChunk(bp.getX() >> 4, bp.getZ() >> 4) == null) return true;
-        Box box = mc.player.getBoundingBox().offset(pos.subtract(new Vec3d(mc.player.getX(), mc.player.getY(), mc.player.getZ())));
-        for (BlockPos bPos : BlockPos.iterate(BlockPos.ofFloored(box.minX, box.minY, box.minZ), BlockPos.ofFloored(box.maxX, box.maxY, box.maxZ))) {
-            BlockState state = mc.world.getBlockState(bPos);
-            if (!state.getCollisionShape(mc.world, bPos).isEmpty() || state.isOf(Blocks.LAVA)) return true;
+    private boolean invalid(Vec3 pos) {
+        if (mc.level == null) return true;
+        BlockPos bp = BlockPos.containing(pos.x, pos.y, pos.z);
+        if (mc.level.getChunk(bp.getX() >> 4, bp.getZ() >> 4) == null) return true;
+        AABB box = mc.player.getBoundingBox().move(pos.subtract(new Vec3(mc.player.getX(), mc.player.getY(), mc.player.getZ())));
+        for (BlockPos bPos : BlockPos.betweenClosed(BlockPos.containing(box.minX, box.minY, box.minZ), BlockPos.containing(box.maxX, box.maxY, box.maxZ))) {
+            BlockState state = mc.level.getBlockState(bPos);
+            if (!state.getCollisionShape(mc.level, bPos).isEmpty() || state.is(Blocks.LAVA)) return true;
         }
         return false;
     }
 
-    private Vec3d findNearestPos(Vec3d desired) {
+    private Vec3 findNearestPos(Vec3 desired) {
         for (int dy = 0; dy <= 2; dy++) {
             for (int dx = -1; dx <= 1; dx++) {
                 for (int dz = -1; dz <= 1; dz++) {
-                    Vec3d test = desired.add(dx, dy, dz);
+                    Vec3 test = desired.add(dx, dy, dz);
                     if (!invalid(test)) return test;
                 }
             }
@@ -383,7 +386,7 @@ public class TpAura extends Module {
         if (mc.player.distanceTo(entity) > maxRange.get()) return false;
         
         // 条件开关过滤
-        if (ignoreFriends.get() && entity instanceof PlayerEntity p && Friends.get().isFriend(p)) {
+        if (ignoreFriends.get() && entity instanceof Player p && Friends.get().isFriend(p)) {
             return false; // 忽略好友
         }
         if (ignoreNamed.get() && entity.hasCustomName()) {
@@ -391,13 +394,13 @@ public class TpAura extends Module {
         }
         if (ignoreTamed.get()) {
             // 检查实体是否被驯服（适用于狼、猫等可驯服生物）
-            if (entity instanceof TameableEntity tameable && tameable.isTamed()) {
+            if (entity instanceof TamableAnimal tameable && tameable.isTame()) {
                 return false; // 忽略驯服的生物
             }
         }
         
         // 玩家特殊处理
-        if (entity instanceof PlayerEntity p) {
+        if (entity instanceof Player p) {
             if (p.isCreative() || p.isSpectator()) return false;
             if (!Friends.get().shouldAttack(p)) return false;
             String name = p.getName().getString();

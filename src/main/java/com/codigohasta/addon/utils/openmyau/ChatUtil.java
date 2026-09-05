@@ -1,28 +1,28 @@
 package com.codigohasta.addon.utils.openmyau;
 
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.text.Text;
+import net.minecraft.client.Minecraft;
+import net.minecraft.network.chat.Component;
 
 public class ChatUtil {
-    private static final MinecraftClient mc = MinecraftClient.getInstance();
+    private static final Minecraft mc = Minecraft.getInstance();
 
-    public static void send(Text text) {
+    public static void send(Component text) {
         if (mc.player != null) {
-            mc.player.sendMessage(text, false);
+            mc.player.sendSystemMessage(text);
         }
     }
 
     public static void sendFormatted(String string) {
-        send(Text.literal(ChatColors.formatColor(string)));
+        send(Component.literal(ChatColors.formatColor(string)));
     }
 
     public static void sendRaw(String string) {
-        send(Text.literal(string));
+        send(Component.literal(string));
     }
 
     public static void sendMessage(String string) {
         if (mc.player != null) {
-            mc.player.networkHandler.sendChatMessage(string);
+            mc.player.connection.sendChat(string);
         }
     }
 }

@@ -1,6 +1,6 @@
 package com.codigohasta.addon.modules;
 
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.phys.Vec3;
 
 import com.codigohasta.addon.AddonTemplate;
 import meteordevelopment.meteorclient.events.game.OpenScreenEvent;
@@ -10,8 +10,8 @@ import meteordevelopment.meteorclient.settings.Setting;
 import meteordevelopment.meteorclient.settings.SettingGroup;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.client.gui.screen.ChatScreen;
-import net.minecraft.client.gui.widget.TextFieldWidget;
+import net.minecraft.client.gui.screens.ChatScreen;
+import net.minecraft.client.gui.components.EditBox;
 
 import java.lang.reflect.Field;
 
@@ -45,11 +45,11 @@ public class InfiniteChat extends Module {
     private void onTick(TickEvent.Post event) {
         if (!infiniteChatBox.get()) return;
 
-        if (mc.currentScreen instanceof ChatScreen) {
+        if (mc.screen instanceof ChatScreen) {
             // 每帧都尝试解锁，防止被游戏重置，或者第一次反射失败
             // 为了性能，我们只在 isHooked 为 false 时执行繁重的反射
             // 但为了确保万无一失，这里我们采用简单的“暴力”逻辑
-            unlockChatLength((ChatScreen) mc.currentScreen);
+            unlockChatLength((ChatScreen) mc.screen);
         } else {
             isHooked = false;
         }
@@ -74,9 +74,9 @@ public class InfiniteChat extends Module {
                     Object value = field.get(screen);
 
                     // 核心逻辑：我们不通过字段名判断，而是通过“值的类型”判断
-                    // 只要这个字段的值是一个 TextFieldWidget (输入框)，我们就修改它
-                    if (value instanceof TextFieldWidget) {
-                        TextFieldWidget inputField = (TextFieldWidget) value;
+                    // 只要这个字段的值是一个 EditBox (输入框)，我们就修改它
+                    if (value instanceof EditBox) {
+                        EditBox inputField = (EditBox) value;
                         
                         // 只有当长度还被限制在 256 时才修改，避免重复操作 (虽然重复设置也没坏处)
                         // 这里直接强制设为 32767

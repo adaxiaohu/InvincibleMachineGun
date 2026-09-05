@@ -1,6 +1,6 @@
 package com.codigohasta.addon.modules;
 
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.phys.Vec3;
 
 import com.codigohasta.addon.AddonTemplate;
 import meteordevelopment.meteorclient.events.world.TickEvent;
@@ -9,7 +9,7 @@ import meteordevelopment.meteorclient.settings.Setting;
 import meteordevelopment.meteorclient.settings.SettingGroup;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.client.gui.screen.ChatScreen;
+import net.minecraft.client.gui.screens.ChatScreen;
 
 public class ChatHider extends Module {
     
@@ -36,7 +36,7 @@ public class ChatHider extends Module {
     @Override
     public void onActivate() {
         // 模块开启时，备份玩家当前的聊天透明度设置
-        originalOpacity = mc.options.getChatOpacity().getValue();
+        originalOpacity = mc.options.chatOpacity().get();
     }
 
     @Override
@@ -44,7 +44,7 @@ public class ChatHider extends Module {
         // 模块关闭时，恢复原来的透明度
         // 修复：如果 originalOpacity 为 0.0，说明是上一次运行时模块将 options 文件写成了 0.0，
         // 此时应使用 openOpacity 的值（默认 1.0）来恢复，否则聊天框仍然不可见。
-        mc.options.getChatOpacity().setValue(originalOpacity > 0.0 ? originalOpacity : openOpacity.get());
+        mc.options.chatOpacity().set(originalOpacity > 0.0 ? originalOpacity : openOpacity.get());
     }
 
     @EventHandler
@@ -55,12 +55,12 @@ public class ChatHider extends Module {
 
         // 核心逻辑：
         // 检查当前屏幕是不是聊天屏幕 (ChatScreen)
-        if (mc.currentScreen instanceof ChatScreen) {
+        if (mc.screen instanceof ChatScreen) {
             // 如果正在打字，设置为用户设定的透明度 (默认1.0)
-            mc.options.getChatOpacity().setValue(openOpacity.get());
+            mc.options.chatOpacity().set(openOpacity.get());
         } else {
             // 如果没在打字，直接把透明度设为 0 (隐藏)
-            mc.options.getChatOpacity().setValue(0.0);
+            mc.options.chatOpacity().set(0.0);
         }
     }
 }

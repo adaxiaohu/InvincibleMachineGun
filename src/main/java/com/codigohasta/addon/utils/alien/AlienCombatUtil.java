@@ -1,19 +1,20 @@
 package com.codigohasta.addon.utils.alien;
 
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.decoration.EndCrystalEntity;
-import net.minecraft.network.packet.c2s.play.PlayerInteractEntityC2SPacket;
-import net.minecraft.util.Hand;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Box;
+import net.minecraft.client.Minecraft;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.boss.enderdragon.EndCrystal;
+import net.minecraft.network.protocol.game.ServerboundInteractPacket;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.network.protocol.game.ServerboundAttackPacket;
 
 public class AlienCombatUtil {
-   private static final MinecraftClient mc = MinecraftClient.getInstance();
+   private static final Minecraft mc = Minecraft.getInstance();
    private static final AlienTimer breakTimer = new AlienTimer();
 
    public static void attackCrystal(BlockPos pos, boolean rotate, boolean eatingPause) {
-      for (EndCrystalEntity entity : AlienBlockUtil.getEndCrystals(new Box(pos))) {
+      for (EndCrystal entity : AlienBlockUtil.getEndCrystals(new AABB(pos))) {
          attackWithDelay(entity, rotate, eatingPause);
       }
    }
@@ -29,8 +30,8 @@ public class AlienCombatUtil {
    public static void attack(Entity entity, boolean rotate) {
       if (entity != null) {
          breakTimer.reset();
-         mc.getNetworkHandler().sendPacket(PlayerInteractEntityC2SPacket.attack(entity, mc.player.isSneaking()));
-         mc.player.swingHand(Hand.MAIN_HAND);
+         mc.getConnection().send(new ServerboundAttackPacket(entity.getId()));
+         mc.player.swing(InteractionHand.MAIN_HAND);
       }
    }
 }

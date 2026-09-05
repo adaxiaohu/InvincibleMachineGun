@@ -3,16 +3,16 @@ package com.codigohasta.addon.modules;
 import meteordevelopment.meteorclient.events.entity.player.PlayerMoveEvent;
 import meteordevelopment.meteorclient.events.packets.PacketEvent;
 import meteordevelopment.meteorclient.events.world.TickEvent;
-import meteordevelopment.meteorclient.mixininterface.IVec3d;
+import meteordevelopment.meteorclient.mixininterface.IVec3;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.entity.EquipmentSlot;
-import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket;
-import net.minecraft.network.packet.c2s.play.TeleportConfirmC2SPacket;
-import net.minecraft.network.packet.s2c.play.PlayerPositionLookS2CPacket;
-import net.minecraft.particle.ParticleTypes;
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
+import net.minecraft.network.protocol.game.ServerboundAcceptTeleportationPacket;
+import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket;
+import net.minecraft.core.particles.ParticleTypes;
+import net.minecraft.world.phys.Vec3;
 
 
 import com.codigohasta.addon.AddonTemplate;
@@ -96,7 +96,7 @@ public class AntiLag extends Module {
 
     @EventHandler
     private void onTick(TickEvent.Pre event) {
-        if (mc.player == null || mc.world == null) return;
+        if (mc.player == null || mc.level == null) return;
 
         if (System.currentTimeMillis() - lastResetTime >= 1000) {
             lagCounter = 0;
@@ -105,15 +105,15 @@ public class AntiLag extends Module {
         }
 
        
-        boolean isMoving = mc.player.input.playerInput.forward() || 
-                           mc.player.input.playerInput.backward() || 
-                           mc.player.input.playerInput.left() || 
-                           mc.player.input.playerInput.right();
+        boolean isMoving = mc.player.input.keyPresses.forward() || 
+                           mc.player.input.keyPresses.backward() || 
+                           mc.player.input.keyPresses.left() || 
+                           mc.player.input.keyPresses.right();
 
         // 自动脱困 (VClip)
         if (isMoving && mc.player.horizontalCollision && !back.get()) {
             if (searchVclipMode.get() == VClipMode.OnlyUp) {
-                mc.player.setPosition(mc.player.getX(), mc.player.getY() + searchFindStep.get(), mc.player.getZ());
+                mc.player.setPos(mc.player.getX(), mc.player.getY() + searchFindStep.get(), mc.player.getZ());
             }
         }
     }
@@ -123,10 +123,10 @@ public class AntiLag extends Module {
     private void onPacketSend(PacketEvent.Send event) {
         if (mc.player == null) return;
 
-        if (event.packet instanceof PlayerMoveC2SPacket) {
+        if (event.packet instanceof ServerboundMovePlayerPacket) {
         
-            boolean isFlying = mc.player.isGliding() && 
-                mc.player.getEquippedStack(EquipmentSlot.CHEST).getItem().toString().contains("elytra");
+            boolean isFlying = mc.player.isFallFlying() && 
+                mc.player.getItemBySlot(EquipmentSlot.CHEST).getItem().toString().contains("elytra");
             if (isFlying) return;
 
             lagCounter++;
@@ -137,7 +137,7 @@ public class AntiLag extends Module {
                 if (printWhenTooManyPacket.get() && lagCounter == limitPerSecond.get() + 1) {
                     warning("§7限制tp数据包。");
                    
-                    mc.particleManager.addParticle(ParticleTypes.CRIT, 
+                    mc.particleEngine.createParticle(ParticleTypes.CRIT, 
                         mc.player.getX(), mc.player.getY() + 1.0, mc.player.getZ(), 0.0, 0.0, 0.0);
                 }
             }
@@ -147,15 +147,15 @@ public class AntiLag extends Module {
     
     @EventHandler
     private void onPacketReceive(PacketEvent.Receive event) {
-        if (mc.player == null || mc.world == null) return;
+        if (mc.player == null || mc.level == null) return;
 
-        if (event.packet instanceof PlayerPositionLookS2CPacket packet) {
+        if (event.packet instanceof ClientboundPlayerPositionPacket packet) {
         
             if (lagCounter > limitPerSecond.get()) return;
 
        
-            Vec3d serverPos = packet.change().position();
-            Vec3d playerPos = new Vec3d(mc.player.getX(), mc.player.getY(), mc.player.getZ());
+            Vec3 serverPos = packet.change().position();
+            Vec3 playerPos = new Vec3(mc.player.getX(), mc.player.getY(), mc.player.getZ());
 
             double dist = playerPos.distanceTo(serverPos);
             if (dist > range.get()) return;
@@ -163,11 +163,11 @@ public class AntiLag extends Module {
             event.cancel();
             
       
-            mc.getNetworkHandler().sendPacket(new TeleportConfirmC2SPacket(packet.teleportId()));
+            mc.getConnection().send(new ServerboundAcceptTeleportationPacket(packet.id()));
 
             
             if (!back.get()) {
-                if (!allowIntoVoid.get() && serverPos.y < mc.world.getBottomY()) return;
+                if (!allowIntoVoid.get() && serverPos.y < mc.level.getMinY()) return;
 
                 if (version.get() == VersionType.MC1_16) {
                   
@@ -181,15 +181,15 @@ public class AntiLag extends Module {
                         double nextZ = serverPos.z + (playerPos.z - serverPos.z) * ratio;
                         
                   
-                        sendFullMovePacket(nextX, nextY, nextZ, mc.player.isOnGround());
+                        sendFullMovePacket(nextX, nextY, nextZ, mc.player.onGround());
                     }
                 } else {
               
-                    sendFullMovePacket(playerPos.x, playerPos.y, playerPos.z, mc.player.isOnGround());
+                    sendFullMovePacket(playerPos.x, playerPos.y, playerPos.z, mc.player.onGround());
                 }
 
                
-                mc.player.setPosition(playerPos.x, playerPos.y, playerPos.z);
+                mc.player.setPos(playerPos.x, playerPos.y, playerPos.z);
                 
               
                 lagCounter++;
@@ -202,19 +202,19 @@ public class AntiLag extends Module {
     private void onPlayerMove(PlayerMoveEvent event) {
         if (isRateLimited) {
           
-            ((IVec3d) event.movement).meteor$set(0.0, 0.0, 0.0);
+            ((IVec3) event.movement).meteor$set(0.0, 0.0, 0.0);
         }
     }
 
 
     private void sendFullMovePacket(double x, double y, double z, boolean onGround) {
-        if (mc.getNetworkHandler() == null) return;
+        if (mc.getConnection() == null) return;
         
        
-        mc.getNetworkHandler().sendPacket(new PlayerMoveC2SPacket.Full(
+        mc.getConnection().send(new ServerboundMovePlayerPacket.PosRot(
             x, y, z, 
-            mc.player.getYaw(), 
-            mc.player.getPitch(), 
+            mc.player.getYRot(), 
+            mc.player.getXRot(), 
             onGround, 
             false
         ));

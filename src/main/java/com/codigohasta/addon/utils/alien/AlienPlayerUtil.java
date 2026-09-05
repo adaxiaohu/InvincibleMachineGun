@@ -1,22 +1,22 @@
 package com.codigohasta.addon.utils.alien;
 
-import net.minecraft.block.Blocks;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Box;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.client.Minecraft;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.phys.AABB;
 
 public class AlienPlayerUtil {
-    private static final MinecraftClient mc = MinecraftClient.getInstance();
+    private static final Minecraft mc = Minecraft.getInstance();
 
-    public static boolean isInWeb(PlayerEntity player) {
-        if (mc.world == null) return false;
+    public static boolean isInWeb(Player player) {
+        if (mc.level == null) return false;
         for (float x : new float[]{0.0F, 0.3F, -0.3F}) {
             for (float z : new float[]{0.0F, 0.3F, -0.3F}) {
                 for (int y : new int[]{-1, 0, 1, 2}) {
-                    BlockPos pos = BlockPos.ofFloored(player.getX() + (double) x, player.getY(), player.getZ() + (double) z).up(y);
-                    Box box = new Box(pos);
-                    if (box.intersects(player.getBoundingBox()) && mc.world.getBlockState(pos).getBlock() == Blocks.COBWEB) {
+                    BlockPos pos = BlockPos.containing(player.getX() + (double) x, player.getY(), player.getZ() + (double) z).above(y);
+                    AABB box = new AABB(pos);
+                    if (box.intersects(player.getBoundingBox()) && mc.level.getBlockState(pos).getBlock() == Blocks.COBWEB) {
                         return true;
                     }
                 }

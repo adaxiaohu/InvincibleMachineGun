@@ -13,13 +13,20 @@ import meteordevelopment.meteorclient.utils.Utils;
 import meteordevelopment.meteorclient.utils.render.color.Color;
 import meteordevelopment.meteorclient.utils.render.color.SettingColor;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.block.BlockState;
-import net.minecraft.block.ChestBlock;
-import net.minecraft.block.entity.*;
-import net.minecraft.block.enums.ChestType;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Direction;
-import net.minecraft.util.math.Vec3d; // ✅ [规则5] 必须显式导入
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.ChestBlock;
+import net.minecraft.world.level.block.entity.BarrelBlockEntity;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.entity.BlockEntityType;
+import net.minecraft.world.level.block.entity.ChestBlockEntity;
+import net.minecraft.world.level.block.entity.DispenserBlockEntity;
+import net.minecraft.world.level.block.entity.EnderChestBlockEntity;
+import net.minecraft.world.level.block.entity.HopperBlockEntity;
+import net.minecraft.world.level.block.entity.ShulkerBoxBlockEntity;
+import net.minecraft.world.level.block.state.properties.ChestType;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.world.phys.Vec3; // ✅ [规则5] 必须显式导入
 
 import java.util.HashSet;
 import java.util.Set;
@@ -74,9 +81,9 @@ public class FillESP extends Module {
     @EventHandler
     private void onInteractBlock(InteractBlockEvent event) {
         BlockPos pos = event.result.getBlockPos();
-        if (mc.world == null) return;
+        if (mc.level == null) return;
 
-        BlockEntity be = mc.world.getBlockEntity(pos);
+        BlockEntity be = mc.level.getBlockEntity(pos);
         if (be == null) return;
 
         // 检查是否是容器 (通过字符串判断 ID 或 实例判断)
@@ -86,13 +93,13 @@ public class FillESP extends Module {
 
             // 处理大箱子（Double Chest）：如果点了一个，另一个也变绿
             if (be instanceof ChestBlockEntity) {
-                BlockState state = mc.world.getBlockState(pos);
-                if (state.contains(ChestBlock.CHEST_TYPE)) {
-                    ChestType type = state.get(ChestBlock.CHEST_TYPE);
+                BlockState state = mc.level.getBlockState(pos);
+                if (state.hasProperty(ChestBlock.TYPE)) {
+                    ChestType type = state.getValue(ChestBlock.TYPE);
                     if (type != ChestType.SINGLE) {
-                        Direction facing = state.get(ChestBlock.FACING);
-                        BlockPos neighborPos = pos.offset(type == ChestType.LEFT ? 
-                            facing.rotateYClockwise() : facing.rotateYCounterclockwise());
+                        Direction facing = state.getValue(ChestBlock.FACING);
+                        BlockPos neighborPos = pos.relative(type == ChestType.LEFT ? 
+                            facing.getClockWise() : facing.getCounterClockWise());
                         openedBlocks.add(neighborPos);
                     }
                 }
@@ -103,14 +110,14 @@ public class FillESP extends Module {
     // --- 渲染逻辑 ---
     @EventHandler
     private void onRender(Render3DEvent event) {
-        if (mc.world == null) return;
+        if (mc.level == null) return;
 
         for (BlockEntity be : Utils.blockEntities()) {
             if (!isContainer(be)) continue;
 
-            BlockPos pos = be.getPos();
+            BlockPos pos = be.getBlockPos();
             
-            // ✅ [规则5] 使用 Vec3d 处理坐标逻辑（此处渲染器需要）
+            // ✅ [规则5] 使用 Vec3 处理坐标逻辑（此处渲染器需要）
             Color renderSideColor;
             Color renderLineColor;
 
@@ -129,9 +136,9 @@ public class FillESP extends Module {
     }
 
     private void drawBox(Render3DEvent event, BlockEntity be, Color side, Color line) {
-        double x = be.getPos().getX();
-        double y = be.getPos().getY();
-        double z = be.getPos().getZ();
+        double x = be.getBlockPos().getX();
+        double y = be.getBlockPos().getY();
+        double z = be.getBlockPos().getZ();
 
         // 针对箱子/末影箱微调尺寸（比完整方块小一点点）
         double shrink = 0.0625;

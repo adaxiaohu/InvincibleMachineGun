@@ -1,6 +1,6 @@
 package com.codigohasta.addon.modules;
 
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.phys.Vec3;
 
 import com.codigohasta.addon.AddonTemplate;
 import meteordevelopment.meteorclient.events.entity.player.StartBreakingBlockEvent;
@@ -16,31 +16,34 @@ import meteordevelopment.meteorclient.utils.misc.Keybind;
 import meteordevelopment.meteorclient.utils.player.Rotations;
 import meteordevelopment.meteorclient.utils.render.color.SettingColor;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.block.BlockState;
-import net.minecraft.block.Blocks;
-import net.minecraft.client.network.PendingUpdateManager;
-import net.minecraft.client.network.SequencedPacketCreator;
-import net.minecraft.client.world.ClientWorld;
-import net.minecraft.enchantment.Enchantment;
-import net.minecraft.enchantment.EnchantmentHelper;
-import net.minecraft.enchantment.Enchantments;
-import net.minecraft.entity.EntityPose;
-import net.minecraft.entity.effect.StatusEffects;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.item.ItemStack;
-import net.minecraft.network.packet.c2s.play.HandSwingC2SPacket;
-import net.minecraft.network.packet.c2s.play.PlayerActionC2SPacket;
-import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket;
-import net.minecraft.network.packet.c2s.play.UpdateSelectedSlotC2SPacket;
-import net.minecraft.network.packet.s2c.play.BlockUpdateS2CPacket;
-import net.minecraft.network.packet.s2c.play.BundleS2CPacket;
-import net.minecraft.registry.RegistryKeys;
-import net.minecraft.registry.entry.RegistryEntry;
-import net.minecraft.registry.tag.FluidTags;
-import net.minecraft.util.Hand;
-import net.minecraft.util.math.*;
-import net.minecraft.util.shape.VoxelShape;
-import net.minecraft.util.shape.VoxelShapes;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.client.multiplayer.prediction.BlockStatePredictionHandler;
+import net.minecraft.client.multiplayer.prediction.PredictiveAction;
+import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.world.item.enchantment.Enchantment;
+import net.minecraft.world.item.enchantment.EnchantmentHelper;
+import net.minecraft.world.item.enchantment.Enchantments;
+import net.minecraft.world.entity.Pose;
+import net.minecraft.world.effect.MobEffects;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.network.protocol.game.ServerboundSwingPacket;
+import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;
+import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
+import net.minecraft.network.protocol.game.ServerboundSetCarriedItemPacket;
+import net.minecraft.network.protocol.game.ClientboundBlockUpdatePacket;
+import net.minecraft.network.protocol.game.ClientboundBundlePacket;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.core.Holder;
+import net.minecraft.tags.FluidTags;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.util.Mth;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.shapes.VoxelShape;
+import net.minecraft.world.phys.shapes.Shapes;
 
 import java.lang.reflect.Method;
 import java.util.*;
@@ -92,7 +95,7 @@ public class xhPacketMinePlus extends Module {
     private final ArrayList<MiningData> miningQueue = new ArrayList<>();
     private boolean instantTogglePressed = false;
     private boolean autoMineTogglePressed = false;
-    private PlayerEntity currentTarget = null;
+    private Player currentTarget = null;
     private BlockPos lastAutoMineBlock = null;
     private long lastAutoMineTime = 0L;
     private BlockPos lastAntiCrawlBlock = null;
@@ -116,7 +119,7 @@ public class xhPacketMinePlus extends Module {
 
     @Override
     public void onDeactivate() {
-        if (!persistentConfig.get() || mc.getNetworkHandler() == null) {
+        if (!persistentConfig.get() || mc.getConnection() == null) {
             miningQueue.clear();
             fadeList.clear();
             syncSlot();
@@ -132,7 +135,7 @@ public class xhPacketMinePlus extends Module {
 
     @EventHandler
     public void onTick(TickEvent.Pre event) {
-        if (mc.player == null || mc.world == null) return;
+        if (mc.player == null || mc.level == null) return;
         
         if (serverSideSlot == -1) serverSideSlot = ((com.codigohasta.addon.mixin.InventoryAccessor) mc.player.getInventory()).getSelectedSlot();
 
@@ -151,13 +154,13 @@ public class xhPacketMinePlus extends Module {
         int clientSlot = ((com.codigohasta.addon.mixin.InventoryAccessor) mc.player.getInventory()).getSelectedSlot();
         
         if (serverSideSlot != clientSlot) {
-            mc.getNetworkHandler().sendPacket(new UpdateSelectedSlotC2SPacket(clientSlot));
+            mc.getConnection().send(new ServerboundSetCarriedItemPacket(clientSlot));
             serverSideSlot = clientSlot;
         }
     }
 
     private void processMiningQueue() {
-        if (mc.options.useKey.isPressed() || mc.player.isUsingItem()) {
+        if (mc.options.keyUse.isDown() || mc.player.isUsingItem()) {
             syncSlot();
             return;
         }
@@ -179,7 +182,7 @@ public class xhPacketMinePlus extends Module {
                 continue;
             }
             
-            double distSq = mc.player.getEyePos().squaredDistanceTo(data.getPos().toCenterPos());
+            double distSq = mc.player.getEyePosition().distanceToSqr(data.getPos().getCenter());
             if (distSq > rangeConfig.get() * rangeConfig.get()) continue;
 
             if (!data.isStarted()) startMining(data);
@@ -205,7 +208,7 @@ public class xhPacketMinePlus extends Module {
                     
                     if (serverSideSlot != bestSlot || forceSwap) {
                         if (swapConfig.get() == Swap.SILENT) {
-                            mc.getNetworkHandler().sendPacket(new UpdateSelectedSlotC2SPacket(bestSlot));
+                            mc.getConnection().send(new ServerboundSetCarriedItemPacket(bestSlot));
                             serverSideSlot = bestSlot;
                         } else if (swapConfig.get() == Swap.NORMAL) {
                             ((com.codigohasta.addon.mixin.InventoryAccessor) mc.player.getInventory()).setSelectedSlot(bestSlot);
@@ -218,29 +221,29 @@ public class xhPacketMinePlus extends Module {
                     }
 
                     // --- Bypass Ground 核心逻辑 (修复版) ---
-                    // 修复: 使用字符串检查避免编译错误 (EntityPose.GLIDING)
+                    // 修复: 使用字符串检查避免编译错误 (Pose.GLIDING)
                     boolean isFallFlying = mc.player.getPose().name().equals("GLIDING");
                     
                     if (bypassGround.get() && !isFallFlying && !data.getState().isAir()) {
                         // 发送一个位置包，标记 onGround = true
                         // 使用微小的偏移(1.0e-9)来确保服务器处理这个包，但视觉上不动
                         // 1.21.4 适配: Full 构造器增加 false (horizontalCollision)
-                        mc.getNetworkHandler().sendPacket(new PlayerMoveC2SPacket.Full(
+                        mc.getConnection().send(new ServerboundMovePlayerPacket.PosRot(
                             mc.player.getX(), 
                             mc.player.getY() + 1.0e-9, 
                             mc.player.getZ(), 
-                            mc.player.getYaw(), 
-                            mc.player.getPitch(), 
+                            mc.player.getYRot(), 
+                            mc.player.getXRot(), 
                             true, // onGround = true (关键)
                             false // horizontalCollision = false (1.21.4 新增)
                         ));
                         // 客户端也更新一下状态，防止回弹
-                        mc.player.onLanding();
+                        mc.player.resetFallDistance();
                     }
 
                     // 发送带序列号的停止挖掘包 (1.21.4 必需)
-                    sendSequenced(id -> new PlayerActionC2SPacket(PlayerActionC2SPacket.Action.STOP_DESTROY_BLOCK, data.getPos(), data.getDirection(), id));
-                    mc.getNetworkHandler().sendPacket(new HandSwingC2SPacket(Hand.MAIN_HAND));
+                    sendSequenced(id -> new ServerboundPlayerActionPacket(ServerboundPlayerActionPacket.Action.STOP_DESTROY_BLOCK, data.getPos(), data.getDirection(), id));
+                    mc.getConnection().send(new ServerboundSwingPacket(InteractionHand.MAIN_HAND));
 
                     data.setAttemptedBreak(true);
                     
@@ -267,25 +270,25 @@ public class xhPacketMinePlus extends Module {
 
     @EventHandler
     public void onSendPacket(PacketEvent.Send event) {
-        if (event.packet instanceof PlayerActionC2SPacket packet 
-            && packet.getAction() == PlayerActionC2SPacket.Action.START_DESTROY_BLOCK
+        if (event.packet instanceof ServerboundPlayerActionPacket packet 
+            && packet.getAction() == ServerboundPlayerActionPacket.Action.START_DESTROY_BLOCK
             && modeConfig.get() == SpeedmineMode.DAMAGE 
             && grimConfig.get()) {
-            mc.getNetworkHandler().sendPacket(new PlayerActionC2SPacket(PlayerActionC2SPacket.Action.ABORT_DESTROY_BLOCK, packet.getPos(), packet.getDirection()));
+            mc.getConnection().send(new ServerboundPlayerActionPacket(ServerboundPlayerActionPacket.Action.ABORT_DESTROY_BLOCK, packet.getPos(), packet.getDirection()));
         }
 
-        if (event.packet instanceof UpdateSelectedSlotC2SPacket packet) {
-            serverSideSlot = packet.getSelectedSlot();
+        if (event.packet instanceof ServerboundSetCarriedItemPacket packet) {
+            serverSideSlot = packet.getSlot();
         }
     }
 
     @EventHandler
     public void onReceivePacket(PacketEvent.Receive event) {
         if (mc.player == null || modeConfig.get() != SpeedmineMode.PACKET) return;
-        if (event.packet instanceof BlockUpdateS2CPacket packet) handleBlockUpdate(packet.getPos(), packet.getState());
-        else if (event.packet instanceof BundleS2CPacket bundle) {
-            for (var p : bundle.getPackets()) {
-                if (p instanceof BlockUpdateS2CPacket packet) handleBlockUpdate(packet.getPos(), packet.getState());
+        if (event.packet instanceof ClientboundBlockUpdatePacket packet) handleBlockUpdate(packet.getPos(), packet.getBlockState());
+        else if (event.packet instanceof ClientboundBundlePacket bundle) {
+            for (var p : bundle.subPackets()) {
+                if (p instanceof ClientboundBlockUpdatePacket packet) handleBlockUpdate(packet.getPos(), packet.getBlockState());
             }
         }
     }
@@ -305,7 +308,7 @@ public class xhPacketMinePlus extends Module {
     // --- 核心修复: 手动计算挖掘速度，移除水下/空中惩罚 ---
     // 1.21.4 适配
     private float getBreakDelta(int slot, BlockState state, BlockPos pos) {
-        float hardness = state.getHardness(mc.world, pos);
+        float hardness = state.getDestroySpeed(mc.level, pos);
         if (hardness == -1.0F) return 0.0F;
         
         float speed = getBlockBreakingSpeed(slot, state);
@@ -316,29 +319,29 @@ public class xhPacketMinePlus extends Module {
             // 修复: 1.21.4 附魔检查逻辑更新
             boolean hasAquaAffinity = false;
             try {
-                // 使用 RegistryEntry 检查 AQUA_AFFINITY
-                RegistryEntry<Enchantment> aquaAffinityEntry = mc.world.getRegistryManager()
-                        .getOrThrow(RegistryKeys.ENCHANTMENT)
+                // 使用 Holder 检查 AQUA_AFFINITY
+                Holder<Enchantment> aquaAffinityEntry = mc.level.registryAccess()
+                        .lookupOrThrow(Registries.ENCHANTMENT)
                         .getOrThrow(Enchantments.AQUA_AFFINITY);
-                hasAquaAffinity = EnchantmentHelper.getEquipmentLevel(aquaAffinityEntry, mc.player) > 0;
+                hasAquaAffinity = EnchantmentHelper.getEnchantmentLevel(aquaAffinityEntry, mc.player) > 0;
             } catch (Exception ignored) {
                 // 兼容性Fallback，如果registry查找失败
             }
 
-            if (mc.player.isSubmergedIn(FluidTags.WATER) && !hasAquaAffinity) {
+            if (mc.player.isEyeInFluid(FluidTags.WATER) && !hasAquaAffinity) {
                 speed /= 5.0F;
             }
             // 原版逻辑：如果不在地面且不在飞 -> /5
-            if (!mc.player.isOnGround()) {
+            if (!mc.player.onGround()) {
                 speed /= 5.0F;
             }
         }
         
         // 计算能否掉落
         boolean canHarvest = true;
-        if (state.isToolRequired()) {
-             ItemStack stack = mc.player.getInventory().getStack(slot);
-             canHarvest = stack.isSuitableFor(state);
+        if (state.requiresCorrectToolForDrops()) {
+             ItemStack stack = mc.player.getInventory().getItem(slot);
+             canHarvest = stack.isCorrectToolForDrops(state);
         }
         
         return speed / hardness / (canHarvest ? 30.0F : 100.0F);
@@ -346,27 +349,27 @@ public class xhPacketMinePlus extends Module {
 
     private float getBlockBreakingSpeed(int slot, BlockState state) {
         try {
-            ItemStack stack = mc.player.getInventory().getStack(slot);
-            float f = stack.getMiningSpeedMultiplier(state);
+            ItemStack stack = mc.player.getInventory().getItem(slot);
+            float f = stack.getDestroySpeed(state);
 
             if (f > 1.0F) {
                 // 1.21.4 写法: 使用 Registry 获取附魔
                 try {
-                   RegistryEntry<Enchantment> effEntry = mc.world.getRegistryManager()
-                           .getOrThrow(RegistryKeys.ENCHANTMENT)
+                   Holder<Enchantment> effEntry = mc.level.registryAccess()
+                           .lookupOrThrow(Registries.ENCHANTMENT)
                            .getOrThrow(Enchantments.EFFICIENCY);
-                   int i = EnchantmentHelper.getLevel(effEntry, stack);
+                   int i = EnchantmentHelper.getItemEnchantmentLevel(effEntry, stack);
                    if (i > 0 && !stack.isEmpty()) f += (float) (i * i + 1);
                 } catch (Exception ignored) {}
             }
 
-            if (mc.player.hasStatusEffect(StatusEffects.HASTE)) {
-                f *= 1.0F + (float) (mc.player.getStatusEffect(StatusEffects.HASTE).getAmplifier() + 1) * 0.2F;
+            if (mc.player.hasEffect(MobEffects.HASTE)) {
+                f *= 1.0F + (float) (mc.player.getEffect(MobEffects.HASTE).getAmplifier() + 1) * 0.2F;
             }
             // 挖掘疲劳
-            if (mc.player.hasStatusEffect(StatusEffects.MINING_FATIGUE)) {
+            if (mc.player.hasEffect(MobEffects.MINING_FATIGUE)) {
                 float k;
-                switch (mc.player.getStatusEffect(StatusEffects.MINING_FATIGUE).getAmplifier()) {
+                switch (mc.player.getEffect(MobEffects.MINING_FATIGUE).getAmplifier()) {
                     case 0 -> k = 0.3F;
                     case 1 -> k = 0.09F;
                     case 2 -> k = 0.0027F;
@@ -380,23 +383,23 @@ public class xhPacketMinePlus extends Module {
         }
     }
 
-    // --- Helper: 反射获取 PendingUpdateManager (修复 access error) ---
-    private PendingUpdateManager getPendingManager() {
+    // --- Helper: 反射获取 BlockStatePredictionHandler (修复 access error) ---
+    private BlockStatePredictionHandler getPendingManager() {
         try {
             // 尝试直接访问 (如果有AccessWidener或Mixin)
-            // return ((ClientWorld) mc.world).getPendingUpdateManager(); 
+            // return ((ClientLevel) mc.world).getPendingUpdateManager(); 
             
             // 否则使用反射
-            Method m = ClientWorld.class.getDeclaredMethod("getPendingUpdateManager"); 
+            Method m = ClientLevel.class.getDeclaredMethod("getPendingUpdateManager"); 
             // 在 Fabric mapping (Yarn) 中通常是 getPendingUpdateManager，Intermediary 是 method_41925
             m.setAccessible(true);
-            return (PendingUpdateManager) m.invoke(mc.world);
+            return (BlockStatePredictionHandler) m.invoke(mc.level);
         } catch (Exception e) {
             // 如果反射名字不对，尝试 intermediary name
              try {
-                Method m2 = ClientWorld.class.getDeclaredMethod("method_41925");
+                Method m2 = ClientLevel.class.getDeclaredMethod("method_41925");
                 m2.setAccessible(true);
-                return (PendingUpdateManager) m2.invoke(mc.world);
+                return (BlockStatePredictionHandler) m2.invoke(mc.level);
             } catch (Exception ex) {
                 return null;
             }
@@ -405,32 +408,32 @@ public class xhPacketMinePlus extends Module {
 
     // --- Helper: 1.21+ 序列化发包 ---
     // 为了防止鬼方块，必须使用 Sequence ID
-    private void sendSequenced(SequencedPacketCreator packetCreator) {
-        if (mc.world == null || mc.getNetworkHandler() == null) return;
+    private void sendSequenced(PredictiveAction packetCreator) {
+        if (mc.level == null || mc.getConnection() == null) return;
         
-        PendingUpdateManager pendingUpdateManager = getPendingManager();
+        BlockStatePredictionHandler pendingUpdateManager = getPendingManager();
         if (pendingUpdateManager != null) {
-            try (PendingUpdateManager manager = pendingUpdateManager.incrementSequence()) {
-                int i = manager.getSequence();
-                mc.getNetworkHandler().sendPacket(packetCreator.predict(i));
+            try (BlockStatePredictionHandler manager = pendingUpdateManager.startPredicting()) {
+                int i = manager.currentSequence();
+                mc.getConnection().send(packetCreator.predict(i));
             }
         } else {
             // Fallback: 如果反射失败，尝试直接发包 (虽然可能不稳)
             // 但在大多数开发环境中，反射应该能工作
-            mc.getNetworkHandler().sendPacket(packetCreator.predict(0));
+            mc.getConnection().send(packetCreator.predict(0));
         }
     }
     
     // --- 兼容旧方法的重载，用于非序列化包 ---
-    private void sendAction(PlayerActionC2SPacket.Action action, MiningData data) {
+    private void sendAction(ServerboundPlayerActionPacket.Action action, MiningData data) {
         // 大多数时候 START/ABORT 包也建议序列化，但为了保持原代码风格，这里暂时使用 sendSequenced 封装最关键的 STOP
         // 这里对 START 也做一次增强，使用序列化发送，提高稳定性
-        sendSequenced(id -> new PlayerActionC2SPacket(action, data.getPos(), data.getDirection(), id));
+        sendSequenced(id -> new ServerboundPlayerActionPacket(action, data.getPos(), data.getDirection(), id));
     }
 
     private void handleKeybinds() {
         if (autoMineKey.get().isPressed()) {
-            if (!autoMineTogglePressed && mc.currentScreen == null) {
+            if (!autoMineTogglePressed && mc.screen == null) {
                 autoMineTogglePressed = true;
                 autoMine.set(!autoMine.get());
                 info("Auto-mine " + (autoMine.get() ? "§aenabled" : "§cdisabled"));
@@ -440,7 +443,7 @@ public class xhPacketMinePlus extends Module {
         }
 
         if (instantToggleKey.get().isPressed()) {
-            if (!instantTogglePressed && mc.currentScreen == null) {
+            if (!instantTogglePressed && mc.screen == null) {
                 instantTogglePressed = true;
                 instantConfig.set(!instantConfig.get());
                 if (!instantConfig.get()) miningQueue.clear();
@@ -455,7 +458,7 @@ public class xhPacketMinePlus extends Module {
         int maxQueue = doubleBreakConfig.get() ? 2 : 1;
         long now = System.currentTimeMillis();
 
-        // 修复: 字符串检查防止 EntityPose.SWIMMING 符号丢失 (虽然 Swimming 通常都存在)
+        // 修复: 字符串检查防止 Pose.SWIMMING 符号丢失 (虽然 Swimming 通常都存在)
         boolean isSwimming = mc.player.getPose().name().equals("SWIMMING");
 
         if (antiCrawl.get() && isSwimming && miningQueue.size() < maxQueue && now - lastAntiCrawlTime >= 100L) {
@@ -506,20 +509,20 @@ public class xhPacketMinePlus extends Module {
 
         if (grimNewConfig.get()) {
             if (!miningFix.get()) {
-                sendAction(PlayerActionC2SPacket.Action.START_DESTROY_BLOCK, data);
-                sendAction(PlayerActionC2SPacket.Action.ABORT_DESTROY_BLOCK, data);
-                sendAction(PlayerActionC2SPacket.Action.STOP_DESTROY_BLOCK, data);
+                sendAction(ServerboundPlayerActionPacket.Action.START_DESTROY_BLOCK, data);
+                sendAction(ServerboundPlayerActionPacket.Action.ABORT_DESTROY_BLOCK, data);
+                sendAction(ServerboundPlayerActionPacket.Action.STOP_DESTROY_BLOCK, data);
             } else {
-                sendAction(PlayerActionC2SPacket.Action.ABORT_DESTROY_BLOCK, data);
+                sendAction(ServerboundPlayerActionPacket.Action.ABORT_DESTROY_BLOCK, data);
             }
-            sendAction(PlayerActionC2SPacket.Action.START_DESTROY_BLOCK, data);
-            mc.getNetworkHandler().sendPacket(new HandSwingC2SPacket(Hand.MAIN_HAND));
-            mc.getNetworkHandler().sendPacket(new HandSwingC2SPacket(Hand.MAIN_HAND));
+            sendAction(ServerboundPlayerActionPacket.Action.START_DESTROY_BLOCK, data);
+            mc.getConnection().send(new ServerboundSwingPacket(InteractionHand.MAIN_HAND));
+            mc.getConnection().send(new ServerboundSwingPacket(InteractionHand.MAIN_HAND));
         } else {
-            sendAction(PlayerActionC2SPacket.Action.ABORT_DESTROY_BLOCK, data);
-            sendAction(PlayerActionC2SPacket.Action.STOP_DESTROY_BLOCK, data);
-            sendAction(PlayerActionC2SPacket.Action.START_DESTROY_BLOCK, data);
-            mc.getNetworkHandler().sendPacket(new HandSwingC2SPacket(Hand.MAIN_HAND));
+            sendAction(ServerboundPlayerActionPacket.Action.ABORT_DESTROY_BLOCK, data);
+            sendAction(ServerboundPlayerActionPacket.Action.STOP_DESTROY_BLOCK, data);
+            sendAction(ServerboundPlayerActionPacket.Action.START_DESTROY_BLOCK, data);
+            mc.getConnection().send(new ServerboundSwingPacket(InteractionHand.MAIN_HAND));
         }
         return true;
     }
@@ -528,8 +531,8 @@ public class xhPacketMinePlus extends Module {
         int bestSlot = -1;
         float bestSpeed = 0.0F;
         for (int i = 0; i < 9; i++) {
-            ItemStack stack = mc.player.getInventory().getStack(i);
-            float speed = stack.getMiningSpeedMultiplier(state);
+            ItemStack stack = mc.player.getInventory().getItem(i);
+            float speed = stack.getDestroySpeed(state);
             if (speed > bestSpeed) {
                 bestSpeed = speed;
                 bestSlot = i;
@@ -545,23 +548,23 @@ public class xhPacketMinePlus extends Module {
         return false;
     }
     
-    private PlayerEntity getClosestEnemy() {
-        if (mc.world == null) return null;
-        return mc.world.getPlayers().stream()
-            .filter(p -> p != mc.player && !p.isDead() && !Friends.get().isFriend(p))
+    private Player getClosestEnemy() {
+        if (mc.level == null) return null;
+        return mc.level.players().stream()
+            .filter(p -> p != mc.player && !p.isDeadOrDying() && !Friends.get().isFriend(p))
             .min(Comparator.comparingDouble(p -> mc.player.distanceTo(p)))
             .filter(p -> mc.player.distanceTo(p) <= enemyRange.get())
             .orElse(null);
     }
     
-    private BlockPos findBestEnemyBlock(PlayerEntity enemy) {
+    private BlockPos findBestEnemyBlock(Player enemy) {
         if (enemy == null) return null;
-        BlockPos enemyPos = enemy.getBlockPos();
+        BlockPos enemyPos = enemy.blockPosition();
         if (isValidBlock(enemyPos)) return enemyPos;
         BlockPos[] surround = { enemyPos.north(), enemyPos.south(), enemyPos.east(), enemyPos.west() };
         for (BlockPos pos : surround) if (isValidBlock(pos)) return pos;
         if (targetHead.get()) {
-            BlockPos head = enemyPos.up(2);
+            BlockPos head = enemyPos.above(2);
             if (isValidBlock(head)) return head;
         }
         return null;
@@ -569,14 +572,14 @@ public class xhPacketMinePlus extends Module {
 
     private boolean isValidBlock(BlockPos pos) {
         if (isMiningBlock(pos)) return false;
-        if (mc.player.getEyePos().squaredDistanceTo(pos.toCenterPos()) > rangeConfig.get() * rangeConfig.get()) return false;
-        BlockState state = mc.world.getBlockState(pos);
-        if (state.isAir() || state.getHardness(mc.world, pos) == -1) return false;
+        if (mc.player.getEyePosition().distanceToSqr(pos.getCenter()) > rangeConfig.get() * rangeConfig.get()) return false;
+        BlockState state = mc.level.getBlockState(pos);
+        if (state.isAir() || state.getDestroySpeed(mc.level, pos) == -1) return false;
         return state.getBlock() == Blocks.OBSIDIAN || state.getBlock() == Blocks.ENDER_CHEST || state.getBlock() == Blocks.NETHERITE_BLOCK || state.getBlock() == Blocks.ANVIL;
     }
     
     private BlockPos getAntiCrawlBlock() {
-        BlockPos head = mc.player.getBlockPos().up();
+        BlockPos head = mc.player.blockPosition().above();
         return isValidBlock(head) ? head : null;
     }
 
@@ -588,10 +591,10 @@ public class xhPacketMinePlus extends Module {
     public void onStartBreaking(StartBreakingBlockEvent event) {
         if (modeConfig.get() == SpeedmineMode.PACKET) {
             event.cancel();
-            BlockState state = mc.world.getBlockState(event.blockPos);
-            if (state.getHardness(mc.world, event.blockPos) != -1.0F && !state.isAir()) {
+            BlockState state = mc.level.getBlockState(event.blockPos);
+            if (state.getDestroySpeed(mc.level, event.blockPos) != -1.0F && !state.isAir()) {
                 clickMine(new MiningData(event.blockPos, event.direction));
-                mc.player.swingHand(Hand.MAIN_HAND);
+                mc.player.swing(InteractionHand.MAIN_HAND);
             }
         }
     }
@@ -631,12 +634,12 @@ public class xhPacketMinePlus extends Module {
             int lineColor = new SettingColor(c.r, c.g, c.b, (int)(100 * factor)).getPacked();
 
             BlockPos pos = data.getPos();
-            VoxelShape shape = data.getState().getOutlineShape(mc.world, pos);
-            if (shape.isEmpty()) shape = VoxelShapes.fullCube();
-            Box box = shape.getBoundingBox().offset(pos);
+            VoxelShape shape = data.getState().getShape(mc.level, pos);
+            if (shape.isEmpty()) shape = Shapes.block();
+            AABB box = shape.bounds().move(pos);
             
             float total = 1.0F; 
-            float progress = data.getState().isAir() ? 1.0f : MathHelper.clamp(data.getBlockDamage() / total, 0f, 1f);
+            float progress = data.getState().isAir() ? 1.0f : Mth.clamp(data.getBlockDamage() / total, 0f, 1f);
             
             if (progress == 0.0f) progress = 0.01f;
 
@@ -648,7 +651,7 @@ public class xhPacketMinePlus extends Module {
             double dy = (box.maxY - box.minY) / 2 * scale;
             double dz = (box.maxZ - box.minZ) / 2 * scale;
             
-            event.renderer.box(new Box(centerX - dx, centerY - dy, centerZ - dz, centerX + dx, centerY + dy, centerZ + dz), new SettingColor(boxColor), new SettingColor(lineColor), shapeMode.get(), 0);
+            event.renderer.box(new AABB(centerX - dx, centerY - dy, centerZ - dz, centerX + dx, centerY + dy, centerZ + dz), new SettingColor(boxColor), new SettingColor(lineColor), shapeMode.get(), 0);
         }
     }
 
@@ -675,7 +678,7 @@ public class xhPacketMinePlus extends Module {
         public float damage(float dmg) { this.blockDamage += dmg; return this.blockDamage; }
         public void resetDamage() { this.started = false; this.blockDamage = 0; }
         public float getBlockDamage() { return blockDamage; }
-        public BlockState getState() { return mc.world.getBlockState(pos); }
+        public BlockState getState() { return mc.level.getBlockState(pos); }
         public int getSlot() { return getBestTool(getState()); }
     }
     

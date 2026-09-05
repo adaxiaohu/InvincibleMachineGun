@@ -1,6 +1,6 @@
 package com.codigohasta.addon.modules;
 
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.phys.Vec3;
 
 import com.codigohasta.addon.AddonTemplate;
 import meteordevelopment.meteorclient.events.world.TickEvent;
@@ -8,7 +8,7 @@ import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.player.ChatUtils;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.client.network.PlayerListEntry;
+import net.minecraft.client.multiplayer.PlayerInfo;
 
 import java.util.*;
 
@@ -2536,7 +2536,7 @@ public class AutoKouZi extends Module {
 
     @EventHandler
     private void onTick(TickEvent.Pre event) {
-        if (mc.player == null || mc.getNetworkHandler() == null) return;
+        if (mc.player == null || mc.getConnection() == null) return;
         
         // 检查时间间隔
         if (System.currentTimeMillis() - lastTime < delay.get() * 1000) {
@@ -2589,14 +2589,14 @@ public class AutoKouZi extends Module {
     private String getTargetPlayer() {
         if (randomWhisper.get()) {
             // 随机选择在线玩家
-            Collection<PlayerListEntry> players = mc.getNetworkHandler().getPlayerList();
-            ArrayList<PlayerListEntry> list = new ArrayList<>(players);
+            Collection<PlayerInfo> players = mc.getConnection().getOnlinePlayers();
+            ArrayList<PlayerInfo> list = new ArrayList<>(players);
 
             if (list.isEmpty()) {
                 return null;
             }
 
-            PlayerListEntry playerListEntry = list.get(random.nextInt(list.size()));
+            PlayerInfo playerListEntry = list.get(random.nextInt(list.size()));
 
             // 检查是否排除自己
             if (checkSelf.get()) {
@@ -2621,10 +2621,10 @@ public class AutoKouZi extends Module {
         if (commandMode.get() || content.startsWith("/")) {
             // 发送命令 (去掉开头的 / 因为 sendChatCommand 不需要)
             String cmd = content.startsWith("/") ? content.substring(1) : content;
-            mc.getNetworkHandler().sendChatCommand(cmd);
+            mc.getConnection().sendCommand(cmd);
         } else {
             // 发送普通消息
-            mc.getNetworkHandler().sendChatMessage(content);
+            mc.getConnection().sendChat(content);
         }
     }
 

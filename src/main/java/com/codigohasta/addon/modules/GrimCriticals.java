@@ -1,6 +1,6 @@
 package com.codigohasta.addon.modules;
 
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.phys.Vec3;
 
 import com.codigohasta.addon.AddonTemplate;
 import meteordevelopment.meteorclient.events.entity.player.AttackEntityEvent;
@@ -12,17 +12,18 @@ import meteordevelopment.meteorclient.systems.modules.combat.CrystalAura;
 import meteordevelopment.meteorclient.systems.modules.combat.Surround;
 import meteordevelopment.meteorclient.utils.player.PlayerUtils;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.decoration.EndCrystalEntity;
-import net.minecraft.network.packet.c2s.play.ClientCommandC2SPacket;
-import net.minecraft.network.packet.c2s.play.PlayerInteractEntityC2SPacket;
-import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Box;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.boss.enderdragon.EndCrystal;
+import net.minecraft.network.protocol.game.ServerboundPlayerCommandPacket;
+import net.minecraft.network.protocol.game.ServerboundInteractPacket;
+import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.phys.AABB;
 
 import java.lang.reflect.Field; // 新增导入：用于反射
 import java.util.Random;
+import net.minecraft.network.protocol.game.ServerboundAttackPacket;
 
 public class GrimCriticals extends Module {
     
@@ -113,17 +114,17 @@ public class GrimCriticals extends Module {
         Entity target = event.entity;
 
         // 3. 基础条件检查
-        if (target instanceof LivingEntity || target instanceof EndCrystalEntity) {
+        if (target instanceof LivingEntity || target instanceof EndCrystal) {
             if (mc.player == null) return;
 
             // 检查玩家状态
-            if (!mc.player.isClimbing() && !mc.player.isTouchingWater() && !mc.player.hasVehicle()) {
+            if (!mc.player.onClimbable() && !mc.player.isInWater() && !mc.player.isPassenger()) {
                 if (!mc.player.isUsingItem()) {
                     
                     // 4. Sprint Fix (处理疾跑状态)
                     this.postUpdateSprint = mc.player.isSprinting();
                     if (this.postUpdateSprint) {
-                        mc.player.networkHandler.sendPacket(new ClientCommandC2SPacket(mc.player, ClientCommandC2SPacket.Mode.STOP_SPRINTING));
+                        mc.player.connection.send(new ServerboundPlayerCommandPacket(mc.player, ServerboundPlayerCommandPacket.Action.STOP_SPRINTING));
                     }
 
                     // 5. 执行逻辑
@@ -137,17 +138,17 @@ public class GrimCriticals extends Module {
     private void onPacketSent(PacketEvent.Sent event) {
         if (mc.player == null) return;
 
-        if (event.packet instanceof PlayerMoveC2SPacket) {
+        if (event.packet instanceof ServerboundMovePlayerPacket) {
             // Strict 模式下恢复地面状态
             if (this.postUpdateGround) {
                 // 修复: 使用反射来设置 onGround，避免找不到符号错误
-                setPacketOnGround((PlayerMoveC2SPacket) event.packet, true);
+                setPacketOnGround((ServerboundMovePlayerPacket) event.packet, true);
                 this.postUpdateGround = false;
             }
 
             // 恢复疾跑状态
             if (this.postUpdateSprint) {
-                mc.player.networkHandler.sendPacket(new ClientCommandC2SPacket(mc.player, ClientCommandC2SPacket.Mode.START_SPRINTING));
+                mc.player.connection.send(new ServerboundPlayerCommandPacket(mc.player, ServerboundPlayerCommandPacket.Action.START_SPRINTING));
                 this.postUpdateSprint = false;
             }
         }
@@ -155,15 +156,15 @@ public class GrimCriticals extends Module {
 
     private void doCritical(Entity target) {
         if (mc.player == null) return;
-        if (!mc.player.isOnGround()) return;
-        if (mc.options.jumpKey.isPressed()) return;
+        if (!mc.player.onGround()) return;
+        if (mc.options.keyJump.isDown()) return;
 
         double x = mc.player.getX();
         double y = mc.player.getY();
         double z = mc.player.getZ();
         
-        float yaw = mc.player.getYaw();
-        float pitch = mc.player.getPitch();
+        float yaw = mc.player.getYRot();
+        float pitch = mc.player.getXRot();
 
         switch (mode.get()) {
             case Grim: {
@@ -175,14 +176,14 @@ public class GrimCriticals extends Module {
                 sendPosition(x, y + offset2, z, false);
                 sendPosition(x, y + offset3, z, false);
                 
-                mc.player.networkHandler.sendPacket(PlayerInteractEntityC2SPacket.attack(target, mc.player.isSneaking()));
+                mc.player.connection.send(new ServerboundAttackPacket(target.getId()));
                 break;
             }
 
             case Packet: {
                 sendPosition(x, y + 0.0625, z, true);
                 sendPosition(x, y, z, false);
-                mc.player.networkHandler.sendPacket(PlayerInteractEntityC2SPacket.attack(target, mc.player.isSneaking()));
+                mc.player.connection.send(new ServerboundAttackPacket(target.getId()));
                 break;
             }
 
@@ -195,7 +196,7 @@ public class GrimCriticals extends Module {
                 sendPosition(x, y, z, false);          // 假装落地（但 onGround 发 false 以触发暴击）
                 
                 // 修复 2: 手动发送攻击包，确保 [跳起 -> 落下 -> 攻击] 的顺序绝对正确
-                mc.player.networkHandler.sendPacket(PlayerInteractEntityC2SPacket.attack(target, mc.player.isSneaking()));
+                mc.player.connection.send(new ServerboundAttackPacket(target.getId()));
                 
                 this.postUpdateGround = true; // 下一 tick 修正地面状态防止被反作弊拉回
                 this.lastAttackTime = System.currentTimeMillis();
@@ -230,23 +231,23 @@ public class GrimCriticals extends Module {
                 sendPosition(x, y + 0.11, z, false);
                 sendPosition(x, y + 0.1100013579, z, false);
                 sendPosition(x, y + 0.0000013579, z, false);
-                mc.player.networkHandler.sendPacket(PlayerInteractEntityC2SPacket.attack(target, mc.player.isSneaking()));
+                mc.player.connection.send(new ServerboundAttackPacket(target.getId()));
                 break;
             }
         }
         
-        mc.player.swingHand(mc.player.getActiveHand());
+        mc.player.swing(mc.player.getUsedItemHand());
     }
 
     // --- Helper Methods ---
 
     /**
-     * 使用反射修改 PlayerMoveC2SPacket 的 onGround 字段
-     * 解决 Meteor 接口 IPlayerMoveC2SPacket 中 setOnGround 缺失的问题
+     * 使用反射修改 ServerboundMovePlayerPacket 的 onGround 字段
+     * 解决 Meteor 接口 IServerboundMovePlayerPacket 中 setOnGround 缺失的问题
      */
-    private void setPacketOnGround(PlayerMoveC2SPacket packet, boolean onGround) {
+    private void setPacketOnGround(ServerboundMovePlayerPacket packet, boolean onGround) {
         try {
-            Field field = PlayerMoveC2SPacket.class.getDeclaredField("onGround");
+            Field field = ServerboundMovePlayerPacket.class.getDeclaredField("onGround");
             field.setAccessible(true);
             field.setBoolean(packet, onGround);
         } catch (Exception e) {
@@ -256,24 +257,24 @@ public class GrimCriticals extends Module {
 
     private void sendPosition(double x, double y, double z, boolean onGround) {
         // 修复: 1.21.2+ 构造函数需要额外的 boolean 参数 (horizontalCollision)，通常设为 false
-        mc.player.networkHandler.sendPacket(new PlayerMoveC2SPacket.PositionAndOnGround(x, y, z, onGround, false));
+        mc.player.connection.send(new ServerboundMovePlayerPacket.Pos(x, y, z, onGround, false));
     }
 
     private void sendPositionFull(double x, double y, double z, float yaw, float pitch, boolean onGround) {
         // 修复: 1.21.2+ 构造函数需要额外的 boolean 参数
-        mc.player.networkHandler.sendPacket(new PlayerMoveC2SPacket.Full(x, y, z, yaw, pitch, onGround, false));
+        mc.player.connection.send(new ServerboundMovePlayerPacket.PosRot(x, y, z, yaw, pitch, onGround, false));
     }
 
     private boolean isPhased() {
-        if (mc.world == null || mc.player == null) return false;
-        Box box = mc.player.getBoundingBox();
-        BlockPos.Mutable mutable = new BlockPos.Mutable();
+        if (mc.level == null || mc.player == null) return false;
+        AABB box = mc.player.getBoundingBox();
+        BlockPos.MutableBlockPos mutable = new BlockPos.MutableBlockPos();
 
         for (int x = (int) Math.floor(box.minX); x < Math.ceil(box.maxX); x++) {
             for (int y = (int) Math.floor(box.minY); y < Math.ceil(box.maxY); y++) {
                 for (int z = (int) Math.floor(box.minZ); z < Math.ceil(box.maxZ); z++) {
                     mutable.set(x, y, z);
-                    if (mc.world.getBlockState(mutable).isFullCube(mc.world, mutable)) {
+                    if (mc.level.getBlockState(mutable).isCollisionShapeFullBlock(mc.level, mutable)) {
                         return true;
                     }
                 }
@@ -283,17 +284,17 @@ public class GrimCriticals extends Module {
     }
 
     private boolean isDoublePhased() {
-        if (mc.world == null || mc.player == null) return false;
-        Box box = mc.player.getBoundingBox();
-        BlockPos.Mutable mutable = new BlockPos.Mutable();
+        if (mc.level == null || mc.player == null) return false;
+        AABB box = mc.player.getBoundingBox();
+        BlockPos.MutableBlockPos mutable = new BlockPos.MutableBlockPos();
 
         for (int x = (int) Math.floor(box.minX); x < Math.ceil(box.maxX); x++) {
             for (int y = (int) Math.floor(box.minY); y < Math.ceil(box.maxY); y++) {
                 for (int z = (int) Math.floor(box.minZ); z < Math.ceil(box.maxZ); z++) {
                     mutable.set(x, y, z);
-                    boolean current = mc.world.getBlockState(mutable).isFullCube(mc.world, mutable);
+                    boolean current = mc.level.getBlockState(mutable).isCollisionShapeFullBlock(mc.level, mutable);
                     mutable.set(x, y + 1, z);
-                    boolean up = mc.world.getBlockState(mutable).isFullCube(mc.world, mutable);
+                    boolean up = mc.level.getBlockState(mutable).isCollisionShapeFullBlock(mc.level, mutable);
                     
                     if (current && up) return true;
                 }

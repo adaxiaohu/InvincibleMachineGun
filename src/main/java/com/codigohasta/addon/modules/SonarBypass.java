@@ -7,8 +7,8 @@ import meteordevelopment.meteorclient.settings.SettingGroup;
 import meteordevelopment.meteorclient.settings.StringSetting;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.entity.EquipmentSlot;
-import net.minecraft.item.ItemStack;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.item.ItemStack;
 import com.codigohasta.addon.AddonTemplate; // 导入你的主类模板
 
 public class SonarBypass extends Module {
@@ -49,27 +49,27 @@ public class SonarBypass extends Module {
 
     @EventHandler
     private void onTick(TickEvent.Pre event) {
-        if (mc.player == null || mc.world == null) return;
+        if (mc.player == null || mc.level == null) return;
 
-        if (strictPhysics.get() && mc.player.age < 60) {
+        if (strictPhysics.get() && mc.player.tickCount < 60) {
             // 【1.21.11 新规范】：禁止使用 setFlag(7)，统一使用 isGliding() 和 stopGliding()
-            if (mc.player.isGliding()) {
-                mc.player.stopGliding();
+            if (mc.player.isFallFlying()) {
+                mc.player.stopFallFlying();
             }
 
             // 【1.21.11 新规范】：安全检查胸甲槽位，不使用 item instanceof 类，改用 toString()
-            ItemStack chestStack = mc.player.getEquippedStack(EquipmentSlot.CHEST);
+            ItemStack chestStack = mc.player.getItemBySlot(EquipmentSlot.CHEST);
             if (chestStack != null && chestStack.getItem().toString().contains("elytra")) {
                 // 如果穿戴了鞘翅并可能引发物理异常，确保强制取消潜行或冲刺
                 // 【1.21.11 新规范】：不使用过时的 Mode 枚举发包，直接修改 Options 释放潜行
-                if (mc.options.sneakKey.isPressed()) {
-                    mc.options.sneakKey.setPressed(false);
+                if (mc.options.keyShift.isDown()) {
+                    mc.options.keyShift.setDown(false);
                 }
             }
             
             // 【1.21.11 新规范】：输入系统的变更，使用 playerInput 的 record 方法和 movementVector
             // 确保刚进服时前向位移不会导致 Sonar 误判
-            if (mc.player.input.playerInput.forward()) {
+            if (mc.player.input.keyPresses.forward()) {
                 // 若需要强制归零，可以直接干预运动向量（Vec2f）
                 // mc.player.input.movementVector = new Vec2f(0.0f, 0.0f);
             }

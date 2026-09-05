@@ -1,7 +1,7 @@
 package com.codigohasta.addon.utils.bmw;
 
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.util.PlayerInput;
+import net.minecraft.client.Minecraft;
+import net.minecraft.world.entity.player.Input;
 
 /**
  * BMWClient-nextgen 移植：DirectionalInput.kt
@@ -28,7 +28,7 @@ public class BMWDirectionalInput {
         this.right = right;
     }
 
-    public BMWDirectionalInput(PlayerInput input) {
+    public BMWDirectionalInput(Input input) {
         this(input.forward(), input.backward(), input.left(), input.right());
     }
 
@@ -40,8 +40,8 @@ public class BMWDirectionalInput {
     }
 
     public static BMWDirectionalInput fromPlayer() {
-        MinecraftClient mc = MinecraftClient.getInstance();
+        Minecraft mc = Minecraft.getInstance();
         if (mc.player == null) return NONE;
-        return new BMWDirectionalInput(mc.player.input.playerInput);
+        return new BMWDirectionalInput(mc.player.input.keyPresses);
     }
 }

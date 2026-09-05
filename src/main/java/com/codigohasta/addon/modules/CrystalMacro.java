@@ -7,14 +7,14 @@ import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.util.Hand;
-import net.minecraft.util.hit.BlockHitResult;
-import net.minecraft.util.hit.EntityHitResult;
-import net.minecraft.util.hit.HitResult;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Box;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.EntityHitResult;
+import net.minecraft.world.phys.HitResult;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.phys.AABB;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -63,7 +63,7 @@ public class CrystalMacro extends Module {
     private long lastPlaceTime = 0;
     private long lastBreakTime = 0;
 
-    private final Set<PlayerEntity> deadPlayers = new HashSet<>();
+    private final Set<Player> deadPlayers = new HashSet<>();
     private boolean paused = false;
     private long resumeTime = 0;
 
@@ -89,14 +89,14 @@ public class CrystalMacro extends Module {
 
     @EventHandler
     private void onTick(final TickEvent.Pre event) {
-        if (mc.currentScreen != null) return;
+        if (mc.screen != null) return;
 
         if (paused && System.currentTimeMillis() >= resumeTime) {
             paused = false;
             if (mc.player != null) {
-                mc.player.sendMessage(net.minecraft.text.Text.literal(
+                mc.player.sendSystemMessage(net.minecraft.network.chat.Component.literal(
                     "§7[§bLegitCrystalMacro§7] §aResumed after stop-on-kill"
-                ), false);
+                ));
             }
         }
 
@@ -105,16 +105,16 @@ public class CrystalMacro extends Module {
         if (mc.player.isUsingItem()) return;
 
         // 【1.21.11 准则】基于字符串检查持有物品是否为水晶
-        String mainHandName = mc.player.getMainHandStack().getItem().toString().toLowerCase();
+        String mainHandName = mc.player.getMainHandItem().getItem().toString().toLowerCase();
         if (!mainHandName.contains("end_crystal")) return;
 
         if (stopOnKill.get() && checkForDeadPlayers()) {
             paused = true;
             resumeTime = System.currentTimeMillis() + 5000;
             if (mc.player != null) {
-                mc.player.sendMessage(net.minecraft.text.Text.literal(
+                mc.player.sendSystemMessage(net.minecraft.network.chat.Component.literal(
                     "§7[§bLegitCrystalMacro§7] §cPaused due to player death (will resume in 5s)"
-                ), false);
+                ));
             }
             return;
         }
@@ -128,7 +128,7 @@ public class CrystalMacro extends Module {
     }
 
     private void handleInteraction() {
-        HitResult crosshairTarget = mc.crosshairTarget;
+        HitResult crosshairTarget = mc.hitResult;
         if (crosshairTarget instanceof BlockHitResult blockHit) {
             handleBlockInteraction(blockHit);
         } else if (crosshairTarget instanceof EntityHitResult entityHit) {
@@ -147,13 +147,13 @@ public class CrystalMacro extends Module {
         BlockPos blockPos = blockHitResult.getBlockPos();
         
         // 【1.21.11 准则】通过名称判定方块
-        String targetBlockName = mc.world.getBlockState(blockPos).getBlock().toString().toLowerCase();
+        String targetBlockName = mc.level.getBlockState(blockPos).getBlock().toString().toLowerCase();
         boolean isObsidianOrBedrock = targetBlockName.contains("obsidian") || targetBlockName.contains("bedrock");
 
         if (isObsidianOrBedrock && isValidCrystalPlacement(blockPos)) {
             // 调用原生接口放置水晶
-            mc.interactionManager.interactBlock(mc.player, Hand.MAIN_HAND, blockHitResult);
-            mc.player.swingHand(Hand.MAIN_HAND);
+            mc.gameMode.useItemOn(mc.player, InteractionHand.MAIN_HAND, blockHitResult);
+            mc.player.swing(InteractionHand.MAIN_HAND);
             
             // 记录放置时间
             lastPlaceTime = currentTime;
@@ -172,8 +172,8 @@ public class CrystalMacro extends Module {
         if (!entityTypeStr.contains("end_crystal") && !entityTypeStr.contains("slime")) return;
 
         // 发送攻击与挥手数据包
-        mc.interactionManager.attackEntity(mc.player, entity);
-        mc.player.swingHand(Hand.MAIN_HAND);
+        mc.gameMode.attack(mc.player, entity);
+        mc.player.swing(InteractionHand.MAIN_HAND);
         
         // 【GrimAC 核心绕过】客户端预测移除 (Predictive Entity Discard)
         // 这个方法直接在你的客户端强行抹除水晶实体。
@@ -185,24 +185,24 @@ public class CrystalMacro extends Module {
     }
 
     private boolean isValidCrystalPlacement(BlockPos blockPos) {
-        BlockPos up = blockPos.up();
-        if (!mc.world.isAir(up)) return false;
+        BlockPos up = blockPos.above();
+        if (!mc.level.isEmptyBlock(up)) return false;
 
         int x = up.getX(), y = up.getY(), z = up.getZ();
         // 如果上面被 predictive discard 的水晶被移除了，这里判断就会立刻通过，实现无缝连点！
-        return mc.world.getOtherEntities(null, new Box(x, y, z, x + 1.0, y + 2.0, z + 1.0)).isEmpty();
+        return mc.level.getEntities(null, new AABB(x, y, z, x + 1.0, y + 2.0, z + 1.0)).isEmpty();
     }
 
     private boolean checkForDeadPlayers() {
-        if (mc.world == null) return false;
+        if (mc.level == null) return false;
 
-        for (PlayerEntity player : mc.world.getPlayers()) {
+        for (Player player : mc.level.players()) {
             if (player == mc.player) continue;
 
             // 遵守 1.21.11 Record 调用规则
             String name = player.getGameProfile().name();
 
-            if (player.isDead() || player.getHealth() <= 0) {
+            if (player.isDeadOrDying() || player.getHealth() <= 0) {
                 if (!deadPlayers.contains(player)) {
                     deadPlayers.add(player);
                     return true;
@@ -210,7 +210,7 @@ public class CrystalMacro extends Module {
             }
         }
 
-        deadPlayers.removeIf(p -> !p.isDead() && p.getHealth() > 0);
+        deadPlayers.removeIf(p -> !p.isDeadOrDying() && p.getHealth() > 0);
         return false;
     }
 }

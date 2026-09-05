@@ -1,8 +1,8 @@
 package com.codigohasta.addon.mixin;
 
 import com.codigohasta.addon.utils.alien.AlienRotationUtil;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.entity.LivingEntity;
+import net.minecraft.client.Minecraft;
+import net.minecraft.world.entity.LivingEntity;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -13,22 +13,22 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 // Only modifies yaw (setYaw), NOT bodyYaw/headYaw — no rendering thread conflict.
 @Mixin(LivingEntity.class)
 public class MixinLivingEntitySprint {
-    private static final MinecraftClient mc = MinecraftClient.getInstance();
+    private static final Minecraft mc = Minecraft.getInstance();
 
-    @Inject(method = "jump", at = @At("HEAD"))
+    @Inject(method = "jumpFromGround", at = @At("HEAD"))
     private void onJumpPre(CallbackInfo ci) {
         if (mc == null || mc.player == null || (Object) this != mc.player) return;
         if (!AlienRotationUtil.shouldRotate) return;
 
-        AlienRotationUtil.preYaw = mc.player.getYaw();
-        mc.player.setYaw(AlienRotationUtil.sprintYaw);
+        AlienRotationUtil.preYaw = mc.player.getYRot();
+        mc.player.setYRot(AlienRotationUtil.sprintYaw);
     }
 
-    @Inject(method = "jump", at = @At("RETURN"))
+    @Inject(method = "jumpFromGround", at = @At("RETURN"))
     private void onJumpPost(CallbackInfo ci) {
         if (mc == null || mc.player == null || (Object) this != mc.player) return;
         if (!AlienRotationUtil.shouldRotate) return;
 
-        mc.player.setYaw(AlienRotationUtil.preYaw);
+        mc.player.setYRot(AlienRotationUtil.preYaw);
     }
 }

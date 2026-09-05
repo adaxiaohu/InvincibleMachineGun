@@ -1,6 +1,6 @@
 package com.codigohasta.addon.modules;
 
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.phys.Vec3;
 
 import com.codigohasta.addon.AddonTemplate;
 import meteordevelopment.meteorclient.events.render.Render2DEvent;
@@ -94,7 +94,7 @@ public class ModuleList extends Module {
 
     @EventHandler
     private void onRender2D(Render2DEvent event) {
-        if (mc.player == null || mc.world == null) return;
+        if (mc.player == null || mc.level == null) return;
 
         TextRenderer textRenderer = TextRenderer.get();
         boolean useShadow = shadow.get();
@@ -179,7 +179,7 @@ public class ModuleList extends Module {
                 )
         );
         
-        // --- 修复点：传入 Matrices 而不是 DrawContext ---
+        // --- 修复点：传入 Matrices 而不是 GuiGraphicsExtractor ---
         Renderer2D.COLOR.render();
 
         // 文字渲染

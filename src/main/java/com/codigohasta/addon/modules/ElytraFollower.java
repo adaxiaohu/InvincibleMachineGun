@@ -1,6 +1,6 @@
 package com.codigohasta.addon.modules;
 
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.phys.Vec3;
 
 import com.codigohasta.addon.AddonTemplate;
 import meteordevelopment.meteorclient.events.meteor.MouseClickEvent;
@@ -12,16 +12,16 @@ import meteordevelopment.meteorclient.systems.modules.Modules;
 import meteordevelopment.meteorclient.systems.modules.combat.KillAura;
 import meteordevelopment.meteorclient.utils.misc.input.KeyAction;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.client.network.PlayerListEntry;
-import net.minecraft.entity.EntityPose;
-import net.minecraft.entity.EquipmentSlot;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
-import net.minecraft.network.packet.c2s.play.ClientCommandC2SPacket;
-import net.minecraft.util.math.MathHelper;
-import net.minecraft.util.math.Vec3d;
-import net.minecraft.world.GameMode;
+import net.minecraft.client.multiplayer.PlayerInfo;
+import net.minecraft.world.entity.Pose;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.network.protocol.game.ServerboundPlayerCommandPacket;
+import net.minecraft.util.Mth;
+import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.level.GameType;
 import org.lwjgl.glfw.GLFW;
 
 public class ElytraFollower extends Module {
@@ -142,7 +142,7 @@ public class ElytraFollower extends Module {
         .build()
     );
 
-    private PlayerEntity target;
+    private Player target;
     private int takeoffTimer = 0;
 
     public ElytraFollower() {
@@ -156,35 +156,35 @@ public class ElytraFollower extends Module {
         takeoffTimer = 0;
     }
 
-    private boolean isTargetValid(PlayerEntity player) {
+    private boolean isTargetValid(Player player) {
         if (player == null || player == mc.player) return false;
         if (!player.isAlive()) return false;
         if (mc.player.distanceTo(player) > range.get() + 30) return false;
         if (!Friends.get().shouldAttack(player)) return false;
 
-        PlayerListEntry entry = mc.getNetworkHandler().getPlayerListEntry(player.getUuid());
+        PlayerInfo entry = mc.getConnection().getPlayerInfo(player.getUUID());
         if (entry == null) return false;
 
-        GameMode gm = entry.getGameMode();
-        if (gm == GameMode.SURVIVAL) return followSurvival.get();
-        if (gm == GameMode.ADVENTURE) return followAdventure.get();
-        if (gm == GameMode.CREATIVE) return followCreative.get();
-        if (gm == GameMode.SPECTATOR) return followSpectator.get();
+        GameType gm = entry.getGameMode();
+        if (gm == GameType.SURVIVAL) return followSurvival.get();
+        if (gm == GameType.ADVENTURE) return followAdventure.get();
+        if (gm == GameType.CREATIVE) return followCreative.get();
+        if (gm == GameType.SPECTATOR) return followSpectator.get();
 
         return false;
     }
 
-    private PlayerEntity getTargetByCrosshair() {
-        PlayerEntity best = null;
+    private Player getTargetByCrosshair() {
+        Player best = null;
         double bestDiff = Double.MAX_VALUE;
 
-        for (PlayerEntity player : mc.world.getPlayers()) {
+        for (Player player : mc.level.players()) {
             if (!isTargetValid(player)) continue;
 
             double diffX = player.getX() - mc.player.getX();
             double diffZ = player.getZ() - mc.player.getZ();
             float targetYaw = (float) Math.toDegrees(Math.atan2(diffZ, diffX)) - 90;
-            float diff = Math.abs(MathHelper.wrapDegrees(mc.player.getYaw() - targetYaw));
+            float diff = Math.abs(Mth.wrapDegrees(mc.player.getYRot() - targetYaw));
 
             if (diff < bestDiff) {
                 bestDiff = diff;
@@ -194,13 +194,13 @@ public class ElytraFollower extends Module {
         return best;
     }
 
-    private PlayerEntity findBestTarget() {
+    private Player findBestTarget() {
         if (mode.get() == Mode.无) return null;
         
         if (mode.get() == Mode.最近) {
-            PlayerEntity best = null;
+            Player best = null;
             double bestDist = Double.MAX_VALUE;
-            for (PlayerEntity player : mc.world.getPlayers()) {
+            for (Player player : mc.level.players()) {
                 if (!isTargetValid(player)) continue;
                 double dist = mc.player.distanceTo(player);
                 if (dist < bestDist) {
@@ -239,7 +239,7 @@ public class ElytraFollower extends Module {
                 return;
             }
 
-            PlayerEntity lookedAt = getTargetByCrosshair();
+            Player lookedAt = getTargetByCrosshair();
             if (lookedAt != null) {
                 target = lookedAt;
                 mode.set(Mode.锁定);
@@ -250,7 +250,7 @@ public class ElytraFollower extends Module {
 
     @EventHandler
     private void onTick(TickEvent.Pre event) {
-        if (mc.player == null || mc.world == null) return;
+        if (mc.player == null || mc.level == null) return;
 
         if (mode.get() == Mode.无) {
             target = null;
@@ -266,49 +266,49 @@ public class ElytraFollower extends Module {
             }
         } else {
             KillAura aura = Modules.get().get(KillAura.class);
-            if (aura != null && aura.isActive() && aura.getTarget() instanceof PlayerEntity auraPlayer && isTargetValid(auraPlayer)) {
+            if (aura != null && aura.isActive() && aura.getTarget() instanceof Player auraPlayer && isTargetValid(auraPlayer)) {
                 target = auraPlayer;
             } else {
                 target = findBestTarget();
             }
         }
 
-        ItemStack chest = mc.player.getEquippedStack(EquipmentSlot.CHEST);
-        if (!chest.isOf(Items.ELYTRA)) return;
+        ItemStack chest = mc.player.getItemBySlot(EquipmentSlot.CHEST);
+        if (!chest.is(Items.ELYTRA)) return;
 
-        if (autoTakeoff.get() && mc.player.getPose() != EntityPose.GLIDING) {
+        if (autoTakeoff.get() && mc.player.getPose() != Pose.FALL_FLYING) {
             if (takeoffTimer > 0) takeoffTimer--;
             else {
-                if (mc.player.isOnGround()) {
-                    mc.player.jump();
+                if (mc.player.onGround()) {
+                    mc.player.jumpFromGround();
                     takeoffTimer = takeoffDelay.get();
-                } else if (!mc.player.isSubmergedInWater()) {
-                    mc.getNetworkHandler().sendPacket(new ClientCommandC2SPacket(mc.player, ClientCommandC2SPacket.Mode.START_FALL_FLYING));
+                } else if (!mc.player.isUnderWater()) {
+                    mc.getConnection().send(new ServerboundPlayerCommandPacket(mc.player, ServerboundPlayerCommandPacket.Action.START_FALL_FLYING));
                     takeoffTimer = takeoffDelay.get();
                 }
             }
             return;
         }
 
-        if (mc.player.getPose() == EntityPose.GLIDING && target != null) {
-            Vec3d targetPos = target.getBoundingBox().getCenter();
-            Vec3d playerPos = mc.player.getEyePos();
+        if (mc.player.getPose() == Pose.FALL_FLYING && target != null) {
+            Vec3 targetPos = target.getBoundingBox().getCenter();
+            Vec3 playerPos = mc.player.getEyePosition();
             double distance = playerPos.distanceTo(targetPos);
 
             if (distance > stopDistance.get()) {
-                Vec3d dir = targetPos.subtract(playerPos).normalize();
-                mc.player.setVelocity(dir.x * speed.get(), dir.y * speed.get(), dir.z * speed.get());
+                Vec3 dir = targetPos.subtract(playerPos).normalize();
+                mc.player.setDeltaMovement(dir.x * speed.get(), dir.y * speed.get(), dir.z * speed.get());
 
                 if (lookAt.get()) {
                     double diffX = targetPos.x - playerPos.x;
                     double diffY = targetPos.y - playerPos.y;
                     double diffZ = targetPos.z - playerPos.z;
                     double diffXZ = Math.sqrt(diffX * diffX + diffZ * diffZ);
-                    mc.player.setYaw((float) Math.toDegrees(Math.atan2(diffZ, diffX)) - 90F);
-                    mc.player.setPitch((float) -Math.toDegrees(Math.atan2(diffY, diffXZ)));
+                    mc.player.setYRot((float) Math.toDegrees(Math.atan2(diffZ, diffX)) - 90F);
+                    mc.player.setXRot((float) -Math.toDegrees(Math.atan2(diffY, diffXZ)));
                 }
             } else {
-                mc.player.setVelocity(mc.player.getVelocity().multiply(0.5));
+                mc.player.setDeltaMovement(mc.player.getDeltaMovement().scale(0.5));
             }
         }
     }

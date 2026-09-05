@@ -1,20 +1,20 @@
 package com.codigohasta.addon.modules;
 
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.phys.Vec3;
 
 import com.codigohasta.addon.AddonTemplate;
 import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.enchantment.EnchantmentHelper;
-import net.minecraft.enchantment.Enchantments;
-import net.minecraft.item.BowItem;
-import net.minecraft.item.CrossbowItem;
-import net.minecraft.item.Item;
-import net.minecraft.item.ItemStack;
-import net.minecraft.registry.RegistryKeys;
-import net.minecraft.util.Hand;
+import net.minecraft.world.item.enchantment.EnchantmentHelper;
+import net.minecraft.world.item.enchantment.Enchantments;
+import net.minecraft.world.item.BowItem;
+import net.minecraft.world.item.CrossbowItem;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.world.InteractionHand;
 
 public class FastCrossbow extends Module {
 
@@ -66,35 +66,35 @@ public class FastCrossbow extends Module {
 
     @Override
     public void onDeactivate() {
-        mc.options.useKey.setPressed(false);
-        if (mc.player != null) mc.interactionManager.stopUsingItem(mc.player);
+        mc.options.keyUse.setDown(false);
+        if (mc.player != null) mc.gameMode.releaseUsingItem(mc.player);
     }
 
     @EventHandler
     private void onTick(TickEvent.Pre event) {
-        if (mc.player == null || mc.world == null) return;
+        if (mc.player == null || mc.level == null) return;
 
         // [新增逻辑] 1. 优先检查主手，如果主手不是武器，则检查副手
-        Hand hand = Hand.MAIN_HAND;
-        ItemStack stack = mc.player.getMainHandStack();
+        InteractionHand hand = InteractionHand.MAIN_HAND;
+        ItemStack stack = mc.player.getMainHandItem();
         
         if (!isWeapon(stack.getItem())) {
-            stack = mc.player.getOffHandStack();
-            hand = Hand.OFF_HAND;
+            stack = mc.player.getOffhandItem();
+            hand = InteractionHand.OFF_HAND;
         }
         
         // 如果主副手都不是弓或弩，直接返回
         if (!isWeapon(stack.getItem())) return;
 
         // 必须按住右键才工作
-        if (!mc.options.useKey.isPressed()) {
+        if (!mc.options.keyUse.isDown()) {
             return;
         }
 
         // 处理冷却
         if (timer > 0) {
             timer--;
-            mc.options.useKey.setPressed(false);
+            mc.options.keyUse.setDown(false);
             return;
         }
 
@@ -124,99 +124,99 @@ public class FastCrossbow extends Module {
 
     // ================= 弩的处理逻辑 (Crossbow) =================
 
-    private void handleCrossbowNative(ItemStack stack, Hand hand) {
+    private void handleCrossbowNative(ItemStack stack, InteractionHand hand) {
         if (CrossbowItem.isCharged(stack)) {
-            mc.interactionManager.interactItem(mc.player, hand);
-            mc.player.swingHand(hand);
+            mc.gameMode.useItem(mc.player, hand);
+            mc.player.swing(hand);
             timer = delay.get();
         } else {
-            mc.options.useKey.setPressed(true);
+            mc.options.keyUse.setDown(true);
             if (!mc.player.isUsingItem()) {
-                mc.interactionManager.interactItem(mc.player, hand);
+                mc.gameMode.useItem(mc.player, hand);
             }
         }
     }
 
-    private void handleCrossbowControl(ItemStack stack, Hand hand) {
+    private void handleCrossbowControl(ItemStack stack, InteractionHand hand) {
         if (CrossbowItem.isCharged(stack)) {
-            mc.interactionManager.interactItem(mc.player, hand);
-            mc.player.swingHand(hand);
+            mc.gameMode.useItem(mc.player, hand);
+            mc.player.swing(hand);
             timer = delay.get();
             return;
         }
 
-        mc.options.useKey.setPressed(true);
+        mc.options.keyUse.setDown(true);
         if (!mc.player.isUsingItem()) {
-            mc.interactionManager.interactItem(mc.player, hand);
+            mc.gameMode.useItem(mc.player, hand);
             return;
         }
 
         int requiredTime = getPullTime(stack) + tolerance.get();
-        if (mc.player.getItemUseTime() >= requiredTime) {
-            mc.interactionManager.stopUsingItem(mc.player);
+        if (mc.player.getTicksUsingItem() >= requiredTime) {
+            mc.gameMode.releaseUsingItem(mc.player);
         }
     }
 
-    private void handleCrossbowPacket(ItemStack stack, Hand hand) {
+    private void handleCrossbowPacket(ItemStack stack, InteractionHand hand) {
         if (CrossbowItem.isCharged(stack)) {
-            mc.interactionManager.interactItem(mc.player, hand);
-            mc.player.swingHand(hand);
+            mc.gameMode.useItem(mc.player, hand);
+            mc.player.swing(hand);
             timer = delay.get();
         } 
 
         if (!mc.player.isUsingItem()) {
-            mc.interactionManager.interactItem(mc.player, hand);
-            mc.options.useKey.setPressed(true);
+            mc.gameMode.useItem(mc.player, hand);
+            mc.options.keyUse.setDown(true);
             return;
         }
 
-        mc.options.useKey.setPressed(true);
+        mc.options.keyUse.setDown(true);
         int requiredTime = getPullTime(stack) + tolerance.get();
-        if (mc.player.getItemUseTime() >= requiredTime) {
-            mc.interactionManager.stopUsingItem(mc.player);
+        if (mc.player.getTicksUsingItem() >= requiredTime) {
+            mc.gameMode.releaseUsingItem(mc.player);
         }
     }
 
     // ================= 弓的处理逻辑 (Bow) =================
     // 弓的特点：拉弓满后，松开右键即触发发射！没有 charged 状态
 
-    private void handleBowNative(ItemStack stack, Hand hand) {
-        mc.options.useKey.setPressed(true);
+    private void handleBowNative(ItemStack stack, InteractionHand hand) {
+        mc.options.keyUse.setDown(true);
         if (!mc.player.isUsingItem()) {
-            mc.interactionManager.interactItem(mc.player, hand);
+            mc.gameMode.useItem(mc.player, hand);
         } else {
             // Native 模式下我们使用基础时间，不加 tolerance
-            if (mc.player.getItemUseTime() >= getPullTime(stack)) {
-                mc.interactionManager.stopUsingItem(mc.player);
-                mc.options.useKey.setPressed(false);
+            if (mc.player.getTicksUsingItem() >= getPullTime(stack)) {
+                mc.gameMode.releaseUsingItem(mc.player);
+                mc.options.keyUse.setDown(false);
                 timer = delay.get(); // 触发射击，进入冷却
             }
         }
     }
 
-    private void handleBowControl(ItemStack stack, Hand hand) {
+    private void handleBowControl(ItemStack stack, InteractionHand hand) {
         if (!mc.player.isUsingItem()) {
-            mc.interactionManager.interactItem(mc.player, hand);
-            mc.options.useKey.setPressed(true);
+            mc.gameMode.useItem(mc.player, hand);
+            mc.options.keyUse.setDown(true);
         } else {
             int requiredTime = getPullTime(stack) + tolerance.get();
-            if (mc.player.getItemUseTime() >= requiredTime) {
-                mc.interactionManager.stopUsingItem(mc.player);
+            if (mc.player.getTicksUsingItem() >= requiredTime) {
+                mc.gameMode.releaseUsingItem(mc.player);
                 timer = delay.get(); // 触发射击，进入冷却
             }
         }
     }
 
-    private void handleBowPacket(ItemStack stack, Hand hand) {
+    private void handleBowPacket(ItemStack stack, InteractionHand hand) {
         // 弓的 Packet 逻辑与 Control 类似，但是尝试更快地响应
         if (!mc.player.isUsingItem()) {
-            mc.interactionManager.interactItem(mc.player, hand);
-            mc.options.useKey.setPressed(true);
+            mc.gameMode.useItem(mc.player, hand);
+            mc.options.keyUse.setDown(true);
         } 
         
         int requiredTime = getPullTime(stack) + tolerance.get();
-        if (mc.player.isUsingItem() && mc.player.getItemUseTime() >= requiredTime) {
-            mc.interactionManager.stopUsingItem(mc.player);
+        if (mc.player.isUsingItem() && mc.player.getTicksUsingItem() >= requiredTime) {
+            mc.gameMode.releaseUsingItem(mc.player);
             timer = delay.get();
         }
     }
@@ -232,9 +232,9 @@ public class FastCrossbow extends Module {
         
         // 2. 如果是弩，计算快速装填 (1.21.4 适配)
         try {
-            var registry = mc.world.getRegistryManager().getOrThrow(RegistryKeys.ENCHANTMENT);
+            var registry = mc.level.registryAccess().lookupOrThrow(Registries.ENCHANTMENT);
             var quickChargeEntry = registry.getOrThrow(Enchantments.QUICK_CHARGE);
-            int level = EnchantmentHelper.getLevel(quickChargeEntry, stack);
+            int level = EnchantmentHelper.getItemEnchantmentLevel(quickChargeEntry, stack);
             return Math.max(0, 25 - 5 * level);
         } catch (Exception e) {
             return 25; // 获取附魔失败时回退到默认的 25 ticks

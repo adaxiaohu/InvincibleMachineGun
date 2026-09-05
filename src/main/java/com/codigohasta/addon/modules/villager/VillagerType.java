@@ -1,9 +1,9 @@
 package com.codigohasta.addon.modules.villager;
 
-import net.minecraft.item.Item;
-import net.minecraft.item.Items;
-import net.minecraft.registry.RegistryKey;
-import net.minecraft.village.VillagerProfession;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.Items;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.entity.npc.villager.VillagerProfession;
 
 public enum VillagerType {
    盔甲匠(Items.BLAST_FURNACE, VillagerProfession.ARMORER),
@@ -21,9 +21,9 @@ public enum VillagerType {
    武器匠(Items.GRINDSTONE, VillagerProfession.WEAPONSMITH);
 
    private final Item item;
-   private final RegistryKey<VillagerProfession> profession;
+   private final ResourceKey<VillagerProfession> profession;
 
-   private VillagerType(Item item, RegistryKey<VillagerProfession> profession) {
+   private VillagerType(Item item, ResourceKey<VillagerProfession> profession) {
       this.item = item;
       this.profession = profession;
    }
@@ -32,13 +32,13 @@ public enum VillagerType {
       return this.item;
    }
 
-   public RegistryKey<VillagerProfession> getProfession() {
+   public ResourceKey<VillagerProfession> getProfession() {
       return this.profession;
    }
 
-   public static VillagerType valueOf(net.minecraft.registry.entry.RegistryEntry<VillagerProfession> profession) {
+   public static VillagerType valueOf(net.minecraft.core.Holder<VillagerProfession> profession) {
       for (VillagerType villagerType : values()) {
-         if (profession.matchesKey(villagerType.getProfession())) {
+         if (profession.is(villagerType.getProfession())) {
             return villagerType;
          }
       }

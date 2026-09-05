@@ -10,25 +10,26 @@ import meteordevelopment.meteorclient.utils.entity.DamageUtils;
 import meteordevelopment.meteorclient.utils.player.InvUtils;
 import meteordevelopment.meteorclient.utils.player.FindItemResult;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.block.BlockState;
-import net.minecraft.block.Blocks;
-import net.minecraft.block.RespawnAnchorBlock;
-import net.minecraft.entity.EntityType;
-import net.minecraft.entity.decoration.EndCrystalEntity;
-import net.minecraft.network.packet.c2s.play.HandSwingC2SPacket;
-import net.minecraft.network.packet.c2s.play.PlayerInteractEntityC2SPacket;
-import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket;
-import net.minecraft.network.packet.s2c.play.BlockUpdateS2CPacket;
-import net.minecraft.network.packet.s2c.play.EntitySpawnS2CPacket;
-import net.minecraft.util.Hand;
-import net.minecraft.util.hit.BlockHitResult;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Box;
-import net.minecraft.util.math.Direction;
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.RespawnAnchorBlock;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.boss.enderdragon.EndCrystal;
+import net.minecraft.network.protocol.game.ServerboundSwingPacket;
+import net.minecraft.network.protocol.game.ServerboundInteractPacket;
+import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
+import net.minecraft.network.protocol.game.ClientboundBlockUpdatePacket;
+import net.minecraft.network.protocol.game.ClientboundAddEntityPacket;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.core.Direction;
+import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
 import java.util.List;
+import net.minecraft.network.protocol.game.ServerboundAttackPacket;
 
 /**
  * GAntiExplosion - 移植自 LiquidBounce/GCore
@@ -144,18 +145,18 @@ public class GAntiExplosion extends Module {
 
     @EventHandler
     private void onReceivePacket(PacketEvent.Receive event) {
-        if (mc.player == null || mc.world == null) return;
+        if (mc.player == null || mc.level == null) return;
 
-        if (event.packet instanceof EntitySpawnS2CPacket packet && antiCrystal.get()) {
-            if (packet.getEntityType() == EntityType.END_CRYSTAL) {
+        if (event.packet instanceof ClientboundAddEntityPacket packet && antiCrystal.get()) {
+            if (packet.getType() == EntityType.END_CRYSTAL) {
                 // 使用 mc.execute() 将处理推迟到主线程，完美避免与渲染线程冲突 (CME)
                 mc.execute(() -> handleCrystalExploit(packet));
             }
         }
-        else if (event.packet instanceof BlockUpdateS2CPacket packet && antiAnchor.get()) {
-            BlockState state = packet.getState(); 
+        else if (event.packet instanceof ClientboundBlockUpdatePacket packet && antiAnchor.get()) {
+            BlockState state = packet.getBlockState(); 
             if (state.getBlock() == Blocks.RESPAWN_ANCHOR) {
-                int charges = state.get(RespawnAnchorBlock.CHARGES);
+                int charges = state.getValue(RespawnAnchorBlock.CHARGE);
                 // 只在重生锚刚被放置（或者被耗尽）时触发
                 // 这意味着这是一个“主动截胡”模块，敌人放锚，你自动瞬移过去帮他点满炸死他
                 if (charges == 0) { 
@@ -167,26 +168,26 @@ public class GAntiExplosion extends Module {
 
     // =================[ Crystal Logic ] =================
 
-    private void handleCrystalExploit(EntitySpawnS2CPacket packet) {
-        Vec3d crystalPos = new Vec3d(packet.getX(), packet.getY(), packet.getZ());
+    private void handleCrystalExploit(ClientboundAddEntityPacket packet) {
+        Vec3 crystalPos = new Vec3(packet.getX(), packet.getY(), packet.getZ());
 
         // 1. Calculate simulated damage if we stay where we are
-        Vec3d currentPos = new Vec3d(mc.player.getX(), mc.player.getY(), mc.player.getZ());
+        Vec3 currentPos = new Vec3(mc.player.getX(), mc.player.getY(), mc.player.getZ());
         float currentDamage = calculateDamageAt(currentPos, crystalPos);
         if (currentDamage <= crystalMaxDamage.get()) return;
 
         // 2. Find safe position
-        Vec3d safePos = findSafePosForCrystal(crystalPos);
+        Vec3 safePos = findSafePosForCrystal(crystalPos);
         if (safePos == null) return;
 
         // 3. Create dummy entity for attacking (Critical for bypassing 1.21.11 client sync delays)
-        EndCrystalEntity dummyCrystal = new EndCrystalEntity(mc.world, crystalPos.x, crystalPos.y, crystalPos.z);
-        dummyCrystal.setId(packet.getEntityId()); // Sync the network ID
+        EndCrystal dummyCrystal = new EndCrystal(mc.level, crystalPos.x, crystalPos.y, crystalPos.z);
+        dummyCrystal.setId(packet.getId()); // Sync the network ID
 
         // 4. Generate VClip Path (To and From)
-        Vec3d originalPos = currentPos;
-        List<Vec3d> pathToSafe = buildVClipPath(originalPos, safePos, vClipStep.get());
-        List<Vec3d> pathBack = returnBack.get() ? buildVClipPath(safePos, originalPos, vClipStep.get()) : new ArrayList<>();
+        Vec3 originalPos = currentPos;
+        List<Vec3> pathToSafe = buildVClipPath(originalPos, safePos, vClipStep.get());
+        List<Vec3> pathBack = returnBack.get() ? buildVClipPath(safePos, originalPos, vClipStep.get()) : new ArrayList<>();
 
         int totalPackets = pathToSafe.size() + pathBack.size() + 2;
         if (totalPackets > packetLimit.get()) {
@@ -200,9 +201,9 @@ public class GAntiExplosion extends Module {
         sendPositionPacket(safePos); // Confirm arrival
 
         // B. Send attack packet (we are virtually at safePos now on the server)
-        PlayerInteractEntityC2SPacket attackPacket = PlayerInteractEntityC2SPacket.attack(dummyCrystal, mc.player.isSneaking());
-        mc.getNetworkHandler().sendPacket(attackPacket);
-        mc.getNetworkHandler().sendPacket(new HandSwingC2SPacket(Hand.MAIN_HAND));
+        ServerboundAttackPacket attackPacket = new ServerboundAttackPacket(dummyCrystal.getId());
+        mc.getConnection().send(attackPacket);
+        mc.getConnection().send(new ServerboundSwingPacket(InteractionHand.MAIN_HAND));
 
         // C. Return back
         if (returnBack.get()) {
@@ -210,16 +211,16 @@ public class GAntiExplosion extends Module {
             sendPositionPacket(originalPos);
         } else {
             // Hard teleport client player to new spot
-            mc.player.setPosition(safePos);
+            mc.player.setPos(safePos);
         }
         ChatUtils.info("§a[GAntiExplosion] VClip Crystal Exploit Successful!");
     }
 
     // ================= [ Anchor Logic ] =================
 
-    private void handleAnchorExploit(BlockUpdateS2CPacket packet) {
+    private void handleAnchorExploit(ClientboundBlockUpdatePacket packet) {
         BlockPos anchorPos = packet.getPos(); 
-        Vec3d anchorCenter = anchorPos.toCenterPos();
+        Vec3 anchorCenter = anchorPos.getCenter();
 
         // 1. Find Glowstone in inventory
         FindItemResult glowstoneResult = InvUtils.findInHotbar(itemStack -> 
@@ -237,18 +238,18 @@ public class GAntiExplosion extends Module {
         if (!igniteItemResult.found()) return;
 
         // 3. Predict damage
-        Vec3d currentPos = new Vec3d(mc.player.getX(), mc.player.getY(), mc.player.getZ());
+        Vec3 currentPos = new Vec3(mc.player.getX(), mc.player.getY(), mc.player.getZ());
         float currentDamage = calculateDamageAt(currentPos, anchorCenter);
         if (currentDamage <= anchorMaxDamage.get()) return;
 
         // 4. Find safe pos
-        Vec3d safePos = findSafePosForAnchor(anchorPos);
+        Vec3 safePos = findSafePosForAnchor(anchorPos);
         if (safePos == null) return;
 
         // 5. Generate Paths
-        Vec3d originalPos = currentPos;
-        List<Vec3d> pathToSafe = buildVClipPath(originalPos, safePos, vClipStep.get());
-        List<Vec3d> pathBack = returnBack.get() ? buildVClipPath(safePos, originalPos, vClipStep.get()) : new ArrayList<>();
+        Vec3 originalPos = currentPos;
+        List<Vec3> pathToSafe = buildVClipPath(originalPos, safePos, vClipStep.get());
+        List<Vec3> pathBack = returnBack.get() ? buildVClipPath(safePos, originalPos, vClipStep.get()) : new ArrayList<>();
 
         int totalPackets = pathToSafe.size() + pathBack.size() + 4; // Extra packets for interaction
         if (totalPackets > packetLimit.get()) {
@@ -271,7 +272,7 @@ public class GAntiExplosion extends Module {
             sendVClipPath(pathBack);
             sendPositionPacket(originalPos);
         } else {
-            mc.player.setPosition(safePos);
+            mc.player.setPos(safePos);
         }
         ChatUtils.info("§a[GAntiExplosion] VClip Anchor Exploit Successful!");
     }
@@ -281,8 +282,8 @@ public class GAntiExplosion extends Module {
     /**
      * Builds a linear path of vectors separated by 'step' distance.
      */
-    private List<Vec3d> buildVClipPath(Vec3d start, Vec3d end, double step) {
-        List<Vec3d> path = new ArrayList<>();
+    private List<Vec3> buildVClipPath(Vec3 start, Vec3 end, double step) {
+        List<Vec3> path = new ArrayList<>();
         double distance = start.distanceTo(end);
         int segments = (int) Math.ceil(distance / step);
 
@@ -296,8 +297,8 @@ public class GAntiExplosion extends Module {
     /**
      * Iterates and sends a list of movement packets.
      */
-    private void sendVClipPath(List<Vec3d> path) {
-        for (Vec3d pos : path) {
+    private void sendVClipPath(List<Vec3> path) {
+        for (Vec3 pos : path) {
             sendPositionPacket(pos);
         }
     }
@@ -306,14 +307,14 @@ public class GAntiExplosion extends Module {
      * Sends a strictly 1.21.11 compliant C04 Movement packet.
      * Rule #4: The 5th parameter `horizontalCollision` must be explicitly provided.
      */
-    private void sendPositionPacket(Vec3d pos) {
+    private void sendPositionPacket(Vec3 pos) {
         // 1.21.11 Constructor: PositionAndOnGround(double x, double y, double z, boolean onGround, boolean horizontalCollision)
-        PlayerMoveC2SPacket packet = new PlayerMoveC2SPacket.PositionAndOnGround(
+        ServerboundMovePlayerPacket packet = new ServerboundMovePlayerPacket.Pos(
             pos.x, pos.y, pos.z, 
-            mc.player.isOnGround(), 
+            mc.player.onGround(), 
             false // horizontalCollision
         );
-        mc.getNetworkHandler().sendPacket(packet);
+        mc.getConnection().send(packet);
     }
 
     /**
@@ -321,23 +322,23 @@ public class GAntiExplosion extends Module {
      * Utilizes the injected InventoryAccessor for safe 1.21.11 slot manipulation.
      */
     private void swapAndInteract(int slot, BlockPos pos) {
-        if (mc.player == null || mc.interactionManager == null) return;
+        if (mc.player == null || mc.gameMode == null) return;
         
         InventoryAccessor accessor = (InventoryAccessor) mc.player.getInventory();
         int prevSlot = accessor.getSelectedSlot();
         
         accessor.setSelectedSlot(slot);
         // 发送原版切槽数据包以同步
-        mc.getNetworkHandler().sendPacket(new net.minecraft.network.packet.c2s.play.UpdateSelectedSlotC2SPacket(slot));
+        mc.getConnection().send(new net.minecraft.network.protocol.game.ServerboundSetCarriedItemPacket(slot));
 
         // 1.21.11 交互修复：必须通过 interactionManager 来自动处理复杂的同步序列(Sequence)
-        BlockHitResult hitResult = new BlockHitResult(pos.toCenterPos(), Direction.UP, pos, false);
-        mc.interactionManager.interactBlock(mc.player, Hand.MAIN_HAND, hitResult);
-        mc.player.swingHand(Hand.MAIN_HAND);
+        BlockHitResult hitResult = new BlockHitResult(pos.getCenter(), Direction.UP, pos, false);
+        mc.gameMode.useItemOn(mc.player, InteractionHand.MAIN_HAND, hitResult);
+        mc.player.swing(InteractionHand.MAIN_HAND);
 
         // Restore slot
         accessor.setSelectedSlot(prevSlot);
-        mc.getNetworkHandler().sendPacket(new net.minecraft.network.packet.c2s.play.UpdateSelectedSlotC2SPacket(prevSlot));
+        mc.getConnection().send(new net.minecraft.network.protocol.game.ServerboundSetCarriedItemPacket(prevSlot));
     }
 
     // =================[ Simulation & Raycasting Engine ] =================
@@ -345,19 +346,19 @@ public class GAntiExplosion extends Module {
     /**
      * Calculates explosion damage as if the player were standing at 'simulatedPlayerPos'.
      */
-    private float calculateDamageAt(Vec3d simulatedPlayerPos, Vec3d explosionPos) {
-        Box originalBox = mc.player.getBoundingBox();
-        Vec3d originalPos = new Vec3d(mc.player.getX(), mc.player.getY(), mc.player.getZ());
+    private float calculateDamageAt(Vec3 simulatedPlayerPos, Vec3 explosionPos) {
+        AABB originalBox = mc.player.getBoundingBox();
+        Vec3 originalPos = new Vec3(mc.player.getX(), mc.player.getY(), mc.player.getZ());
 
         try {
-            mc.player.setPosition(simulatedPlayerPos);
-            mc.player.setBoundingBox(originalBox.offset(simulatedPlayerPos.subtract(originalPos)));
+            mc.player.setPos(simulatedPlayerPos);
+            mc.player.setBoundingBox(originalBox.move(simulatedPlayerPos.subtract(originalPos)));
 
             return DamageUtils.crystalDamage(mc.player, explosionPos);
         } catch (Exception e) {
             return 100f; // 如果测算出现异常（极少情况），视为高危伤害
         } finally {
-            mc.player.setPosition(originalPos);
+            mc.player.setPos(originalPos);
             mc.player.setBoundingBox(originalBox);
         }
     }
@@ -365,23 +366,23 @@ public class GAntiExplosion extends Module {
     /**
      * Scans a 3D grid around the player to find a safe spot to attack the crystal.
      */
-    private Vec3d findSafePosForCrystal(Vec3d crystalPos) {
+    private Vec3 findSafePosForCrystal(Vec3 crystalPos) {
         int border = crystalScanBorder.get();
         double maxDist = crystalHitRange.get();
 
-        Vec3d bestPos = null;
+        Vec3 bestPos = null;
         float lowestDamage = Float.MAX_VALUE;
 
         for (int x = -border; x <= border; x++) {
             for (int y = -border; y <= border; y++) {
                 for (int z = -border; z <= border; z++) {
-                    Vec3d testPos = new Vec3d(mc.player.getX(), mc.player.getY(), mc.player.getZ()).add(x, y, z);
+                    Vec3 testPos = new Vec3(mc.player.getX(), mc.player.getY(), mc.player.getZ()).add(x, y, z);
 
                     if (testPos.distanceTo(crystalPos) > maxDist) continue;
                     
                     // 性能优化与防卡死：过滤掉墙体内的坐标
-                    BlockPos testBlockPos = BlockPos.ofFloored(testPos);
-                    if (!mc.world.getBlockState(testBlockPos).getCollisionShape(mc.world, testBlockPos).isEmpty()) continue;
+                    BlockPos testBlockPos = BlockPos.containing(testPos);
+                    if (!mc.level.getBlockState(testBlockPos).getCollisionShape(mc.level, testBlockPos).isEmpty()) continue;
 
                     float dmg = calculateDamageAt(testPos, crystalPos);
                     
@@ -405,24 +406,24 @@ public class GAntiExplosion extends Module {
     /**
      * Scans a 3D grid around the player to find a safe spot to interact with the anchor.
      */
-    private Vec3d findSafePosForAnchor(BlockPos anchorPos) {
-        Vec3d anchorCenter = anchorPos.toCenterPos();
+    private Vec3 findSafePosForAnchor(BlockPos anchorPos) {
+        Vec3 anchorCenter = anchorPos.getCenter();
         int border = anchorScanBorder.get();
         double maxDist = anchorClickRange.get();
 
-        Vec3d bestPos = null;
+        Vec3 bestPos = null;
         float lowestDamage = Float.MAX_VALUE;
 
         for (int x = -border; x <= border; x++) {
             for (int y = -border; y <= border; y++) {
                 for (int z = -border; z <= border; z++) {
-                    Vec3d testPos = new Vec3d(mc.player.getX(), mc.player.getY(), mc.player.getZ()).add(x, y, z);
+                    Vec3 testPos = new Vec3(mc.player.getX(), mc.player.getY(), mc.player.getZ()).add(x, y, z);
 
                     if (testPos.distanceTo(anchorCenter) > maxDist) continue;
 
                     // 性能优化与防卡死：过滤掉墙体内的坐标
-                    BlockPos testBlockPos = BlockPos.ofFloored(testPos);
-                    if (!mc.world.getBlockState(testBlockPos).getCollisionShape(mc.world, testBlockPos).isEmpty()) continue;
+                    BlockPos testBlockPos = BlockPos.containing(testPos);
+                    if (!mc.level.getBlockState(testBlockPos).getCollisionShape(mc.level, testBlockPos).isEmpty()) continue;
 
                     float dmg = calculateDamageAt(testPos, anchorCenter);
                     

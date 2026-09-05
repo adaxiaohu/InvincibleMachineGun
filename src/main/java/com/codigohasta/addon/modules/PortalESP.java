@@ -1,6 +1,6 @@
 package com.codigohasta.addon.modules;
 
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.phys.Vec3;
 
 import com.codigohasta.addon.AddonTemplate;
 import meteordevelopment.meteorclient.events.render.Render3DEvent;
@@ -12,13 +12,13 @@ import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.render.color.SettingColor;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.block.Blocks;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.ChunkPos;
-import net.minecraft.world.chunk.ChunkSection;
-import net.minecraft.world.chunk.WorldChunk;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.chunk.LevelChunkSection;
+import net.minecraft.world.level.chunk.LevelChunk;
 
 import java.util.Collections;
 import java.util.HashSet;
@@ -153,14 +153,14 @@ public class PortalESP extends Module {
     // --- 扫描逻辑 ---
 
     private void reloadChunks() {
-        if (mc.world == null || mc.player == null) return;
+        if (mc.level == null || mc.player == null) return;
         
-        int renderDist = mc.options.getClampedViewDistance();
-        ChunkPos playerPos = mc.player.getChunkPos();
+        int renderDist = mc.options.getEffectiveRenderDistance();
+        ChunkPos playerPos = mc.player.chunkPosition();
 
         for (int x = -renderDist; x <= renderDist; x++) {
             for (int z = -renderDist; z <= renderDist; z++) {
-                WorldChunk chunk = mc.world.getChunk(playerPos.x + x, playerPos.z + z);
+                LevelChunk chunk = mc.level.getChunk(playerPos.x() + x, playerPos.z() + z);
                 if (chunk != null && !chunk.isEmpty()) {
                     scanChunk(chunk);
                 }
@@ -170,8 +170,8 @@ public class PortalESP extends Module {
 
     @EventHandler
     private void onChunkData(ChunkDataEvent event) {
-        if (mc.world != null) {
-            WorldChunk chunk = event.chunk();
+        if (mc.level != null) {
+            LevelChunk chunk = event.chunk();
             if (chunk != null) {
                 scanChunk(chunk);
             }
@@ -188,35 +188,35 @@ public class PortalESP extends Module {
         if (oldState.getBlock() == Blocks.NETHER_PORTAL && newState.getBlock() != Blocks.NETHER_PORTAL) {
             netherPortals.remove(pos);
         } else if (newState.getBlock() == Blocks.NETHER_PORTAL) {
-            netherPortals.add(pos.toImmutable());
+            netherPortals.add(pos.immutable());
         }
 
         // 2. 末地传送门
         if (oldState.getBlock() == Blocks.END_PORTAL && newState.getBlock() != Blocks.END_PORTAL) {
             endPortals.remove(pos);
         } else if (newState.getBlock() == Blocks.END_PORTAL) {
-            endPortals.add(pos.toImmutable());
+            endPortals.add(pos.immutable());
         }
 
         // 3. 末地折跃门 (新增)
         if (oldState.getBlock() == Blocks.END_GATEWAY && newState.getBlock() != Blocks.END_GATEWAY) {
             gateways.remove(pos);
         } else if (newState.getBlock() == Blocks.END_GATEWAY) {
-            gateways.add(pos.toImmutable());
+            gateways.add(pos.immutable());
         }
     }
 
-    private void scanChunk(WorldChunk chunk) {
-        ChunkSection[] sections = chunk.getSectionArray();
-        int chunkX = chunk.getPos().x;
-        int chunkZ = chunk.getPos().z;
+    private void scanChunk(LevelChunk chunk) {
+        LevelChunkSection[] sections = chunk.getSections();
+        int chunkX = chunk.getPos().x();
+        int chunkZ = chunk.getPos().z();
 
         for (int i = 0; i < sections.length; i++) {
-            ChunkSection section = sections[i];
-            if (section.isEmpty()) continue;
+            LevelChunkSection section = sections[i];
+            if (section.hasOnlyAir()) continue;
 
             // 高度修正
-            int yOffset = chunk.sectionIndexToCoord(i) << 4;
+            int yOffset = chunk.getSectionYFromSectionIndex(i) << 4;
 
             for (int x = 0; x < 16; x++) {
                 for (int y = 0; y < 16; y++) {
@@ -278,13 +278,13 @@ public class PortalESP extends Module {
 
     private void renderSet(Render3DEvent event, Set<BlockPos> positions, SettingColor sideColor, SettingColor lineColor, ShapeMode shapeMode) {
         int rangeSq = renderDistance.get() * renderDistance.get();
-        Vec3d cameraPos = mc.player.getEyePos();
+        Vec3 cameraPos = mc.player.getEyePosition();
 double cameraX = cameraPos.x;
 double cameraY = cameraPos.y;
 double cameraZ = cameraPos.z;
 
         for (BlockPos pos : positions) {
-            double distSq = pos.getSquaredDistance(cameraX, cameraY, cameraZ);
+            double distSq = pos.distToLowCornerSqr(cameraX, cameraY, cameraZ);
             if (distSq > rangeSq) continue;
 
             event.renderer.box(

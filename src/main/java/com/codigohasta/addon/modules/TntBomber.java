@@ -1,6 +1,6 @@
 package com.codigohasta.addon.modules;
 
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.phys.Vec3;
 
 import com.codigohasta.addon.AddonTemplate;
 import meteordevelopment.meteorclient.events.world.TickEvent;
@@ -11,14 +11,14 @@ import meteordevelopment.meteorclient.utils.player.InvUtils;
 import meteordevelopment.meteorclient.utils.player.Rotations;
 import meteordevelopment.meteorclient.utils.world.BlockUtils;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.entity.EquipmentSlot;
-import net.minecraft.item.FireChargeItem;
-import net.minecraft.item.FlintAndSteelItem;
-import net.minecraft.item.Items;
-import net.minecraft.util.hit.BlockHitResult;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Direction;
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.item.FireChargeItem;
+import net.minecraft.world.item.FlintAndSteelItem;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.world.phys.Vec3;
 
 public class TntBomber extends Module {
     private final SettingGroup sgGeneral = settings.getDefaultGroup();
@@ -59,7 +59,7 @@ public class TntBomber extends Module {
 
     @EventHandler
     private void onTick(TickEvent.Pre event) {
-        if (mc.player == null || mc.world == null) return;
+        if (mc.player == null || mc.level == null) return;
 
         if (timer > 0) {
             timer--;
@@ -67,9 +67,9 @@ public class TntBomber extends Module {
         }
 
         // 检查是否满足激活条件
-        boolean shouldActivate = !requireRightClick.get() || mc.options.useKey.isPressed();
+        boolean shouldActivate = !requireRightClick.get() || mc.options.keyUse.isDown();
         // 检查玩家是否穿着鞘翅且不在地面上，作为飞行状态的替代判断
-        boolean isFlying = mc.player.getEquippedStack(EquipmentSlot.CHEST).getItem() == Items.ELYTRA && !mc.player.isOnGround();
+        boolean isFlying = mc.player.getItemBySlot(EquipmentSlot.CHEST).getItem() == Items.ELYTRA && !mc.player.onGround();
 
         if (!shouldActivate || (onlyWhenFlying.get() && !isFlying)) {
             return;
@@ -85,11 +85,11 @@ public class TntBomber extends Module {
         }
 
         // --- 新逻辑：将TNT放置在玩家身后以避免碰撞 ---
-        Vec3d playerPos = new net.minecraft.util.math.Vec3d(mc.player.getX(), mc.player.getY(), mc.player.getZ());
-        Vec3d playerVelocity = mc.player.getVelocity();
+        Vec3 playerPos = new net.minecraft.world.phys.Vec3(mc.player.getX(), mc.player.getY(), mc.player.getZ());
+        Vec3 playerVelocity = mc.player.getDeltaMovement();
         // 基于速度计算玩家刚刚飞过的位置
-        Vec3d behindPos = playerPos.subtract(playerVelocity.multiply(2.5));
-        BlockPos placePos = BlockPos.ofFloored(behindPos.x, playerPos.y - 1, behindPos.z);
+        Vec3 behindPos = playerPos.subtract(playerVelocity.scale(2.5));
+        BlockPos placePos = BlockPos.containing(behindPos.x, playerPos.y - 1, behindPos.z);
 
         // 如果目标位置不能放置，则放弃本次放置
         if (!BlockUtils.canPlace(placePos)) return;
@@ -105,10 +105,10 @@ public class TntBomber extends Module {
                 FindItemResult igniter = flint.found() ? flint : fireCharge;
 
                 // 手动创建交互结果
-                BlockHitResult hitResult = new BlockHitResult(finalPlacePos.toCenterPos(), Direction.UP, finalPlacePos, false);
+                BlockHitResult hitResult = new BlockHitResult(finalPlacePos.getCenter(), Direction.UP, finalPlacePos, false);
 
                 InvUtils.swap(igniter.slot(), false); // 切换到点火工具
-                mc.interactionManager.interactBlock(mc.player, igniter.getHand(), hitResult);
+                mc.gameMode.useItemOn(mc.player, igniter.getHand(), hitResult);
                 InvUtils.swap(prevSlot, false); // 切换回原来的物品
 
                 timer = delay.get(); // 重置计时器

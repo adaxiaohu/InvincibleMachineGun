@@ -11,12 +11,10 @@ import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.render.RenderUtils;
 import meteordevelopment.meteorclient.utils.render.color.SettingColor;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.gl.Framebuffer;
-import net.minecraft.client.gl.GlBackend;
-import net.minecraft.client.texture.GlTexture;
-import net.minecraft.resource.Resource;
-import net.minecraft.util.Identifier;
+import net.minecraft.client.Minecraft;
+import com.mojang.blaze3d.pipeline.RenderTarget;
+import com.mojang.blaze3d.opengl.GlTexture;
+import net.minecraft.resources.Identifier;
 import org.joml.Matrix4f;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL13;
@@ -54,8 +52,8 @@ abstract class FullscreenShaderModule extends Module {
 
     protected FullscreenShaderModule(String name, String description, String shaderName) {
         super(AddonTemplate.CATEGORY, name, description);
-        vertexShader = Identifier.of("shader", shaderName + ".vsh");
-        fragmentShader = Identifier.of("shader", shaderName + ".fsh");
+        vertexShader = Identifier.fromNamespaceAndPath("shader", shaderName + ".vsh");
+        fragmentShader = Identifier.fromNamespaceAndPath("shader", shaderName + ".fsh");
         textureLabel = name + " scene copy";
     }
 
@@ -93,11 +91,10 @@ abstract class FullscreenShaderModule extends Module {
 
         if (program == -1 || vao == -1) return;
 
-        MinecraftClient client = MinecraftClient.getInstance();
-        Framebuffer framebuffer = client.getFramebuffer();
-        if (!(framebuffer.getDepthAttachment() instanceof GlTexture depthTexture)
-            || !(framebuffer.getColorAttachment() instanceof GlTexture colorTexture)
-            || !(RenderSystem.getDevice() instanceof GlBackend backend)) return;
+        Minecraft client = Minecraft.getInstance();
+        RenderTarget framebuffer = client.getMainRenderTarget();
+        if (!(framebuffer.getDepthTexture() instanceof GlTexture depthTexture)
+            || !(framebuffer.getColorTexture() instanceof GlTexture colorTexture)) return;
 
         RenderSystem.assertOnRenderThread();
 
@@ -116,11 +113,11 @@ abstract class FullscreenShaderModule extends Module {
         GL11.glGetIntegerv(GL11.GL_VIEWPORT, previousViewport);
 
         try {
-            int width = framebuffer.textureWidth;
-            int height = framebuffer.textureHeight;
+            int width = framebuffer.width;
+            int height = framebuffer.height;
             copySceneColor(colorTexture, width, height);
             GL30.glBindFramebuffer(GL30.GL_DRAW_FRAMEBUFFER,
-                colorTexture.getOrCreateFramebuffer(backend.getBufferManager(), null));
+                previousDrawFramebuffer);
             GL11.glDisable(GL11.GL_SCISSOR_TEST);
             GL11.glDisable(GL11.GL_BLEND);
             GL11.glDisable(GL11.GL_DEPTH_TEST);
@@ -128,8 +125,8 @@ abstract class FullscreenShaderModule extends Module {
             GL11.glViewport(0, 0, width, height);
 
             GL20.glUseProgram(program);
-            bindTexture("MainDepthSampler", GL13.GL_TEXTURE0, depthTexture.getGlId());
-            bindTexture("MainColorSampler", GL13.GL_TEXTURE1, ((GlTexture) sceneTexture).getGlId());
+            bindTexture("MainDepthSampler", GL13.GL_TEXTURE0, depthTexture.glId());
+            bindTexture("MainColorSampler", GL13.GL_TEXTURE1, ((GlTexture) sceneTexture).glId());
 
             float elapsedSeconds = (System.nanoTime() - startedAtNanos) / 1_000_000_000.0f;
             uniform2f("ScreenSize", width, height);
@@ -137,11 +134,11 @@ abstract class FullscreenShaderModule extends Module {
             uniform1f("U_SkyEnabled", renderSky.get() ? 1.0f : 0.0f);
             uniform1f("U_GroundEnabled", renderGround.get() ? 1.0f : 0.0f);
 
-            var camera = client.gameRenderer.getCamera();
-            var cameraPos = camera.getCameraPos();
+            var camera = client.gameRenderer.getMainCamera();
+            var cameraPos = camera.position();
             uniform3f("U_CameraPosition", (float) cameraPos.x, (float) cameraPos.y, (float) cameraPos.z);
             uniformMatrix4f("U_InverseProjectionMatrix", new Matrix4f(RenderUtils.projection).invert());
-            uniformMatrix4f("U_InverseViewMatrix", new Matrix4f().rotation(camera.getRotation()));
+            uniformMatrix4f("U_InverseViewMatrix", new Matrix4f().rotation(camera.rotation()));
             configureUniforms(event, elapsedSeconds);
 
             GL30.glBindVertexArray(vao);
@@ -254,9 +251,7 @@ abstract class FullscreenShaderModule extends Module {
 
     private int compileShader(Identifier id, int type) {
         String source;
-        Resource resource = mc.getResourceManager().getResource(id)
-            .orElseThrow(() -> new IllegalStateException("找不到资源 " + id));
-        try (InputStream stream = resource.getInputStream()) {
+        try (InputStream stream = mc.getResourceManager().open(id)) {
             source = new String(stream.readAllBytes(), StandardCharsets.UTF_8);
         } catch (IOException e) {
             throw new IllegalStateException(e.getMessage(), e);

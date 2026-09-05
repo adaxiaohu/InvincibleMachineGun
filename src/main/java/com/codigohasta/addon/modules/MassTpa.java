@@ -10,9 +10,9 @@ import meteordevelopment.meteorclient.systems.friends.Friends;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.player.ChatUtils;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.client.network.PlayerListEntry;
-import net.minecraft.network.packet.s2c.play.GameMessageS2CPacket;
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.client.multiplayer.PlayerInfo;
+import net.minecraft.network.protocol.game.ClientboundSystemChatPacket;
+import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -89,7 +89,7 @@ public class MassTpa extends Module {
     private final List<String> targetPlayers = new ArrayList<>();
     private int playerIndex = 0;
     private int timer = 0;
-    private Vec3d lastPos = null;
+    private Vec3 lastPos = null;
 
     public MassTpa() {
         super(AddonTemplate.CATEGORY, "MassTpa", "自动向全服玩家发送 /tpa 请求，有人接受即停止。");
@@ -99,7 +99,7 @@ public class MassTpa extends Module {
     public void onActivate() {
         loadPlayers();
         timer = 0;
-        lastPos = mc.player != null ? new net.minecraft.util.math.Vec3d(mc.player.getX(), mc.player.getY(), mc.player.getZ()) : null;
+        lastPos = mc.player != null ? new net.minecraft.world.phys.Vec3(mc.player.getX(), mc.player.getY(), mc.player.getZ()) : null;
     }
 
     @Override
@@ -114,18 +114,18 @@ public class MassTpa extends Module {
 
     @EventHandler
     private void onTick(TickEvent.Post event) {
-        if (mc.player == null || mc.world == null) return;
+        if (mc.player == null || mc.level == null) return;
 
         // 1. 检测位移
         if (stopOnTeleport.get() && lastPos != null) {
-            double distance = lastPos.distanceTo(new net.minecraft.util.math.Vec3d(mc.player.getX(), mc.player.getY(), mc.player.getZ()));
+            double distance = lastPos.distanceTo(new net.minecraft.world.phys.Vec3(mc.player.getX(), mc.player.getY(), mc.player.getZ()));
             if (distance > 8) {
                 info("检测到位置突变 (位移 %.1f)，判定传送成功，停止模块。", distance);
                 toggle();
                 return;
             }
         }
-        lastPos = new net.minecraft.util.math.Vec3d(mc.player.getX(), mc.player.getY(), mc.player.getZ());
+        lastPos = new net.minecraft.world.phys.Vec3(mc.player.getX(), mc.player.getY(), mc.player.getZ());
 
         // 2. 计时器
         if (timer > 0) {
@@ -162,7 +162,7 @@ public class MassTpa extends Module {
     private void onReceivePacket(PacketEvent.Receive event) {
         if (!stopOnChat.get()) return;
 
-        if (event.packet instanceof GameMessageS2CPacket packet) {
+        if (event.packet instanceof ClientboundSystemChatPacket packet) {
             String message = packet.content().getString();
             
             if (debugChat.get()) {
@@ -181,9 +181,9 @@ public class MassTpa extends Module {
 
     private void loadPlayers() {
         targetPlayers.clear();
-        if (mc.getNetworkHandler() == null) return;
+        if (mc.getConnection() == null) return;
 
-        for (PlayerListEntry entry : mc.getNetworkHandler().getPlayerList()) {
+        for (PlayerInfo entry : mc.getConnection().getOnlinePlayers()) {
             String name = entry.getProfile().name();
             if (name.equals(mc.player.getName().getString())) continue;
             

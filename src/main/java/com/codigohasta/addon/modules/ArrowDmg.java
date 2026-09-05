@@ -10,19 +10,19 @@ import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.render.color.Color;
 import meteordevelopment.meteorclient.utils.render.color.SettingColor;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.EntityType;
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.item.ItemStack;
-import net.minecraft.network.packet.c2s.play.ClientCommandC2SPacket;
-import net.minecraft.network.packet.c2s.play.PlayerActionC2SPacket;
-import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket;
-import net.minecraft.util.hit.HitResult;
-import net.minecraft.util.math.Box;
-import net.minecraft.util.math.MathHelper;
-import net.minecraft.util.math.Vec3d;
-import net.minecraft.world.RaycastContext;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.network.protocol.game.ServerboundPlayerCommandPacket;
+import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;
+import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
+import net.minecraft.world.phys.HitResult;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.util.Mth;
+import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.level.ClipContext;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -209,7 +209,7 @@ public class ArrowDmg extends Module {
     @Override
     public void onDeactivate() {
         if (forcedPressed) {
-            mc.options.useKey.setPressed(false);
+            mc.options.keyUse.setDown(false);
             forcedPressed = false;
         }
         currentTarget = null;
@@ -221,49 +221,49 @@ public class ArrowDmg extends Module {
     private void onTick(TickEvent.Pre event) {
         // --- 图腾绕过 ---
         if (totemBypass.get() && bypassTimer > 0) {
-            mc.options.useKey.setPressed(true); // 强行按住右键，极速蓄力第二箭
+            mc.options.keyUse.setDown(true); // 强行按住右键，极速蓄力第二箭
             bypassTimer--;
             
             // 倒计时结束，瞬间松开发射第二箭
             if (bypassTimer == 0) {
                 if (mc.player.isUsingItem() && isValidItem(mc.player.getActiveItem())) {
-                    mc.interactionManager.stopUsingItem(mc.player); 
+                    mc.gameMode.releaseUsingItem(mc.player); 
                 } else {
                     isSecondShot = false; // 如果手里切成了别的物品，直接取消第二箭
                 }
-                mc.options.useKey.setPressed(false);
+                mc.options.keyUse.setDown(false);
             }
             return; // 双发扳机倒计时期间，阻断下方的普通连射逻辑，防止冲突
         }
 
-        if (mc.player == null || mc.world == null) return;
+        if (mc.player == null || mc.level == null) return;
 
-        boolean validMainHand = isValidItem(mc.player.getMainHandStack());
-        boolean validOffHand = isValidItem(mc.player.getOffHandStack());
+        boolean validMainHand = isValidItem(mc.player.getMainHandItem());
+        boolean validOffHand = isValidItem(mc.player.getOffhandItem());
         boolean hasValidItem = validMainHand || validOffHand;
 
         currentTarget = null; 
 
         // 1. 自瞄逻辑
         if (aimbot.get() && hasValidItem) {
-            boolean isPressingRightClick = mc.options.useKey.isPressed() || forcedPressed;
+            boolean isPressingRightClick = mc.options.keyUse.isDown() || forcedPressed;
 
             if (!aimOnlyWhenHoldingRightClick.get() || isPressingRightClick) {
                 Entity bestTarget = null;
                 double bestScore = Double.MAX_VALUE;
 
-                for (Entity entity : mc.world.getEntities()) {
+                for (Entity entity : mc.level.entitiesForRendering()) {
                     if (entity == mc.player) continue;
-                    if (!(entity instanceof LivingEntity living) || living.isDead() || living.getHealth() <= 0) continue;
+                    if (!(entity instanceof LivingEntity living) || living.isDeadOrDying() || living.getHealth() <= 0) continue;
                     if (!entities.get().contains(entity.getType())) continue;
 
-                    if (entity instanceof PlayerEntity player) {
+                    if (entity instanceof Player player) {
                         if (player.isCreative() || player.isSpectator() || Friends.get().isFriend(player)) continue;
                     }
 
                     double dist = mc.player.distanceTo(entity);
                     if (dist > aimRange.get()) continue;
-                    if (ignoreWalls.get() && !mc.player.canSee(entity)) continue;
+                    if (ignoreWalls.get() && !mc.player.hasLineOfSight(entity)) continue;
 
                     double score = 0;
                     switch (priority.get()) {
@@ -274,13 +274,13 @@ public class ArrowDmg extends Module {
                             score = living.getHealth();
                             break;
                         case Angle:
-                            Vec3d targetPos = entity.getBoundingBox().getCenter();
+                            Vec3 targetPos = entity.getBoundingBox().getCenter();
                             double dX = targetPos.x - mc.player.getX();
                             double dY = targetPos.y - mc.player.getEyeY();
                             double dZ = targetPos.z - mc.player.getZ();
-                            double yawDiff = Math.toDegrees(Math.atan2(dZ, dX)) - 90.0 - mc.player.getYaw();
-                            double pitchDiff = -Math.toDegrees(Math.atan2(dY, Math.sqrt(dX * dX + dZ * dZ))) - mc.player.getPitch();
-                            score = Math.abs(MathHelper.wrapDegrees((float)yawDiff)) + Math.abs(MathHelper.wrapDegrees((float)pitchDiff));
+                            double yawDiff = Math.toDegrees(Math.atan2(dZ, dX)) - 90.0 - mc.player.getYRot();
+                            double pitchDiff = -Math.toDegrees(Math.atan2(dY, Math.sqrt(dX * dX + dZ * dZ))) - mc.player.getXRot();
+                            score = Math.abs(Mth.wrapDegrees((float)yawDiff)) + Math.abs(Mth.wrapDegrees((float)pitchDiff));
                             break;
                     }
 
@@ -292,7 +292,7 @@ public class ArrowDmg extends Module {
 
                 if (bestTarget != null) {
                     currentTarget = bestTarget;
-                    Vec3d targetPos = bestTarget.getBoundingBox().getCenter();
+                    Vec3 targetPos = bestTarget.getBoundingBox().getCenter();
                     double dX = targetPos.x - mc.player.getX();
                     double dY = targetPos.y - mc.player.getEyeY();
                     double dZ = targetPos.z - mc.player.getZ();
@@ -301,9 +301,9 @@ public class ArrowDmg extends Module {
                     float yaw = (float) Math.toDegrees(Math.atan2(dZ, dX)) - 90.0F;
                     float pitch = (float) -Math.toDegrees(Math.atan2(dY, distXZ));
 
-                    pitch = MathHelper.clamp(pitch, -90.0F, 90.0F);
-                    mc.player.setYaw(yaw);
-                    mc.player.setPitch(pitch);
+                    pitch = Mth.clamp(pitch, -90.0F, 90.0F);
+                    mc.player.setYRot(yaw);
+                    mc.player.setXRot(pitch);
                 }
             }
         }
@@ -312,7 +312,7 @@ public class ArrowDmg extends Module {
         ItemStack activeStack = mc.player.getActiveItem();
         if (mc.player.isUsingItem() && !isValidItem(activeStack)) {
             if (forcedPressed) {
-                mc.options.useKey.setPressed(false);
+                mc.options.keyUse.setDown(false);
                 forcedPressed = false;
             }
             return;
@@ -320,20 +320,20 @@ public class ArrowDmg extends Module {
 
         if (!autoShoot.get() || !hasValidItem) {
             if (forcedPressed) {
-                mc.options.useKey.setPressed(false);
+                mc.options.keyUse.setDown(false);
                 forcedPressed = false;
             }
             return;
         }
 
         if (!onlyWhenHoldingRightClick.get() && !mc.player.isUsingItem()) {
-            mc.options.useKey.setPressed(true);
+            mc.options.keyUse.setDown(true);
             forcedPressed = true;
         }
 
         if (mc.player.isUsingItem() && isValidItem(activeStack)) {
-            if (mc.player.getItemUseTime() >= charge.get()) {
-                mc.interactionManager.stopUsingItem(mc.player);
+            if (mc.player.getTicksUsingItem() >= charge.get()) {
+                mc.gameMode.releaseUsingItem(mc.player);
             }
         }
     }
@@ -341,9 +341,9 @@ public class ArrowDmg extends Module {
     @EventHandler
     private void onSendPacket(PacketEvent.Send event) {
         if (isShooting) return;
-        if (event.packet instanceof PlayerActionC2SPacket packet) {
-            if (packet.getAction() == PlayerActionC2SPacket.Action.RELEASE_USE_ITEM) {
-                if (mc.player != null && (isValidItem(mc.player.getMainHandStack()) || isValidItem(mc.player.getOffHandStack()))) {
+        if (event.packet instanceof ServerboundPlayerActionPacket packet) {
+            if (packet.getAction() == ServerboundPlayerActionPacket.Action.RELEASE_USE_ITEM) {
+                if (mc.player != null && (isValidItem(mc.player.getMainHandItem()) || isValidItem(mc.player.getOffhandItem()))) {
                     event.cancel();
                     processShoot(packet);
                 }
@@ -351,24 +351,24 @@ public class ArrowDmg extends Module {
         }
     }
 
-    private void processShoot(PlayerActionC2SPacket releasePacket) {
-        if (mc.player == null || mc.world == null || mc.getNetworkHandler() == null) return;
+    private void processShoot(ServerboundPlayerActionPacket releasePacket) {
+        if (mc.player == null || mc.level == null || mc.getConnection() == null) return;
 
         isShooting = true;
-        mc.getNetworkHandler().sendPacket(new ClientCommandC2SPacket(mc.player, ClientCommandC2SPacket.Mode.START_SPRINTING));
+        mc.getConnection().send(new ServerboundPlayerCommandPacket(mc.player, ServerboundPlayerCommandPacket.Action.START_SPRINTING));
 
         double x = mc.player.getX(), y = mc.player.getY(), z = mc.player.getZ();
         double currentStrength = (isSecondShot && totemBypass.get()) ? bypassStrength.get() : strength.get();
         double adjustedStrength = (currentStrength / 10.0) * Math.sqrt(500.0);
-        Vec3d lookVec = mc.player.getRotationVector().multiply(adjustedStrength);
+        Vec3 lookVec = mc.player.getLookAngle().scale(adjustedStrength);
 
-        Vec3d spoofOffset = new Vec3d(-lookVec.x, vertical.get() ? -lookVec.y : 0, -lookVec.z);
+        Vec3 spoofOffset = new Vec3(-lookVec.x, vertical.get() ? -lookVec.y : 0, -lookVec.z);
 
         if (smartStrength.get()) {
-            double safeDist = getSafeSpoofDistance(new Vec3d(x, y, z), spoofOffset);
+            double safeDist = getSafeSpoofDistance(new Vec3(x, y, z), spoofOffset);
             double adjustedDist = Math.max(0.01, safeDist - 0.5);
             if (adjustedDist < spoofOffset.length()) {
-                spoofOffset = spoofOffset.normalize().multiply(adjustedDist);
+                spoofOffset = spoofOffset.normalize().scale(adjustedDist);
             }
         }
 
@@ -378,7 +378,7 @@ public class ArrowDmg extends Module {
         sendPos(targetX, targetY, targetZ, false);
         sendPos(x, y, z, false);
 
-        mc.getNetworkHandler().sendPacket(releasePacket);
+        mc.getConnection().send(releasePacket);
 
         if (vertical.get() && useOffset.get() && spoofOffset.y > 0) {
             sendPos(x, y + 0.01, z, false);
@@ -404,28 +404,28 @@ public class ArrowDmg extends Module {
      // ================= 轨迹与渲染 ================
     @EventHandler
     private void onRender3D(Render3DEvent event) {
-        if (!doRender.get() || mc.player == null || mc.world == null) return;
-        if (!isValidItem(mc.player.getMainHandStack()) && !isValidItem(mc.player.getOffHandStack())) return;
+        if (!doRender.get() || mc.player == null || mc.level == null) return;
+        if (!isValidItem(mc.player.getMainHandItem()) && !isValidItem(mc.player.getOffhandItem())) return;
 
         float tickDelta = event.tickDelta;
 
         // 1. 平滑角度计算视线向量
-        float pitchInterp = MathHelper.lerp(tickDelta, mc.player.lastPitch, mc.player.getPitch());
-        float yawInterp = MathHelper.lerp(tickDelta, mc.player.lastYaw, mc.player.getYaw());
+        float pitchInterp = Mth.lerp(tickDelta, mc.player.xRotO, mc.player.getXRot());
+        float yawInterp = Mth.lerp(tickDelta, mc.player.yRotO, mc.player.getYRot());
         
         float radPitch = pitchInterp * 0.017453292F;
         float radYaw = -yawInterp * 0.017453292F;
-        float cosYaw = MathHelper.cos(radYaw);
-        float sinYaw = MathHelper.sin(radYaw);
-        float cosPitch = MathHelper.cos(radPitch);
-        float sinPitch = MathHelper.sin(radPitch);
+        float cosYaw = Mth.cos(radYaw);
+        float sinYaw = Mth.sin(radYaw);
+        float cosPitch = Mth.cos(radPitch);
+        float sinPitch = Mth.sin(radPitch);
         
         // 这里的方向向量 lookVec 是渲染用的平滑向量
-        Vec3d lookVec = new Vec3d((double)(sinYaw * cosPitch), (double)(-sinPitch), (double)(cosYaw * cosPitch));
+        Vec3 lookVec = new Vec3((double)(sinYaw * cosPitch), (double)(-sinPitch), (double)(cosYaw * cosPitch));
 
         // 2. 动量计算与颜色警报
         double baseStr = (strength.get() / 10.0) * Math.sqrt(500.0);
-        Vec3d spoofOffset = new Vec3d(-lookVec.x * baseStr, vertical.get() ? -lookVec.y * baseStr : 0, -lookVec.z * baseStr);
+        Vec3 spoofOffset = new Vec3(-lookVec.x * baseStr, vertical.get() ? -lookVec.y * baseStr : 0, -lookVec.z * baseStr);
         
         double maxD = spoofOffset.length();
         double finalVelAdd = maxD;
@@ -433,51 +433,51 @@ public class ArrowDmg extends Module {
         
         if (smartStrength.get()) {
             // 空间检测使用当前时刻的真实坐标
-            double sDist = getSafeSpoofDistance(new Vec3d(mc.player.getX(), mc.player.getY(), mc.player.getZ()), spoofOffset);
+            double sDist = getSafeSpoofDistance(new Vec3(mc.player.getX(), mc.player.getY(), mc.player.getZ()), spoofOffset);
             double adjDist = Math.max(0.01, sDist - 0.5);
             if (adjDist < maxD) finalVelAdd = adjDist;
             
-            float ratio = (float) MathHelper.clamp(sDist / maxD, 0.0, 1.0);
+            float ratio = (float) Mth.clamp(sDist / maxD, 0.0, 1.0);
             laserColor = new Color((int) ((1.0f - ratio) * 255), (int) (ratio * 255), 0, 255);
         }
 
         
-        double renderX = MathHelper.lerp(tickDelta, mc.player.lastX, mc.player.getX());
-        double renderY = MathHelper.lerp(tickDelta, mc.player.lastY, mc.player.getY()) + (mc.player.getEyeY() - mc.player.getY());
-        double renderZ = MathHelper.lerp(tickDelta, mc.player.lastZ, mc.player.getZ());
+        double renderX = Mth.lerp(tickDelta, mc.player.xo, mc.player.getX());
+        double renderY = Mth.lerp(tickDelta, mc.player.yo, mc.player.getY()) + (mc.player.getEyeY() - mc.player.getY());
+        double renderZ = Mth.lerp(tickDelta, mc.player.zo, mc.player.getZ());
         
         
-        Vec3d simPos = new Vec3d(renderX, renderY - 0.1, renderZ);
+        Vec3 simPos = new Vec3(renderX, renderY - 0.1, renderZ);
       
-        Vec3d simVel = lookVec.normalize().multiply(3.0 + finalVelAdd);
+        Vec3 simVel = lookVec.normalize().scale(3.0 + finalVelAdd);
         
-        List<Vec3d> points = new ArrayList<>();
+        List<Vec3> points = new ArrayList<>();
         points.add(simPos);
         Entity hitEnt = null;
 
        
         for (int step = 0; step < 150; step++) {
-            Vec3d nextSimPos = simPos.add(simVel);
+            Vec3 nextSimPos = simPos.add(simVel);
             
           
-            RaycastContext bCtx = new RaycastContext(simPos, nextSimPos, RaycastContext.ShapeType.COLLIDER, RaycastContext.FluidHandling.NONE, mc.player);
-            HitResult bHit = mc.world.raycast(bCtx);
+            ClipContext bCtx = new ClipContext(simPos, nextSimPos, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, mc.player);
+            HitResult bHit = mc.level.clip(bCtx);
             if (bHit != null && bHit.getType() == HitResult.Type.BLOCK) {
-                nextSimPos = bHit.getPos();
+                nextSimPos = bHit.getLocation();
             }
 
        
-            Box segBox = new Box(simPos.x, simPos.y, simPos.z, nextSimPos.x, nextSimPos.y, nextSimPos.z).expand(0.5);
+            AABB segBox = new AABB(simPos.x, simPos.y, simPos.z, nextSimPos.x, nextSimPos.y, nextSimPos.z).inflate(0.5);
             double nearest = Double.MAX_VALUE;
             
-            for (Entity e : mc.world.getOtherEntities(mc.player, segBox)) {
+            for (Entity e : mc.level.getEntities(mc.player, segBox)) {
                 if (!(e instanceof LivingEntity living) || !living.isAlive()) continue;
              
-                if (e instanceof PlayerEntity p && (p.isCreative() || p.isSpectator() || Friends.get().isFriend(p))) continue;
+                if (e instanceof Player p && (p.isCreative() || p.isSpectator() || Friends.get().isFriend(p))) continue;
 
-                Optional<Vec3d> clip = e.getBoundingBox().expand(0.3).raycast(simPos, nextSimPos);
+                Optional<Vec3> clip = e.getBoundingBox().inflate(0.3).clip(simPos, nextSimPos);
                 if (clip.isPresent()) {
-                    double d = simPos.squaredDistanceTo(clip.get());
+                    double d = simPos.distanceToSqr(clip.get());
                     if (d < nearest) {
                         nearest = d;
                         nextSimPos = clip.get();
@@ -491,23 +491,23 @@ public class ArrowDmg extends Module {
             
             simPos = nextSimPos;
        
-            simVel = simVel.multiply(0.99).subtract(0, 0.05, 0); 
+            simVel = simVel.scale(0.99).subtract(0, 0.05, 0); 
         }
 
    
         if (points.size() >= 2) {
-            Vec3d pStart = points.get(0);
-            Vec3d pNext = points.get(1);
+            Vec3 pStart = points.get(0);
+            Vec3 pNext = points.get(1);
             if (pStart.distanceTo(pNext) > 8) {
-                Vec3d dir = pNext.subtract(pStart).normalize();
-                points.set(0, pStart.add(dir.multiply(1.5)));
+                Vec3 dir = pNext.subtract(pStart).normalize();
+                points.set(0, pStart.add(dir.scale(1.5)));
             }
         }
 
       
         for (int renderIdx = 0; renderIdx < points.size() - 1; renderIdx++) {
-            Vec3d p1 = points.get(renderIdx);
-            Vec3d p2 = points.get(renderIdx + 1);
+            Vec3 p1 = points.get(renderIdx);
+            Vec3 p2 = points.get(renderIdx + 1);
             event.renderer.line(p1.x, p1.y, p1.z, p2.x, p2.y, p2.z, laserColor);
         }
 
@@ -523,32 +523,32 @@ public class ArrowDmg extends Module {
         }
     }
 
-    private double getSafeSpoofDistance(Vec3d start, Vec3d offset) {
-        Vec3d end = start.add(offset);
+    private double getSafeSpoofDistance(Vec3 start, Vec3 offset) {
+        Vec3 end = start.add(offset);
         double maxDist = offset.length();
 
-        RaycastContext footContext = new RaycastContext(start, end, RaycastContext.ShapeType.COLLIDER, RaycastContext.FluidHandling.NONE, mc.player);
-        HitResult footHit = mc.world.raycast(footContext);
+        ClipContext footContext = new ClipContext(start, end, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, mc.player);
+        HitResult footHit = mc.level.clip(footContext);
 
-        Vec3d headOffsetVec = new Vec3d(0, 1.8, 0);
-        Vec3d headStart = start.add(headOffsetVec);
-        Vec3d headEnd = end.add(headOffsetVec);
-        RaycastContext headContext = new RaycastContext(headStart, headEnd, RaycastContext.ShapeType.COLLIDER, RaycastContext.FluidHandling.NONE, mc.player);
-        HitResult headHit = mc.world.raycast(headContext);
+        Vec3 headOffsetVec = new Vec3(0, 1.8, 0);
+        Vec3 headStart = start.add(headOffsetVec);
+        Vec3 headEnd = end.add(headOffsetVec);
+        ClipContext headContext = new ClipContext(headStart, headEnd, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, mc.player);
+        HitResult headHit = mc.level.clip(headContext);
 
         double safeDist = maxDist;
 
         if (footHit != null && footHit.getType() == HitResult.Type.BLOCK) {
-            safeDist = Math.min(safeDist, start.distanceTo(footHit.getPos()));
+            safeDist = Math.min(safeDist, start.distanceTo(footHit.getLocation()));
         }
         if (headHit != null && headHit.getType() == HitResult.Type.BLOCK) {
-            safeDist = Math.min(safeDist, headStart.distanceTo(headHit.getPos()));
+            safeDist = Math.min(safeDist, headStart.distanceTo(headHit.getLocation()));
         }
         return safeDist;
     }
 
     private void sendPos(double x, double y, double z, boolean onGround) {
-        mc.getNetworkHandler().sendPacket(new PlayerMoveC2SPacket.PositionAndOnGround(x, y, z, onGround, mc.player.horizontalCollision));
+        mc.getConnection().send(new ServerboundMovePlayerPacket.Pos(x, y, z, onGround, mc.player.horizontalCollision));
     }
 
     private boolean isValidItem(ItemStack stack) {

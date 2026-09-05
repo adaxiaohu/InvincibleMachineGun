@@ -1,6 +1,6 @@
 package com.codigohasta.addon.modules;
 
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.phys.Vec3;
 
 import com.codigohasta.addon.AddonTemplate;
 import meteordevelopment.meteorclient.events.world.TickEvent;
@@ -8,12 +8,12 @@ import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.player.InvUtils;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.component.DataComponentTypes; // 必须导入这个
-import net.minecraft.item.Item;
+import net.minecraft.core.component.DataComponents; // 必须导入这个
+import net.minecraft.world.item.Item;
 
-import net.minecraft.item.Items;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 
 
 import java.util.List;
@@ -29,7 +29,7 @@ public class SwordGap extends Module {
         .description("Select which items are allowed to be eaten.")
         .defaultValue(Items.ENCHANTED_GOLDEN_APPLE, Items.GOLDEN_APPLE)
         // 1.21.4 修复：使用数据组件检查物品是否包含 FOOD 组件
-        .filter(item -> item.getComponents().contains(DataComponentTypes.FOOD))
+        .filter(item -> item.components().has(DataComponents.FOOD))
         .build()
     );
 
@@ -51,10 +51,10 @@ public class SwordGap extends Module {
 
     @EventHandler
     private void onTick(TickEvent.Pre event) {
-        if (mc.player == null || mc.world == null) return;
+        if (mc.player == null || mc.level == null) return;
 
-        boolean holdingSword = mc.player.getMainHandStack().getItem().toString().contains("sword");
-        boolean pressingUse = mc.options.useKey.isPressed();
+        boolean holdingSword = mc.player.getMainHandItem().getItem().toString().contains("sword");
+        boolean pressingUse = mc.options.keyUse.isDown();
 
         if (holdingSword && pressingUse) {
             if (!isEating) {
@@ -72,7 +72,7 @@ public class SwordGap extends Module {
 
         if (foodSlot == -1) return;
 
-        if (allowedFoods.get().contains(mc.player.getOffHandStack().getItem())) {
+        if (allowedFoods.get().contains(mc.player.getOffhandItem().getItem())) {
             isEating = true;
             return;
         }

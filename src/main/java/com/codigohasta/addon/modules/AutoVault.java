@@ -8,18 +8,18 @@ import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.block.Block;
-import net.minecraft.block.Blocks;
-import net.minecraft.block.VaultBlock;
-import net.minecraft.client.network.PendingUpdateManager;
-import net.minecraft.client.network.SequencedPacketCreator;
-import net.minecraft.item.Item;
-import net.minecraft.item.Items;
-import net.minecraft.network.packet.c2s.play.CloseHandledScreenC2SPacket;
-import net.minecraft.network.packet.c2s.play.PlayerInteractBlockC2SPacket;
-import net.minecraft.util.Hand;
-import net.minecraft.util.hit.BlockHitResult;
-import net.minecraft.util.math.BlockPos;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.VaultBlock;
+import net.minecraft.client.multiplayer.prediction.BlockStatePredictionHandler;
+import net.minecraft.client.multiplayer.prediction.PredictiveAction;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.Items;
+import net.minecraft.network.protocol.game.ServerboundContainerClosePacket;
+import net.minecraft.network.protocol.game.ServerboundUseItemOnPacket;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.core.BlockPos;
 
 import static meteordevelopment.meteorclient.MeteorClient.mc;
 
@@ -81,18 +81,18 @@ public class AutoVault extends Module {
 
     @EventHandler
     public void onTick(TickEvent.Pre event) {
-        if (mc.player == null || mc.world == null) return;
-        if (mc.currentScreen != null) return;
-        if (!(mc.crosshairTarget instanceof BlockHitResult hitResult)) return;
+        if (mc.player == null || mc.level == null) return;
+        if (mc.screen != null) return;
+        if (!(mc.hitResult instanceof BlockHitResult hitResult)) return;
 
         BlockPos pos = hitResult.getBlockPos();
-        Block block = mc.world.getBlockState(pos).getBlock();
+        Block block = mc.level.getBlockState(pos).getBlock();
         if (block != Blocks.VAULT) return;
 
-        if (mc.player.getEyePos().squaredDistanceTo(pos.toCenterPos()) > range.get() * range.get()) return;
+        if (mc.player.getEyePosition().distanceToSqr(pos.getCenter()) > range.get() * range.get()) return;
 
         if (mode.get() == Mode.Manual) {
-            if (!mc.options.useKey.isPressed()) {
+            if (!mc.options.keyUse.isDown()) {
                 manualUsed = false;
                 return;
             }
@@ -102,10 +102,10 @@ public class AutoVault extends Module {
             if (!timer.passedMs(delay.get())) return;
         }
 
-        boolean ominous = mc.world.getBlockState(pos).get(VaultBlock.OMINOUS);
+        boolean ominous = mc.level.getBlockState(pos).getValue(VaultBlock.OMINOUS);
         Item targetKey = ominous ? Items.OMINOUS_TRIAL_KEY : Items.TRIAL_KEY;
 
-        boolean keyInHand = mc.player.getMainHandStack().getItem() == targetKey;
+        boolean keyInHand = mc.player.getMainHandItem().getItem() == targetKey;
 
         int hotbarSlot = -1;
         int invSlot = -1;
@@ -113,7 +113,7 @@ public class AutoVault extends Module {
         if (!keyInHand) {
             hotbarSlot = InventoryUtil.findItem(targetKey);
             if (hotbarSlot == -1 && inventorySwap.get()) {
-                if (mc.player.getOffHandStack().getItem() == targetKey) {
+                if (mc.player.getOffhandItem().getItem() == targetKey) {
                     keyInHand = true;
                 } else {
                     invSlot = InventoryUtil.findItemInventorySlot(targetKey);
@@ -138,7 +138,7 @@ public class AutoVault extends Module {
             }
         }
 
-        sendSequencedPacket(id -> new PlayerInteractBlockC2SPacket(Hand.MAIN_HAND, hitResult, id));
+        sendSequencedPacket(id -> new ServerboundUseItemOnPacket(InteractionHand.MAIN_HAND, hitResult, id));
 
         if (!keyInHand) {
             if (swapMode.get() == SwapMode.Hotbar) {
@@ -147,18 +147,18 @@ public class AutoVault extends Module {
                 }
             } else if (invSlot != -1) {
                 InventoryUtil.inventorySwap(invSlot, oldSlot);
-                mc.getNetworkHandler().sendPacket(new CloseHandledScreenC2SPacket(mc.player.currentScreenHandler.syncId));
+                mc.getConnection().send(new ServerboundContainerClosePacket(mc.player.containerMenu.containerId));
             }
         }
 
         timer.reset();
     }
 
-    private void sendSequencedPacket(SequencedPacketCreator packetCreator) {
-        if (mc.getNetworkHandler() == null || mc.world == null) return;
-        try (PendingUpdateManager pendingUpdateManager = mc.world.getPendingUpdateManager().incrementSequence()) {
-            int i = pendingUpdateManager.getSequence();
-            mc.getNetworkHandler().sendPacket(packetCreator.predict(i));
+    private void sendSequencedPacket(PredictiveAction packetCreator) {
+        if (mc.getConnection() == null || mc.level == null) return;
+        try (BlockStatePredictionHandler pendingUpdateManager = mc.level.getBlockStatePredictionHandler().startPredicting()) {
+            int i = pendingUpdateManager.currentSequence();
+            mc.getConnection().send(packetCreator.predict(i));
         }
     }
 }

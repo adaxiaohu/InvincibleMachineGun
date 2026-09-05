@@ -24,18 +24,18 @@ import meteordevelopment.meteorclient.utils.player.InvUtils;
 import meteordevelopment.meteorclient.utils.player.Rotations;
 import meteordevelopment.meteorclient.utils.render.color.SettingColor;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.client.network.PlayerListEntry;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.EntityType;
-import net.minecraft.entity.EquipmentSlot;
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.item.Item;
-import net.minecraft.item.Items;
-import net.minecraft.util.Hand;
-import net.minecraft.util.math.Box;
-import net.minecraft.util.math.Vec3d;
-import net.minecraft.world.GameMode;
+import net.minecraft.client.multiplayer.PlayerInfo;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.level.GameType;
 
 public class Follower extends Module {
     private final SettingGroup sgGeneral = this.settings.getDefaultGroup();
@@ -103,8 +103,8 @@ public class Follower extends Module {
     public void onDeactivate() {
         this.targets.clear();
         CamUtils.rem(this);
-        this.mc.options.sneakKey.setPressed(false);
-        this.mc.options.jumpKey.setPressed(false);
+        this.mc.options.keyShift.setDown(false);
+        this.mc.options.keyJump.setDown(false);
     }
 
     // --- 索敌 ---
@@ -114,7 +114,7 @@ public class Follower extends Module {
         double closestDiff = Double.MAX_VALUE;
 
       
-        for (Entity entity : mc.world.getEntities()) {
+        for (Entity entity : mc.level.entitiesForRendering()) {
          
             if (entity == mc.player || !entity.isAlive() || !(entity instanceof LivingEntity)) continue;
 
@@ -126,18 +126,18 @@ public class Follower extends Module {
             if (!entities.get().contains(entity.getType())) continue;
 
             
-            if (entity instanceof PlayerEntity player) {
+            if (entity instanceof Player player) {
                
                 if (!Friends.get().shouldAttack(player)) continue;
 
                 
-                GameMode gm = getGameMode(player);
+                GameType gm = getGameMode(player);
                 
                
-                if (gm == GameMode.CREATIVE && !attackCreative.get()) continue;
-                if (gm == GameMode.SURVIVAL && !attackSurvival.get()) continue;
-                if (gm == GameMode.ADVENTURE && !attackAdventure.get()) continue;
-                if (gm == GameMode.SPECTATOR) continue; 
+                if (gm == GameType.CREATIVE && !attackCreative.get()) continue;
+                if (gm == GameType.SURVIVAL && !attackSurvival.get()) continue;
+                if (gm == GameType.ADVENTURE && !attackAdventure.get()) continue;
+                if (gm == GameType.SPECTATOR) continue; 
             }
 
             
@@ -153,16 +153,16 @@ public class Follower extends Module {
     }
 
     
-    private GameMode getGameMode(PlayerEntity p) {
-        if (mc.getNetworkHandler() == null) return GameMode.DEFAULT;
+    private GameType getGameMode(Player p) {
+        if (mc.getConnection() == null) return GameType.DEFAULT_MODE;
         
         
-        PlayerListEntry entry = mc.getNetworkHandler().getPlayerListEntry(p.getUuid());
-        if (entry == null) return GameMode.DEFAULT;
+        PlayerInfo entry = mc.getConnection().getPlayerInfo(p.getUUID());
+        if (entry == null) return GameType.DEFAULT_MODE;
         
-        GameMode gm = entry.getGameMode();
+        GameType gm = entry.getGameMode();
       
-        return (gm != null) ? gm : GameMode.DEFAULT;
+        return (gm != null) ? gm : GameType.DEFAULT_MODE;
     }
 
     @EventHandler
@@ -172,24 +172,24 @@ public class Follower extends Module {
 
         if (this.targets.isEmpty()) {
             CamUtils.rem(this);
-            this.mc.options.sneakKey.setPressed(false);
-            this.mc.options.jumpKey.setPressed(false);
+            this.mc.options.keyShift.setDown(false);
+            this.mc.options.keyJump.setDown(false);
         } else {
             CamUtils.add(this);
             Entity primary = this.targets.getFirst();
 
-            if (!this.onlyAir.get() || !this.mc.player.isOnGround()) {
-                if (!this.preventGround.get() || !primary.isOnGround()) {
+            if (!this.onlyAir.get() || !this.mc.player.onGround()) {
+                if (!this.preventGround.get() || !primary.onGround()) {
                     
                     
                     // 低头 (Pitch > 0) -> 按下 Sneak (Shift) 
-                    this.mc.options.sneakKey.setPressed(CamUtils.pitch() > 0.0F);
+                    this.mc.options.keyShift.setDown(CamUtils.pitch() > 0.0F);
                     // 抬头 (Pitch <= 0) -> 按下 Jump (空格) 
-                    this.mc.options.jumpKey.setPressed(CamUtils.pitch() <= 0.0F);
+                    this.mc.options.keyJump.setDown(CamUtils.pitch() <= 0.0F);
 
                     // 身体锁定目标
-                    MeteorClient.mc.player.setYaw((float) Rotations.getYaw(primary));
-                    MeteorClient.mc.player.setPitch(primary.isOnGround() && this.preventGround.get() ? -90.0F : (float) Rotations.getPitch(primary, Target.Body));
+                    MeteorClient.mc.player.setYRot((float) Rotations.getYaw(primary));
+                    MeteorClient.mc.player.setXRot(primary.onGround() && this.preventGround.get() ? -90.0F : (float) Rotations.getPitch(primary, Target.Body));
                 }
             }
         }
@@ -197,11 +197,11 @@ public class Follower extends Module {
         // ESP 渲染
         if (this.render.get() && !this.targets.isEmpty() && this.targets.getFirst() != null) {
             Entity target = this.targets.getFirst();
-            Vec3d lerped = target.getLerpedPos(event.tickDelta);
+            Vec3 lerped = target.getPosition(event.tickDelta);
             double x = lerped.x - target.getX();
             double y = lerped.y - target.getY();
             double z = lerped.z - target.getZ();
-            Box box = target.getBoundingBox();
+            AABB box = target.getBoundingBox();
             event.renderer.box(x + box.minX, y + box.minY, z + box.minZ, x + box.maxX, y + box.maxY, z + box.maxZ, this.sideColor.get(), this.lineColor.get(), this.shapeMode.get(), 0);
         }
     }
@@ -214,8 +214,8 @@ public class Follower extends Module {
         
         
         // 1.21.11 这么写的: isGliding() + getEquippedStack
-        if (this.mc.player.isGliding() && this.mc.player.getEquippedStack(EquipmentSlot.CHEST).isOf(Items.ELYTRA)) {
-            if (this.timer < 0 && this.mc.options.forwardKey.isPressed()) {
+        if (this.mc.player.isFallFlying() && this.mc.player.getItemBySlot(EquipmentSlot.CHEST).is(Items.ELYTRA)) {
+            if (this.timer < 0 && this.mc.options.keyUp.isDown()) {
                 this.quickUse(Items.FIREWORK_ROCKET);
                 this.timer = countdown;
             }
@@ -237,7 +237,7 @@ public class Follower extends Module {
             int itemSlot = result.slot();
             boolean wasHeld = result.isMainHand();
             if (!wasHeld) InvUtils.quickSwap().fromId(selectedSlot).to(itemSlot);
-            this.mc.interactionManager.interactItem(this.mc.player, Hand.MAIN_HAND);
+            this.mc.gameMode.useItem(this.mc.player, InteractionHand.MAIN_HAND);
             if (!wasHeld) InvUtils.quickSwap().fromId(selectedSlot).to(itemSlot);
         }
     }

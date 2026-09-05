@@ -11,21 +11,32 @@ import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.render.color.SettingColor;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.block.*;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.ItemEntity;
-import net.minecraft.entity.decoration.ArmorStandEntity;
-import net.minecraft.entity.decoration.EndCrystalEntity;
-import net.minecraft.entity.effect.StatusEffects;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.item.*;
-import net.minecraft.network.packet.c2s.play.PlayerActionC2SPacket;
-import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket;
-import net.minecraft.network.packet.c2s.play.UpdateSelectedSlotC2SPacket;
-import net.minecraft.network.packet.c2s.play.PlayerActionC2SPacket.Action;
-import net.minecraft.screen.slot.SlotActionType;
-import net.minecraft.util.Hand;
-import net.minecraft.util.math.*;
+import net.minecraft.world.level.block.AirBlock;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.entity.decoration.ArmorStand;
+import net.minecraft.world.entity.boss.enderdragon.EndCrystal;
+import net.minecraft.world.effect.MobEffects;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.AirItem;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;
+import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
+import net.minecraft.network.protocol.game.ServerboundSetCarriedItemPacket;
+import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket.Action;
+import net.minecraft.world.inventory.ContainerInput;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.core.Vec3i;
+import net.minecraft.util.Ease;
+import net.minecraft.util.Mth;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
 
 import java.awt.Color;
 import java.text.DecimalFormat;
@@ -51,7 +62,7 @@ public class AlienV4PacketMine extends Module {
     private final AlienTimer startTime = new AlienTimer();
 
     int lastSlot = -1;
-    Vec3d directionVec = null;
+    Vec3 directionVec = null;
     Runnable switchBack;
     BlockPos breakPos;
     boolean startPacket = false;
@@ -256,7 +267,7 @@ public class AlienV4PacketMine extends Module {
         .name("Animation").description("Animation type").defaultValue(AnimMode.Up)
         .visible(() -> page.get() == Page.Render).build());
     private final Setting<AlienEasing> ease = sgRender.add(new EnumSetting.Builder<AlienEasing>()
-        .name("Ease").description("Easing function").defaultValue(AlienEasing.CubicInOut)
+        .name("Ease").description("Ease function").defaultValue(AlienEasing.CubicInOut)
         .visible(() -> page.get() == Page.Render).build());
     private final Setting<AlienEasing> fadeEase = sgRender.add(new EnumSetting.Builder<AlienEasing>()
         .name("FadeEase").description("Fade easing function").defaultValue(AlienEasing.CubicInOut)
@@ -286,7 +297,7 @@ public class AlienV4PacketMine extends Module {
         .name("Text").description("Show progress text").defaultValue(true)
         .visible(() -> page.get() == Page.Render).build());
     private final Setting<Boolean> box = sgRender.add(new BoolSetting.Builder()
-        .name("Box").description("Show fill box").defaultValue(true)
+        .name("AABB").description("Show fill box").defaultValue(true)
         .visible(() -> page.get() == Page.Render).build());
     private final Setting<Boolean> outline = sgRender.add(new BoolSetting.Builder()
         .name("Outline").description("Show outline").defaultValue(true)
@@ -338,7 +349,7 @@ public class AlienV4PacketMine extends Module {
 
     // ─── Rotation helpers ───
 
-    private float[] getRotationTo(Vec3d vec) {
+    private float[] getRotationTo(Vec3 vec) {
         double diffX = vec.x - mc.player.getX();
         double diffY = vec.y - (mc.player.getY() + mc.player.getEyeHeight(mc.player.getPose()));
         double diffZ = vec.z - mc.player.getZ();
@@ -348,16 +359,16 @@ public class AlienV4PacketMine extends Module {
         return new float[]{yaw, pitch};
     }
 
-    private void lookAt(Vec3d vec) {
+    private void lookAt(Vec3 vec) {
         float[] rot = getRotationTo(vec);
-        mc.player.setYaw(rot[0]);
-        mc.player.setPitch(rot[1]);
+        mc.player.setYRot(rot[0]);
+        mc.player.setXRot(rot[1]);
     }
 
-    private boolean inFov(Vec3d vec, float fovDeg) {
+    private boolean inFov(Vec3 vec, float fovDeg) {
         float[] rot = getRotationTo(vec);
-        float yawDiff = MathHelper.wrapDegrees(mc.player.getYaw() - rot[0]);
-        float pitchDiff = MathHelper.wrapDegrees(mc.player.getPitch() - rot[1]);
+        float yawDiff = Mth.wrapDegrees(mc.player.getYRot() - rot[0]);
+        float pitchDiff = Mth.wrapDegrees(mc.player.getXRot() - rot[1]);
         return Math.sqrt(yawDiff * yawDiff + pitchDiff * pitchDiff) <= fovDeg;
     }
 
@@ -367,7 +378,7 @@ public class AlienV4PacketMine extends Module {
         return !mc.player.getPose().name().equals("GLIDING");
     }
 
-    boolean faceVector(Vec3d directionVec) {
+    boolean faceVector(Vec3 directionVec) {
         if (!shouldYawStep()) {
             lookAt(directionVec);
             return true;
@@ -380,11 +391,11 @@ public class AlienV4PacketMine extends Module {
 
     // ─── Web check ───
 
-    private boolean isInWeb(PlayerEntity player) {
-        BlockPos pos = player.getBlockPos();
-        if (mc.world.getBlockState(pos).getBlock() == Blocks.COBWEB) return true;
-        if (mc.world.getBlockState(pos.up()).getBlock() == Blocks.COBWEB) return true;
-        if (mc.world.getBlockState(pos.down()).getBlock() == Blocks.COBWEB) return true;
+    private boolean isInWeb(Player player) {
+        BlockPos pos = player.blockPosition();
+        if (mc.level.getBlockState(pos).getBlock() == Blocks.COBWEB) return true;
+        if (mc.level.getBlockState(pos.above()).getBlock() == Blocks.COBWEB) return true;
+        if (mc.level.getBlockState(pos.below()).getBlock() == Blocks.COBWEB) return true;
         return false;
     }
 
@@ -396,11 +407,11 @@ public class AlienV4PacketMine extends Module {
             if (secondPos != null) {
                 float currentFastest = 1.0F;
                 for (int i = 0; i < 9; i++) {
-                    ItemStack stack = mc.player.getInventory().getStack(i);
+                    ItemStack stack = mc.player.getInventory().getItem(i);
                     if (stack != ItemStack.EMPTY) {
                         int eff = getEfficiencyLevel(stack);
                         float digSpeed = eff;
-                        float destroySpeed = stack.getMiningSpeedMultiplier(mc.world.getBlockState(secondPos));
+                        float destroySpeed = stack.getDestroySpeed(mc.level.getBlockState(secondPos));
                         if (digSpeed + destroySpeed > currentFastest) {
                             currentFastest = digSpeed + destroySpeed;
                             index = i;
@@ -409,8 +420,8 @@ public class AlienV4PacketMine extends Module {
                 }
             }
             if (index != -1
-                && !mc.options.useKey.isPressed()
-                && !mc.options.attackKey.isPressed()
+                && !mc.options.keyUse.isDown()
+                && !mc.options.keyAttack.isDown()
                 && !mc.player.isUsingItem()
                 && secondTimer.passedMs(getBreakTime(secondPos, index, start.get()))) {
                 if (index != ((InventoryAccessor) mc.player.getInventory()).getSelectedSlot()) {
@@ -429,7 +440,7 @@ public class AlienV4PacketMine extends Module {
 
     @EventHandler
     public void onTick(TickEvent.Pre event) {
-        if (mc.player == null || mc.world == null) return;
+        if (mc.player == null || mc.level == null) return;
 
         // ---- rotation (yaw step) ----
         if (rotate.get() && shouldYawStep() && directionVec != null && !sync.passedMs(syncTime.get())) {
@@ -437,7 +448,7 @@ public class AlienV4PacketMine extends Module {
         }
 
         // ---- main tick logic ----
-        if (breakPos != null && mc.world.isAir(breakPos)) {
+        if (breakPos != null && mc.level.isEmptyBlock(breakPos)) {
             complete = true;
         }
 
@@ -460,7 +471,7 @@ public class AlienV4PacketMine extends Module {
             } else {
                 // Screen changed (e.g. merchant UI opened) — can't SWAP, just send STOP_DESTROY
                 if (breakPos != null) {
-                    mc.getNetworkHandler().sendPacket(new PlayerActionC2SPacket(Action.STOP_DESTROY_BLOCK, breakPos, AlienBlockUtil.getClickSide(breakPos)));
+                    mc.getConnection().send(new ServerboundPlayerActionPacket(Action.STOP_DESTROY_BLOCK, breakPos, AlienBlockUtil.getClickSide(breakPos)));
                 }
                 breakNumber++;
                 delayTimer.reset();
@@ -469,7 +480,7 @@ public class AlienV4PacketMine extends Module {
             switchBack = null;
         }
 
-        if (mc.player.isDead()) {
+        if (mc.player.isDeadOrDying()) {
             secondPos = null;
         }
 
@@ -510,7 +521,7 @@ public class AlienV4PacketMine extends Module {
                         complete = false;
                     }
                     breakNumber = 0;
-                } else if (MathHelper.sqrt((float) mc.player.getEyePos().squaredDistanceTo(breakPos.toCenterPos())) > range.get()) {
+                } else if (Mth.sqrt((float) mc.player.getEyePosition().distanceToSqr(breakPos.getCenter())) > range.get()) {
                     if (farCancel.get()) {
                         startPacket = false;
                         ghost = false;
@@ -518,17 +529,17 @@ public class AlienV4PacketMine extends Module {
                         breakNumber = 0;
                         breakPos = null;
                     }
-                } else if (!usingPause.get() || !mc.player.isUsingItem() || (allowOffhand.get() && mc.player.getActiveHand() != Hand.MAIN_HAND)) {
+                } else if (!usingPause.get() || !mc.player.isUsingItem() || (allowOffhand.get() && mc.player.getUsedItemHand() != InteractionHand.MAIN_HAND)) {
                     if (!pauseBind.get()) {
                         if (hotBar.get() || AlienEntityUtil.inInventory()) {
                             if (isAir(breakPos)) {
                                 // ── Air block: place blocks / attack crystals ──
                                 if (shouldCrystal()) {
                                     for (Direction facing : Direction.values()) {
-                                        AlienCombatUtil.attackCrystal(breakPos.offset(facing), placeRotate.get(), true);
+                                        AlienCombatUtil.attackCrystal(breakPos.relative(facing), placeRotate.get(), true);
                                     }
                                 }
-                                if (placeTimer.passedMs(placeDelay.get()) && AlienBlockUtil.canPlace(breakPos) && mc.currentScreen == null) {
+                                if (placeTimer.passedMs(placeDelay.get()) && AlienBlockUtil.canPlace(breakPos) && mc.screen == null) {
                                     if (enderChest.get()) {
                                         int eChest = AlienInventoryUtil.findBlock(Blocks.ENDER_CHEST);
                                         if (eChest != -1) {
@@ -543,8 +554,8 @@ public class AlienV4PacketMine extends Module {
                                         if (obby != -1) {
                                             boolean hasCrystal = false;
                                             if (shouldCrystal()) {
-                                                for (Entity entity : AlienBlockUtil.getEntities(new Box(breakPos.up()))) {
-                                                    if (entity instanceof EndCrystalEntity) { hasCrystal = true; break; }
+                                                for (Entity entity : AlienBlockUtil.getEntities(new AABB(breakPos.above()))) {
+                                                    if (entity instanceof EndCrystal) { hasCrystal = true; break; }
                                                 }
                                             }
                                             if (!hasCrystal || spamPlace.get()) {
@@ -559,7 +570,7 @@ public class AlienV4PacketMine extends Module {
                                 }
                                 breakNumber = 0;
 
-                            } else if (canPlaceCrystal(breakPos.up()) && shouldCrystal()) {
+                            } else if (canPlaceCrystal(breakPos.above()) && shouldCrystal()) {
                                 // ── Place crystal near block ──
                                 if (placeTimer.passedMs(placeDelay.get())) {
                                     if (checkDamage.get()) {
@@ -580,11 +591,11 @@ public class AlienV4PacketMine extends Module {
                             if (delayTimer.passed(stopDelay.get().longValue())) {
                                 if (startPacket) {
                                     if (isAir(breakPos)) return;
-                                    if (onlyGround.get() && !mc.player.isOnGround()) return;
+                                    if (onlyGround.get() && !mc.player.onGround()) return;
 
                                     if (mineTimer.passed((long) breakFinalTime)) {
                                         if (endRotate.get() && shouldYawStep()
-                                            && !faceVector(breakPos.toCenterPos().offset(AlienBlockUtil.getClickSide(breakPos), 0.5))) {
+                                            && !faceVector(breakPos.getCenter().relative(AlienBlockUtil.getClickSide(breakPos), 0.5))) {
                                             return;
                                         }
 
@@ -602,37 +613,37 @@ public class AlienV4PacketMine extends Module {
                                                 AlienInventoryUtil.switchToSlot(slot);
                                             } else {
                                                 int invSlot = slot < 9 ? slot + 36 : slot;
-                                                mc.interactionManager.clickSlot(mc.player.currentScreenHandler.syncId, invSlot, old, SlotActionType.SWAP, mc.player);
+                                                mc.gameMode.handleContainerInput(mc.player.containerMenu.containerId, invSlot, old, ContainerInput.SWAP, mc.player);
                                             }
                                         }
 
                                         int finalSlot = slot;
                                         switchBack = () -> {
                                             if (endRotate.get()
-                                                && !faceVector(breakPos.toCenterPos().offset(AlienBlockUtil.getClickSide(breakPos), 0.5))) {
+                                                && !faceVector(breakPos.getCenter().relative(AlienBlockUtil.getClickSide(breakPos), 0.5))) {
                                                 // snap back original slot
                                                 if (shouldSwitch) {
                                                     if (hotBar.get()) {
                                                         AlienInventoryUtil.switchToSlot(old);
                                                     } else if (AlienEntityUtil.inInventory()) {
                                                         int fs = finalSlot < 9 ? finalSlot + 36 : finalSlot;
-                                                        mc.interactionManager.clickSlot(mc.player.currentScreenHandler.syncId, fs, old, SlotActionType.SWAP, mc.player);
+                                                        mc.gameMode.handleContainerInput(mc.player.containerMenu.containerId, fs, old, ContainerInput.SWAP, mc.player);
                                                         AlienEntityUtil.syncInventory();
                                                     } else if (old >= 0 && old <= 8) {
                                                         AlienInventoryUtil.switchToSlot(old);
                                                     }
                                                 }
                                             } else {
-                                                mc.getNetworkHandler().sendPacket(new PlayerActionC2SPacket(Action.STOP_DESTROY_BLOCK, breakPos, AlienBlockUtil.getClickSide(breakPos)));
+                                                mc.getConnection().send(new ServerboundPlayerActionPacket(Action.STOP_DESTROY_BLOCK, breakPos, AlienBlockUtil.getClickSide(breakPos)));
                                                 if (endSwing.get()) {
-                                                    swingHand(Hand.MAIN_HAND, swingMode.get());
+                                                    swingHand(InteractionHand.MAIN_HAND, swingMode.get());
                                                 }
                                                 if (shouldSwitch) {
                                                     if (hotBar.get()) {
                                                         AlienInventoryUtil.switchToSlot(old);
                                                     } else if (AlienEntityUtil.inInventory()) {
                                                         int fs = finalSlot < 9 ? finalSlot + 36 : finalSlot;
-                                                        mc.interactionManager.clickSlot(mc.player.currentScreenHandler.syncId, fs, old, SlotActionType.SWAP, mc.player);
+                                                        mc.gameMode.handleContainerInput(mc.player.containerMenu.containerId, fs, old, ContainerInput.SWAP, mc.player);
                                                         AlienEntityUtil.syncInventory();
                                                     } else if (old >= 0 && old <= 8) {
                                                         AlienInventoryUtil.switchToSlot(old);
@@ -643,11 +654,11 @@ public class AlienV4PacketMine extends Module {
                                                 startTime.reset();
                                                 if (afterBreak.get() && shouldCrystal()) {
                                                     for (Direction facing : Direction.values()) {
-                                                        AlienCombatUtil.attackCrystal(breakPos.offset(facing), placeRotate.get(), true);
+                                                        AlienCombatUtil.attackCrystal(breakPos.relative(facing), placeRotate.get(), true);
                                                     }
                                                 }
                                                 if (setAir.get()) {
-                                                    mc.world.setBlockState(breakPos, Blocks.AIR.getDefaultState());
+                                                    mc.level.setBlockAndUpdate(breakPos, Blocks.AIR.defaultBlockState());
                                                 }
                                                 ghost = true;
                                             }
@@ -663,15 +674,15 @@ public class AlienV4PacketMine extends Module {
 
                                     Direction side = AlienBlockUtil.getClickSide(breakPos);
                                     if (rotate.get()) {
-                                        Vec3i vec3i = side.getVector();
-                                        if (!faceVector(breakPos.toCenterPos().add(new Vec3d(vec3i.getX() * 0.5, vec3i.getY() * 0.5, vec3i.getZ() * 0.5)))) {
+                                        Vec3i vec3i = side.getUnitVec3i();
+                                        if (!faceVector(breakPos.getCenter().add(new Vec3(vec3i.getX() * 0.5, vec3i.getY() * 0.5, vec3i.getZ() * 0.5)))) {
                                             return;
                                         }
                                     }
                                     mineTimer.reset();
                                     animationTime.reset();
                                     if (swing.get()) {
-                                        swingHand(Hand.MAIN_HAND, swingMode.get());
+                                        swingHand(InteractionHand.MAIN_HAND, swingMode.get());
                                     }
                                     if (doubleBreak.get()) {
                                         if (secondPos == null || isAir(secondPos)) {
@@ -683,7 +694,7 @@ public class AlienV4PacketMine extends Module {
                                         }
                                         doDoubleBreak(side);
                                     }
-                                    mc.getNetworkHandler().sendPacket(new PlayerActionC2SPacket(Action.START_DESTROY_BLOCK, breakPos, side));
+                                    mc.getConnection().send(new ServerboundPlayerActionPacket(Action.START_DESTROY_BLOCK, breakPos, side));
                                     startTime.reset();
                                 }
                             }
@@ -705,7 +716,7 @@ public class AlienV4PacketMine extends Module {
 
     @EventHandler
     public void onStartBreakingBlock(meteordevelopment.meteorclient.events.entity.player.StartBreakingBlockEvent event) {
-        if (mc.player == null || mc.world == null) return;
+        if (mc.player == null || mc.level == null) return;
         if (mc.player.isCreative()) return;
 
         event.cancel();
@@ -715,10 +726,10 @@ public class AlienV4PacketMine extends Module {
         if (unbreakable(pos)) return;
 
         if (breakPos == null || !preferWeb.get() || AlienBlockUtil.getBlock(breakPos) != Blocks.COBWEB) {
-            if (breakPos == null || !preferHead.get() || !mc.player.isCrawling()
-                || !AlienEntityUtil.getPlayerPos(true).up().equals(breakPos)) {
+            if (breakPos == null || !preferHead.get() || !mc.player.isVisuallyCrawling()
+                || !AlienEntityUtil.getPlayerPos(true).above().equals(breakPos)) {
                 if (AlienBlockUtil.getClickSideStrict(pos) == null) return;
-                if (MathHelper.sqrt((float) mc.player.getEyePos().squaredDistanceTo(pos.toCenterPos())) > range.get()) return;
+                if (Mth.sqrt((float) mc.player.getEyePosition().distanceToSqr(pos.getCenter())) > range.get()) return;
 
                 breakPos = pos;
                 breakNumber = 0;
@@ -730,13 +741,13 @@ public class AlienV4PacketMine extends Module {
 
                 Direction side = AlienBlockUtil.getClickSide(breakPos);
                 if (rotate.get()) {
-                    Vec3i vec3i = side.getVector();
-                    if (!faceVector(breakPos.toCenterPos().add(new Vec3d(vec3i.getX() * 0.5, vec3i.getY() * 0.5, vec3i.getZ() * 0.5)))) {
+                    Vec3i vec3i = side.getUnitVec3i();
+                    if (!faceVector(breakPos.getCenter().add(new Vec3(vec3i.getX() * 0.5, vec3i.getY() * 0.5, vec3i.getZ() * 0.5)))) {
                         return;
                     }
                 }
                 if (startTime.passed(startDelay.get().intValue())) {
-                    if (swing.get()) swingHand(Hand.MAIN_HAND, swingMode.get());
+                    if (swing.get()) swingHand(InteractionHand.MAIN_HAND, swingMode.get());
                     if (doubleBreak.get()) {
                         if (secondPos == null || isAir(secondPos)) {
                             int s = getTool(breakPos);
@@ -752,7 +763,7 @@ public class AlienV4PacketMine extends Module {
                     int s = getTool(breakPos);
                     if (s == -1) s = ((InventoryAccessor) mc.player.getInventory()).getSelectedSlot();
                     breakFinalTime = getBreakTime(breakPos, s);
-                    mc.getNetworkHandler().sendPacket(new PlayerActionC2SPacket(Action.START_DESTROY_BLOCK, breakPos, side));
+                    mc.getConnection().send(new ServerboundPlayerActionPacket(Action.START_DESTROY_BLOCK, breakPos, side));
                     startTime.reset();
                 }
             }
@@ -763,16 +774,16 @@ public class AlienV4PacketMine extends Module {
 
     @EventHandler
     public void onPacketSend(PacketEvent.Send event) {
-        if (mc.player == null || mc.world == null) return;
+        if (mc.player == null || mc.level == null) return;
         if (mc.player.isCreative()) return;
 
-        if (event.packet instanceof PlayerMoveC2SPacket) {
+        if (event.packet instanceof ServerboundMovePlayerPacket) {
             if (bypassGround.get()
                 && !mc.player.getPose().name().equals("GLIDING")
                 && breakPos != null
                 && !isAir(breakPos)
                 && bypassTime.get() > 0
-                && MathHelper.sqrt((float) breakPos.toCenterPos().squaredDistanceTo(mc.player.getEyePos())) <= range.get().floatValue() + 2.0F) {
+                && Mth.sqrt((float) breakPos.getCenter().distanceToSqr(mc.player.getEyePosition())) <= range.get().floatValue() + 2.0F) {
                 double breakTime = breakFinalTime - bypassTime.get();
                 if (breakTime <= 0 || mineTimer.passed((long) breakTime)) {
                     sendGroundPacket = true;
@@ -781,9 +792,9 @@ public class AlienV4PacketMine extends Module {
             } else {
                 sendGroundPacket = false;
             }
-        } else if (event.packet instanceof UpdateSelectedSlotC2SPacket packet) {
-            if (packet.getSelectedSlot() != lastSlot) {
-                lastSlot = packet.getSelectedSlot();
+        } else if (event.packet instanceof ServerboundSetCarriedItemPacket packet) {
+            if (packet.getSlot() != lastSlot) {
+                lastSlot = packet.getSlot();
                 if (switchReset.get()) {
                     startPacket = false;
                     ghost = false;
@@ -792,11 +803,11 @@ public class AlienV4PacketMine extends Module {
                     animationTime.reset();
                 }
             }
-        } else if (event.packet instanceof PlayerActionC2SPacket packet) {
+        } else if (event.packet instanceof ServerboundPlayerActionPacket packet) {
             if (packet.getAction() == Action.START_DESTROY_BLOCK) {
                 if (breakPos == null || !packet.getPos().equals(breakPos)) return;
                 if (grimDisabler.get()) {
-                    mc.getNetworkHandler().sendPacket(new PlayerActionC2SPacket(Action.STOP_DESTROY_BLOCK, packet.getPos(), packet.getDirection()));
+                    mc.getConnection().send(new ServerboundPlayerActionPacket(Action.STOP_DESTROY_BLOCK, packet.getPos(), packet.getDirection()));
                 }
                 startPacket = true;
             } else if (packet.getAction() == Action.STOP_DESTROY_BLOCK) {
@@ -814,9 +825,9 @@ public class AlienV4PacketMine extends Module {
 
     @EventHandler
     public void onRender3D(Render3DEvent event) {
-        if (mc.player == null || mc.world == null) return;
+        if (mc.player == null || mc.level == null) return;
 
-        if (breakPos != null && mc.world.isAir(breakPos)) {
+        if (breakPos != null && mc.level.isEmptyBlock(breakPos)) {
             complete = true;
         }
         if (mc.player.isCreative()) {
@@ -848,10 +859,10 @@ public class AlienV4PacketMine extends Module {
 
             if (unbreakable(breakPos)) {
                 if (box.get()) {
-                    AlienRender3DUtil.drawFill(event, new Box(breakPos), toAwt(startColor.get()));
+                    AlienRender3DUtil.drawFill(event, new AABB(breakPos), toAwt(startColor.get()));
                 }
                 if (outline.get()) {
-                    AlienRender3DUtil.drawBox(event, new Box(breakPos), toAwt(startOutlineColor.get()));
+                    AlienRender3DUtil.drawBox(event, new AABB(breakPos), toAwt(startOutlineColor.get()));
                 }
                 return;
             }
@@ -864,7 +875,7 @@ public class AlienV4PacketMine extends Module {
                 AlienRender3DUtil.drawBox(event, getOutlineBox(breakPos, easeVal), toAwt(getOutlineColor(fadeVal)));
             }
             if (text.get()) {
-                Vec3d textPos = breakPos.toCenterPos();
+                Vec3 textPos = breakPos.getCenter();
                 String progressText;
                 if (isAir(breakPos)) {
                     progressText = "Waiting";
@@ -887,60 +898,60 @@ public class AlienV4PacketMine extends Module {
 
     // ─── Helper methods ───
 
-    private void swingHand(Hand hand, SwingHandMode mode) {
+    private void swingHand(InteractionHand hand, SwingHandMode mode) {
         switch (mode) {
-            case All -> mc.player.swingHand(hand);
-            case Client -> mc.player.swingHand(hand, false);
-            case Server -> mc.getNetworkHandler().sendPacket(new net.minecraft.network.packet.c2s.play.HandSwingC2SPacket(hand));
+            case All -> mc.player.swing(hand);
+            case Client -> mc.player.swing(hand, false);
+            case Server -> mc.getConnection().send(new net.minecraft.network.protocol.game.ServerboundSwingPacket(hand));
         }
     }
 
-    private Box getFillBox(BlockPos pos, double easeVal) {
+    private AABB getFillBox(BlockPos pos, double easeVal) {
         return switch ((AnimMode) animation.get()) {
             case Center -> {
                 easeVal = (1.0 - easeVal) / 2.0;
-                yield new Box(pos).shrink(easeVal, easeVal, easeVal).shrink(-easeVal, -easeVal, -easeVal);
+                yield new AABB(pos).contract(easeVal, easeVal, easeVal).contract(-easeVal, -easeVal, -easeVal);
             }
             case Grow -> {
                 easeVal = (1.0 - easeVal) / 2.0;
-                yield new Box(pos).shrink(easeVal, 0.0, easeVal).shrink(-easeVal, 0.0, -easeVal);
+                yield new AABB(pos).contract(easeVal, 0.0, easeVal).contract(-easeVal, 0.0, -easeVal);
             }
-            case Up -> new Box(pos.getX(), pos.getY(), pos.getZ(), pos.getX() + 1, pos.getY() + easeVal, pos.getZ() + 1);
-            case Down -> new Box(pos.getX(), pos.getY() + 1 - easeVal, pos.getZ(), pos.getX() + 1, pos.getY() + 1, pos.getZ() + 1);
-            case Oscillation -> new Box(pos).shrink(easeVal, easeVal, easeVal).shrink(-easeVal, -easeVal, -easeVal);
-            case None -> new Box(pos);
+            case Up -> new AABB(pos.getX(), pos.getY(), pos.getZ(), pos.getX() + 1, pos.getY() + easeVal, pos.getZ() + 1);
+            case Down -> new AABB(pos.getX(), pos.getY() + 1 - easeVal, pos.getZ(), pos.getX() + 1, pos.getY() + 1, pos.getZ() + 1);
+            case Oscillation -> new AABB(pos).contract(easeVal, easeVal, easeVal).contract(-easeVal, -easeVal, -easeVal);
+            case None -> new AABB(pos);
         };
     }
 
-    private Box getOutlineBox(BlockPos pos, double easeVal) {
+    private AABB getOutlineBox(BlockPos pos, double easeVal) {
         easeVal = Math.min(easeVal + expandLine.get(), 1.0);
         return switch ((AnimMode) animation.get()) {
             case Center -> {
                 easeVal = (1.0 - easeVal) / 2.0;
-                yield new Box(pos).shrink(easeVal, easeVal, easeVal).shrink(-easeVal, -easeVal, -easeVal);
+                yield new AABB(pos).contract(easeVal, easeVal, easeVal).contract(-easeVal, -easeVal, -easeVal);
             }
             case Grow -> {
                 easeVal = (1.0 - easeVal) / 2.0;
-                yield new Box(pos).shrink(easeVal, 0.0, easeVal).shrink(-easeVal, 0.0, -easeVal);
+                yield new AABB(pos).contract(easeVal, 0.0, easeVal).contract(-easeVal, 0.0, -easeVal);
             }
-            case Up -> new Box(pos.getX(), pos.getY(), pos.getZ(), pos.getX() + 1, pos.getY() + easeVal, pos.getZ() + 1);
-            case Down -> new Box(pos.getX(), pos.getY() + 1 - easeVal, pos.getZ(), pos.getX() + 1, pos.getY() + 1, pos.getZ() + 1);
-            case Oscillation -> new Box(pos).shrink(easeVal, easeVal, easeVal).shrink(-easeVal, -easeVal, -easeVal);
-            case None -> new Box(pos);
+            case Up -> new AABB(pos.getX(), pos.getY(), pos.getZ(), pos.getX() + 1, pos.getY() + easeVal, pos.getZ() + 1);
+            case Down -> new AABB(pos.getX(), pos.getY() + 1 - easeVal, pos.getZ(), pos.getX() + 1, pos.getY() + 1, pos.getZ() + 1);
+            case Oscillation -> new AABB(pos).contract(easeVal, easeVal, easeVal).contract(-easeVal, -easeVal, -easeVal);
+            case None -> new AABB(pos);
         };
     }
 
     boolean canPlaceCrystal(BlockPos pos) {
-        BlockPos obsPos = pos.down();
-        BlockPos boost = obsPos.up();
+        BlockPos obsPos = pos.below();
+        BlockPos boost = obsPos.above();
         return (AlienBlockUtil.getBlock(obsPos) == Blocks.BEDROCK || AlienBlockUtil.getBlock(obsPos) == Blocks.OBSIDIAN)
             && AlienBlockUtil.getClickSideStrict(obsPos) != null
-            && noEntity(boost) && noEntity(boost.up());
+            && noEntity(boost) && noEntity(boost.above());
     }
 
     boolean noEntity(BlockPos pos) {
-        for (Entity entity : AlienBlockUtil.getEntities(new Box(pos))) {
-            if (!(entity instanceof ItemEntity) && !(entity instanceof ArmorStandEntity)) {
+        for (Entity entity : AlienBlockUtil.getEntities(new AABB(pos))) {
+            if (!(entity instanceof ItemEntity) && !(entity instanceof ArmorStand)) {
                 return false;
             }
         }
@@ -956,7 +967,7 @@ public class AlienV4PacketMine extends Module {
         if (crystalSlot != -1) {
             int oldSlot = ((InventoryAccessor) mc.player.getInventory()).getSelectedSlot();
             doSwap(crystalSlot, crystalSlot);
-            AlienBlockUtil.placeCrystal(breakPos.up(), placeRotate.get());
+            AlienBlockUtil.placeCrystal(breakPos.above(), placeRotate.get());
             doSwap(oldSlot, crystalSlot);
             placeTimer.reset();
             return !waitPlace.get();
@@ -975,8 +986,8 @@ public class AlienV4PacketMine extends Module {
     }
 
     void doDoubleBreak(Direction side) {
-        mc.getNetworkHandler().sendPacket(new PlayerActionC2SPacket(Action.START_DESTROY_BLOCK, breakPos, side));
-        mc.getNetworkHandler().sendPacket(new PlayerActionC2SPacket(Action.STOP_DESTROY_BLOCK, breakPos, side));
+        mc.getConnection().send(new ServerboundPlayerActionPacket(Action.START_DESTROY_BLOCK, breakPos, side));
+        mc.getConnection().send(new ServerboundPlayerActionPacket(Action.STOP_DESTROY_BLOCK, breakPos, side));
     }
 
     public static double getBreakTime(BlockPos pos) {
@@ -990,14 +1001,14 @@ public class AlienV4PacketMine extends Module {
     }
 
     double getBreakTime(BlockPos pos, int slot, double damageMul) {
-        return 1.0F / getBlockStrength(pos, mc.player.getInventory().getStack(slot)) / 20.0F * 1000.0F * damageMul;
+        return 1.0F / getBlockStrength(pos, mc.player.getInventory().getItem(slot)) / 20.0F * 1000.0F * damageMul;
     }
 
     float getBlockStrength(BlockPos position, ItemStack itemStack) {
-        BlockState state = mc.world.getBlockState(position);
-        float hardness = state.getHardness(mc.world, position);
+        BlockState state = mc.level.getBlockState(position);
+        float hardness = state.getDestroySpeed(mc.level, position);
         if (hardness < 0.0F) return 0.0F;
-        float i = state.isToolRequired() && !itemStack.isSuitableFor(state) ? 100.0F : 30.0F;
+        float i = state.requiresCorrectToolForDrops() && !itemStack.isCorrectToolForDrops(state) ? 100.0F : 30.0F;
         return getDigSpeed(state, itemStack) / hardness / i;
     }
 
@@ -1009,22 +1020,22 @@ public class AlienV4PacketMine extends Module {
                 digSpeed += (float) (StrictMath.pow(efficiencyModifier, 2.0) + 1.0);
             }
         }
-        if (mc.player.hasStatusEffect(StatusEffects.HASTE)) {
-            digSpeed *= 1.0F + (mc.player.getStatusEffect(StatusEffects.HASTE).getAmplifier() + 1) * 0.2F;
+        if (mc.player.hasEffect(MobEffects.HASTE)) {
+            digSpeed *= 1.0F + (mc.player.getEffect(MobEffects.HASTE).getAmplifier() + 1) * 0.2F;
         }
-        if (mc.player.hasStatusEffect(StatusEffects.MINING_FATIGUE)) {
-            digSpeed *= switch (mc.player.getStatusEffect(StatusEffects.MINING_FATIGUE).getAmplifier()) {
+        if (mc.player.hasEffect(MobEffects.MINING_FATIGUE)) {
+            digSpeed *= switch (mc.player.getEffect(MobEffects.MINING_FATIGUE).getAmplifier()) {
                 case 0 -> 0.3F;
                 case 1 -> 0.09F;
                 case 2 -> 0.0027F;
                 default -> 8.1E-4F;
             };
         }
-        if (mc.player.isSubmergedInWater()) {
-            digSpeed *= (float) mc.player.getAttributeValue(net.minecraft.entity.attribute.EntityAttributes.SUBMERGED_MINING_SPEED);
+        if (mc.player.isUnderWater()) {
+            digSpeed *= (float) mc.player.getAttributeValue(net.minecraft.world.entity.ai.attributes.Attributes.SUBMERGED_MINING_SPEED);
         }
-        boolean inWeb = checkWeb.get() && isInWeb(mc.player) && mc.world.getBlockState(breakPos).getBlock() == Blocks.COBWEB;
-        if ((!mc.player.isOnGround() || inWeb)
+        boolean inWeb = checkWeb.get() && isInWeb(mc.player) && mc.level.getBlockState(breakPos).getBlock() == Blocks.COBWEB;
+        if ((!mc.player.onGround() || inWeb)
             && checkGround.get()
             && (!smart.get() || mc.player.getPose().name().equals("GLIDING") || inWeb)) {
             digSpeed /= 5.0F;
@@ -1035,7 +1046,7 @@ public class AlienV4PacketMine extends Module {
     float getDestroySpeed(BlockState state, ItemStack itemStack) {
         float destroySpeed = 1.0F;
         if (itemStack != null && !itemStack.isEmpty()) {
-            destroySpeed *= itemStack.getMiningSpeedMultiplier(state);
+            destroySpeed *= itemStack.getDestroySpeed(state);
         }
         return destroySpeed;
     }
@@ -1045,9 +1056,9 @@ public class AlienV4PacketMine extends Module {
         try {
             var enchantments = stack.getEnchantments();
             if (enchantments == null) return 0;
-            for (var entry : enchantments.getEnchantmentEntries()) {
+            for (var entry : enchantments.entrySet()) {
                 if (entry == null || entry.getKey() == null) continue;
-                String idStr = entry.getKey().getKey().map(k -> k.getValue().toString()).orElse(entry.getKey().toString().toLowerCase());
+                String idStr = entry.getKey().unwrapKey().map(k -> k.identifier().toString()).orElse("");
                 if (idStr.contains("efficiency")) return entry.getIntValue();
             }
         } catch (Exception ignored) {}
@@ -1059,10 +1070,10 @@ public class AlienV4PacketMine extends Module {
             int index = -1;
             float currentFastest = 1.0F;
             for (int i = 0; i < 9; i++) {
-                ItemStack stack = mc.player.getInventory().getStack(i);
+                ItemStack stack = mc.player.getInventory().getItem(i);
                 if (stack != ItemStack.EMPTY) {
                     int eff = getEfficiencyLevel(stack);
-                    float destroySpeed = stack.getMiningSpeedMultiplier(mc.world.getBlockState(pos));
+                    float destroySpeed = stack.getDestroySpeed(mc.level.getBlockState(pos));
                     if (eff + destroySpeed > currentFastest) {
                         currentFastest = eff + destroySpeed;
                         index = i;
@@ -1074,9 +1085,9 @@ public class AlienV4PacketMine extends Module {
             AtomicInteger slot = new AtomicInteger(-1);
             float currentFastest = 1.0F;
             for (Map.Entry<Integer, ItemStack> entry : AlienInventoryUtil.getInventoryAndHotbarSlots().entrySet()) {
-                if (!(entry.getValue().getItem() instanceof AirBlockItem)) {
+                if (!(entry.getValue().getItem() instanceof AirItem)) {
                     int eff = getEfficiencyLevel(entry.getValue());
-                    float destroySpeed = entry.getValue().getMiningSpeedMultiplier(mc.world.getBlockState(pos));
+                    float destroySpeed = entry.getValue().getDestroySpeed(mc.level.getBlockState(pos));
                     if (eff + destroySpeed > currentFastest) {
                         currentFastest = eff + destroySpeed;
                         slot.set(entry.getKey());
@@ -1088,13 +1099,13 @@ public class AlienV4PacketMine extends Module {
     }
 
     boolean isAir(BlockPos breakPos) {
-        return mc.world.isAir(breakPos) || (AlienBlockUtil.getBlock(breakPos) == Blocks.FIRE && AlienBlockUtil.hasCrystal(breakPos));
+        return mc.level.isEmptyBlock(breakPos) || (AlienBlockUtil.getBlock(breakPos) == Blocks.FIRE && AlienBlockUtil.hasCrystal(breakPos));
     }
 
     public static boolean unbreakable(BlockPos blockPos) {
-        if (INSTANCE == null || INSTANCE.mc.world == null) return true;
-        Block block = INSTANCE.mc.world.getBlockState(blockPos).getBlock();
-        return !(block instanceof AirBlock) && (block.getHardness() == -1.0F || block.getHardness() == 100.0F);
+        if (INSTANCE == null || INSTANCE.mc.level == null) return true;
+        Block block = INSTANCE.mc.level.getBlockState(blockPos).getBlock();
+        return !(block instanceof AirBlock) && (block.defaultDestroyTime() == -1.0F || block.defaultDestroyTime() == 100.0F);
     }
 
     SettingColor getColor(double quad) {

@@ -1,6 +1,6 @@
 package com.codigohasta.addon.modules;
 
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.phys.Vec3;
 
 import com.codigohasta.addon.AddonTemplate;
 import meteordevelopment.meteorclient.events.meteor.MouseClickEvent;
@@ -17,27 +17,27 @@ import meteordevelopment.meteorclient.utils.player.InvUtils;
 import meteordevelopment.meteorclient.utils.player.Rotations;
 import meteordevelopment.meteorclient.utils.render.color.SettingColor;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.enchantment.EnchantmentHelper;
-import net.minecraft.enchantment.Enchantments;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.EntityType;
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.passive.AbstractHorseEntity;
-import net.minecraft.entity.passive.TameableEntity;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.entity.projectile.ProjectileUtil;
-import net.minecraft.item.BowItem;
-import net.minecraft.item.CrossbowItem;
-import net.minecraft.item.Item;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
-import net.minecraft.registry.RegistryKeys;
-import net.minecraft.util.Hand;
-import net.minecraft.util.hit.EntityHitResult;
-import net.minecraft.util.math.Box;
-import net.minecraft.util.math.MathHelper;
-import net.minecraft.util.math.Vec3d;
-import net.minecraft.world.GameMode;
+import net.minecraft.world.item.enchantment.EnchantmentHelper;
+import net.minecraft.world.item.enchantment.Enchantments;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.animal.equine.AbstractHorse;
+import net.minecraft.world.entity.TamableAnimal;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.entity.projectile.ProjectileUtil;
+import net.minecraft.world.item.BowItem;
+import net.minecraft.world.item.CrossbowItem;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.phys.EntityHitResult;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.util.Mth;
+import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.level.GameType;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -175,11 +175,11 @@ public class CrossbowAura extends Module {
 
     private Entity currentTarget;
     private Entity lockedTarget;
-    private Vec3d lastPredictedPos = null;
+    private Vec3 lastPredictedPos = null;
     private int timer;
 
     // 存储上一次的速度，用于计算加速度
-    private final Map<Integer, Vec3d> prevVelocities = new HashMap<>();
+    private final Map<Integer, Vec3> prevVelocities = new HashMap<>();
 
     public CrossbowAura() {
         super(AddonTemplate.CATEGORY, "万弩射江潮", "诗云：百年霸越，钱王万弩射江潮。机关枪打死你。自动瞄准射击模板，娱乐功能");
@@ -194,8 +194,8 @@ public class CrossbowAura extends Module {
     }
     
     @Override public void onDeactivate() {
-        mc.options.useKey.setPressed(false);
-        if (mc.player != null) mc.interactionManager.stopUsingItem(mc.player);
+        mc.options.keyUse.setDown(false);
+        if (mc.player != null) mc.gameMode.releaseUsingItem(mc.player);
         lockedTarget = null;
         lastPredictedPos = null;
         prevVelocities.clear();
@@ -222,14 +222,14 @@ public class CrossbowAura extends Module {
 
     @EventHandler
     private void onTick(TickEvent.Pre event) {
-        if (mc.player == null || mc.world == null) return;
+        if (mc.player == null || mc.level == null) return;
 
         currentTarget = findTarget();
         lastPredictedPos = null; 
         
         // 自动切枪逻辑
-        ItemStack mainStack = mc.player.getMainHandStack();
-        ItemStack offStack = mc.player.getOffHandStack();
+        ItemStack mainStack = mc.player.getMainHandItem();
+        ItemStack offStack = mc.player.getOffhandItem();
         boolean mainValid = isValidWeapon(mainStack.getItem());
         boolean offValid = isValidWeapon(offStack.getItem());
 
@@ -237,19 +237,19 @@ public class CrossbowAura extends Module {
             FindItemResult weapon = findWeapon();
             if (weapon.found()) {
                 InvUtils.swap(weapon.slot(), true);
-                mainStack = mc.player.getMainHandStack();
+                mainStack = mc.player.getMainHandItem();
                 mainValid = isValidWeapon(mainStack.getItem());
             }
         }
         
-        Hand activeHand;
+        InteractionHand activeHand;
         ItemStack activeStack;
         
         if (mainValid) {
-            activeHand = Hand.MAIN_HAND;
+            activeHand = InteractionHand.MAIN_HAND;
             activeStack = mainStack;
         } else if (offValid) {
-            activeHand = Hand.OFF_HAND;
+            activeHand = InteractionHand.OFF_HAND;
             activeStack = offStack;
         } else {
             currentTarget = null;
@@ -257,20 +257,20 @@ public class CrossbowAura extends Module {
             return; 
         }
 
-        boolean shouldShoot = autoFire.get() || mc.options.useKey.isPressed();
+        boolean shouldShoot = autoFire.get() || mc.options.keyUse.isDown();
 
         if (currentTarget != null) {
             double dist = mc.player.distanceTo(currentTarget);
             float[] rots = solveBallistic(currentTarget, activeStack.getItem(), dist);
             
             // 记录当前目标速度，供下一tick计算加速度
-            Vec3d currentVel = new Vec3d(currentTarget.getX() - currentTarget.lastRenderX, currentTarget.getY() - currentTarget.lastRenderY, currentTarget.getZ() - currentTarget.lastRenderZ);
+            Vec3 currentVel = new Vec3(currentTarget.getX() - currentTarget.xOld, currentTarget.getY() - currentTarget.yOld, currentTarget.getZ() - currentTarget.zOld);
             prevVelocities.put(currentTarget.getId(), currentVel);
 
             if (rots != null) {
                 if (aimMode.get() == AimMode.Lock) {
-                    mc.player.setYaw(rots[0]);
-                    mc.player.setPitch(rots[1]);
+                    mc.player.setYRot(rots[0]);
+                    mc.player.setXRot(rots[1]);
                 }
 
                 if (shouldShoot || aimMode.get() == AimMode.Lock) {
@@ -281,9 +281,9 @@ public class CrossbowAura extends Module {
             }
         } else {
             prevVelocities.clear();
-            if (autoFire.get() && mc.options.useKey.isPressed()) {
-                mc.options.useKey.setPressed(false);
-                mc.interactionManager.stopUsingItem(mc.player);
+            if (autoFire.get() && mc.options.keyUse.isDown()) {
+                mc.options.keyUse.setDown(false);
+                mc.gameMode.releaseUsingItem(mc.player);
             }
         }
     }
@@ -297,7 +297,7 @@ public class CrossbowAura extends Module {
         }
 
         List<Entity> candidates = new ArrayList<>();
-        for (Entity entity : mc.world.getEntities()) {
+        for (Entity entity : mc.level.entitiesForRendering()) {
             if (isValid(entity)) {
                 candidates.add(entity);
             }
@@ -315,13 +315,13 @@ public class CrossbowAura extends Module {
         
         if (!entities.get().contains(entity.getType())) return false;
 
-        if (entity instanceof PlayerEntity player) {
+        if (entity instanceof Player player) {
             if (player.isCreative() && !targetCreative.get()) return false;
             if (!player.isCreative() && !player.isSpectator() && !targetSurvival.get() && !targetAdventure.get()) return false; 
-            GameMode gm = getGameMode(player);
-            if (gm == GameMode.SURVIVAL && !targetSurvival.get()) return false;
-            if (gm == GameMode.ADVENTURE && !targetAdventure.get()) return false;
-            if (gm == GameMode.SPECTATOR) return false;
+            GameType gm = getGameMode(player);
+            if (gm == GameType.SURVIVAL && !targetSurvival.get()) return false;
+            if (gm == GameType.ADVENTURE && !targetAdventure.get()) return false;
+            if (gm == GameType.SPECTATOR) return false;
 
             if (ignoreFriends.get() && !Friends.get().shouldAttack(player)) return false;
 
@@ -340,7 +340,7 @@ public class CrossbowAura extends Module {
             if (ignorePets.get() && isPet(entity)) return false;
         }
 
-        if (!mc.player.canSee(entity)) return false;
+        if (!mc.player.hasLineOfSight(entity)) return false;
         return true;
     }
     
@@ -351,10 +351,10 @@ public class CrossbowAura extends Module {
         };
     }
 
-    private void handleShooting(ItemStack stack, Hand hand, double distance) {
+    private void handleShooting(ItemStack stack, InteractionHand hand, double distance) {
         if (timer > 0) {
             timer--;
-            if (cbMode.get() == CrossbowMode.Native || autoFire.get()) mc.options.useKey.setPressed(false);
+            if (cbMode.get() == CrossbowMode.Native || autoFire.get()) mc.options.keyUse.setDown(false);
             return;
         }
 
@@ -363,81 +363,81 @@ public class CrossbowAura extends Module {
         else if (item instanceof BowItem) handleBow(hand, distance);
         else if (item == Items.TRIDENT) handleTrident(hand); // 新增三叉戟专门处理
         else {
-            mc.interactionManager.interactItem(mc.player, hand);
-            mc.player.swingHand(hand);
+            mc.gameMode.useItem(mc.player, hand);
+            mc.player.swing(hand);
             timer = delay.get();
         }
     }
 
-    private void handleCrossbow(ItemStack stack, Hand hand) {
+    private void handleCrossbow(ItemStack stack, InteractionHand hand) {
         switch (cbMode.get()) {
             case Native -> {
                 if (CrossbowItem.isCharged(stack)) {
-                    mc.interactionManager.interactItem(mc.player, hand);
-                    mc.player.swingHand(hand);
+                    mc.gameMode.useItem(mc.player, hand);
+                    mc.player.swing(hand);
                     timer = delay.get();
                 } else {
-                    mc.options.useKey.setPressed(true);
-                    if (!mc.player.isUsingItem()) mc.interactionManager.interactItem(mc.player, hand);
+                    mc.options.keyUse.setDown(true);
+                    if (!mc.player.isUsingItem()) mc.gameMode.useItem(mc.player, hand);
                 }
             }
             case Control -> {
                 if (CrossbowItem.isCharged(stack)) {
-                    mc.interactionManager.interactItem(mc.player, hand);
-                    mc.player.swingHand(hand);
+                    mc.gameMode.useItem(mc.player, hand);
+                    mc.player.swing(hand);
                     timer = delay.get(); return;
                 }
-                mc.options.useKey.setPressed(true);
-                if (!mc.player.isUsingItem()) { mc.interactionManager.interactItem(mc.player, hand); return; }
+                mc.options.keyUse.setDown(true);
+                if (!mc.player.isUsingItem()) { mc.gameMode.useItem(mc.player, hand); return; }
                 int time = getPullTime(stack) + tolerance.get();
-                if (mc.player.getItemUseTime() >= time) mc.interactionManager.stopUsingItem(mc.player);
+                if (mc.player.getTicksUsingItem() >= time) mc.gameMode.releaseUsingItem(mc.player);
             }
             case Packet -> {
                 if (CrossbowItem.isCharged(stack)) {
-                    mc.interactionManager.interactItem(mc.player, hand);
-                    mc.player.swingHand(hand);
+                    mc.gameMode.useItem(mc.player, hand);
+                    mc.player.swing(hand);
                     timer = delay.get();
                 }
                 if (!mc.player.isUsingItem()) {
-                    mc.interactionManager.interactItem(mc.player, hand);
-                    mc.options.useKey.setPressed(true); return;
+                    mc.gameMode.useItem(mc.player, hand);
+                    mc.options.keyUse.setDown(true); return;
                 }
-                mc.options.useKey.setPressed(true);
+                mc.options.keyUse.setDown(true);
                 int time = getPullTime(stack) + tolerance.get();
-                if (mc.player.getItemUseTime() >= time) mc.interactionManager.stopUsingItem(mc.player);
+                if (mc.player.getTicksUsingItem() >= time) mc.gameMode.releaseUsingItem(mc.player);
             }
         }
     }
 
-    private void handleBow(Hand hand, double distance) {
+    private void handleBow(InteractionHand hand, double distance) {
         if (!mc.player.isUsingItem()) {
-            mc.options.useKey.setPressed(true);
-            mc.interactionManager.interactItem(mc.player, hand); 
+            mc.options.keyUse.setDown(true);
+            mc.gameMode.useItem(mc.player, hand); 
             return;
         }
-        int useTicks = mc.player.getItemUseTime();
+        int useTicks = mc.player.getTicksUsingItem();
         int targetCharge = (distance < 10) ? 12 : 20;
         if (useTicks >= targetCharge) {
-            mc.interactionManager.stopUsingItem(mc.player); 
-            mc.options.useKey.setPressed(false);
+            mc.gameMode.releaseUsingItem(mc.player); 
+            mc.options.keyUse.setDown(false);
             timer = delay.get();
         }
     }
 
     // --- 新增：三叉戟专门处理逻辑 (模拟蓄力) ---
-    private void handleTrident(Hand hand) {
+    private void handleTrident(InteractionHand hand) {
         // 如果当前没有在使用物品，开始蓄力
         if (!mc.player.isUsingItem()) {
-            mc.options.useKey.setPressed(true);
-            mc.interactionManager.interactItem(mc.player, hand);
+            mc.options.keyUse.setDown(true);
+            mc.gameMode.useItem(mc.player, hand);
             return;
         }
 
         // 三叉戟需要至少 10 tick 才能丢出，我们使用 12 tick 以确保稳定性
-        int useTicks = mc.player.getItemUseTime();
+        int useTicks = mc.player.getTicksUsingItem();
         if (useTicks >= 12) {
-            mc.interactionManager.stopUsingItem(mc.player); // 释放按键，发射
-            mc.options.useKey.setPressed(false);
+            mc.gameMode.releaseUsingItem(mc.player); // 释放按键，发射
+            mc.options.keyUse.setDown(false);
             timer = delay.get();
         }
     }
@@ -452,21 +452,21 @@ public class CrossbowAura extends Module {
         else if (weapon == Items.TRIDENT) { v = 2.5; g = 0.05; }
         else if (weapon == Items.SNOWBALL || weapon == Items.EGG) { v = 1.5; g = 0.03; }
 
-        Vec3d playerPos = mc.player.getEyePos();
-        Vec3d targetPos = new net.minecraft.util.math.Vec3d(target.getX(), target.getY(), target.getZ()).add(0, target.getHeight() * 0.5, 0);
+        Vec3 playerPos = mc.player.getEyePosition();
+        Vec3 targetPos = new net.minecraft.world.phys.Vec3(target.getX(), target.getY(), target.getZ()).add(0, target.getBbHeight() * 0.5, 0);
         
         // 计算当前速度 (Velocity)
-        Vec3d targetVel = new Vec3d(target.getX() - target.lastRenderX, target.getY() - target.lastRenderY, target.getZ() - target.lastRenderZ);
+        Vec3 targetVel = new Vec3(target.getX() - target.xOld, target.getY() - target.yOld, target.getZ() - target.zOld);
         
         // 计算加速度 (Acceleration)
-        Vec3d targetAccel = Vec3d.ZERO;
+        Vec3 targetAccel = Vec3.ZERO;
         if (calculateAcceleration.get() && prevVelocities.containsKey(target.getId())) {
-            Vec3d lastVel = prevVelocities.get(target.getId());
+            Vec3 lastVel = prevVelocities.get(target.getId());
             // 加速度 = (当前速度 - 上一刻速度)
             targetAccel = targetVel.subtract(lastVel);
             
             // 限制加速度影响，防止瞬移造成的预判飞出天际
-            if (targetAccel.lengthSquared() > 1.0) targetAccel = Vec3d.ZERO; 
+            if (targetAccel.lengthSqr() > 1.0) targetAccel = Vec3.ZERO; 
         }
 
         if (predictMovement.get()) {
@@ -474,8 +474,8 @@ public class CrossbowAura extends Module {
             double t = d / v; 
             
             double pingTicks = 0;
-            if (pingCompensation.get() && mc.getNetworkHandler() != null && mc.player != null) {
-                int latency = mc.getNetworkHandler().getPlayerListEntry(mc.player.getUuid()).getLatency();
+            if (pingCompensation.get() && mc.getConnection() != null && mc.player != null) {
+                int latency = mc.getConnection().getPlayerInfo(mc.player.getUUID()).getLatency();
                 pingTicks = latency / 50.0; 
             }
 
@@ -487,24 +487,24 @@ public class CrossbowAura extends Module {
                 double timeSec = totalTime; // 时间因子
                 
                 // 公式：P_final = P_0 + (V * t) + (0.5 * A * t^2)
-                Vec3d velTerm = targetVel.multiply(timeSec);
-                Vec3d accelTerm = targetAccel.multiply(0.5 * timeSec * timeSec);
+                Vec3 velTerm = targetVel.scale(timeSec);
+                Vec3 accelTerm = targetAccel.scale(0.5 * timeSec * timeSec);
                 
-                Vec3d prediction = velTerm;
+                Vec3 prediction = velTerm;
                 if (calculateAcceleration.get()) {
                     prediction = prediction.add(accelTerm);
                 }
                 
-                Vec3d futurePos = targetPos.add(prediction.multiply(scale));
+                Vec3 futurePos = targetPos.add(prediction.scale(scale));
                 double newDist = playerPos.distanceTo(futurePos);
                 t = newDist / v;
             }
 
             double finalTime = t + pingTicks;
-            Vec3d velTerm = targetVel.multiply(finalTime);
-            Vec3d accelTerm = calculateAcceleration.get() ? targetAccel.multiply(0.5 * finalTime * finalTime) : Vec3d.ZERO;
+            Vec3 velTerm = targetVel.scale(finalTime);
+            Vec3 accelTerm = calculateAcceleration.get() ? targetAccel.scale(0.5 * finalTime * finalTime) : Vec3.ZERO;
             
-            Vec3d prediction = velTerm.add(accelTerm).multiply(scale);
+            Vec3 prediction = velTerm.add(accelTerm).scale(scale);
             targetPos = targetPos.add(prediction);
         }
         
@@ -532,9 +532,9 @@ public class CrossbowAura extends Module {
 
     private int getPullTime(ItemStack stack) {
         try {
-            var registry = mc.world.getRegistryManager().getOrThrow(RegistryKeys.ENCHANTMENT);
+            var registry = mc.level.registryAccess().lookupOrThrow(Registries.ENCHANTMENT);
             var quickChargeEntry = registry.getOrThrow(Enchantments.QUICK_CHARGE);
-            int level = EnchantmentHelper.getLevel(quickChargeEntry, stack);
+            int level = EnchantmentHelper.getItemEnchantmentLevel(quickChargeEntry, stack);
             return Math.max(0, 25 - 5 * level);
         } catch (Exception e) { return 25; }
     }
@@ -542,28 +542,28 @@ public class CrossbowAura extends Module {
     private FindItemResult findWeapon() { return InvUtils.find(item -> isValidWeapon(item.getItem())); }
     private boolean isValidWeapon(Item item) { return item == Items.SNOWBALL || item == Items.EGG || item == Items.TRIDENT || item instanceof BowItem || item instanceof CrossbowItem; }
     private boolean isPet(Entity e) {
-        if (e instanceof TameableEntity tameable && tameable.isTamed()) return true;
-        if (e instanceof AbstractHorseEntity horse && horse.isTame()) return true;
+        if (e instanceof TamableAnimal tameable && tameable.isTame()) return true;
+        if (e instanceof AbstractHorse horse && horse.isTamed()) return true;
         return false;
     }
-    private GameMode getGameMode(PlayerEntity player) {
-        if (mc.getNetworkHandler() == null) return GameMode.SURVIVAL;
-        var entry = mc.getNetworkHandler().getPlayerListEntry(player.getUuid());
-        return entry == null ? GameMode.SURVIVAL : entry.getGameMode();
+    private GameType getGameMode(Player player) {
+        if (mc.getConnection() == null) return GameType.SURVIVAL;
+        var entry = mc.getConnection().getPlayerInfo(player.getUUID());
+        return entry == null ? GameType.SURVIVAL : entry.getGameMode();
     }
 
     private Entity getEntityInCrosshair(double reachDistance) {
-        Vec3d cameraPos = mc.player.getCameraPosVec(1.0F);
-        Vec3d rotationVec = mc.player.getRotationVec(1.0F);
-        Vec3d endPos = cameraPos.add(rotationVec.multiply(reachDistance));
-        Box box = mc.player.getBoundingBox().stretch(rotationVec.multiply(reachDistance)).expand(1.0D, 1.0D, 1.0D);
+        Vec3 cameraPos = mc.player.getEyePosition(1.0F);
+        Vec3 rotationVec = mc.player.getViewVector(1.0F);
+        Vec3 endPos = cameraPos.add(rotationVec.scale(reachDistance));
+        AABB box = mc.player.getBoundingBox().expandTowards(rotationVec.scale(reachDistance)).inflate(1.0D, 1.0D, 1.0D);
 
-        EntityHitResult result = ProjectileUtil.raycast(
+        EntityHitResult result = ProjectileUtil.getEntityHitResult(
             mc.player,
             cameraPos,
             endPos,
             box,
-            (entity) -> !entity.isSpectator() && entity.canHit(),
+            (entity) -> !entity.isSpectator() && entity.isPickable(),
             reachDistance * reachDistance
         );
 
@@ -579,7 +579,7 @@ public class CrossbowAura extends Module {
             
             if (renderPredict.get() && lastPredictedPos != null) {
                 double size = 0.3;
-                Box pBox = new Box(
+                AABB pBox = new AABB(
                     lastPredictedPos.x - size, lastPredictedPos.y - size, lastPredictedPos.z - size,
                     lastPredictedPos.x + size, lastPredictedPos.y + size, lastPredictedPos.z + size
                 );

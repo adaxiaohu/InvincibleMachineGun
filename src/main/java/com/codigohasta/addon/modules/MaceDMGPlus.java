@@ -1,6 +1,6 @@
 package com.codigohasta.addon.modules;
 
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.phys.Vec3;
 
 import com.codigohasta.addon.AddonTemplate;
 import com.codigohasta.addon.mixin.InventoryAccessor;
@@ -8,8 +8,7 @@ import com.codigohasta.addon.utils.leaveshack.InventoryUtil;
 import meteordevelopment.meteorclient.events.packets.PacketEvent;
 import meteordevelopment.meteorclient.events.render.Render3DEvent;
 import meteordevelopment.meteorclient.events.world.TickEvent;
-import meteordevelopment.meteorclient.mixininterface.IPlayerInteractEntityC2SPacket;
-import meteordevelopment.meteorclient.mixininterface.IPlayerMoveC2SPacket;
+import meteordevelopment.meteorclient.mixininterface.IServerboundMovePlayerPacket;
 import meteordevelopment.meteorclient.renderer.ShapeMode;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.friends.Friends;
@@ -21,29 +20,29 @@ import meteordevelopment.meteorclient.utils.player.InvUtils;
 import meteordevelopment.meteorclient.utils.player.Rotations;
 import meteordevelopment.meteorclient.utils.render.color.SettingColor;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.block.Blocks;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.EntityType;
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.passive.TameableEntity;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.item.Items;
-import net.minecraft.network.packet.c2s.play.CloseHandledScreenC2SPacket;
-import net.minecraft.network.packet.c2s.play.HandSwingC2SPacket;
-import net.minecraft.screen.slot.SlotActionType;
-import net.minecraft.network.packet.c2s.play.PlayerInteractEntityC2SPacket;
-import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket;
-import net.minecraft.network.packet.c2s.play.UpdateSelectedSlotC2SPacket;
-import net.minecraft.network.packet.c2s.play.VehicleMoveC2SPacket;
-import net.minecraft.util.Hand;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.TamableAnimal;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.Items;
+import net.minecraft.network.protocol.game.ServerboundContainerClosePacket;
+import net.minecraft.network.protocol.game.ServerboundSwingPacket;
+import net.minecraft.world.inventory.ContainerInput;
+import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
+import net.minecraft.network.protocol.game.ServerboundSetCarriedItemPacket;
+import net.minecraft.network.protocol.game.ServerboundMoveVehiclePacket;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
+import net.minecraft.network.protocol.game.ServerboundAttackPacket;
 
 public class MaceDMGPlus extends Module {
     private final SettingGroup sgGeneral = settings.getDefaultGroup();
@@ -230,7 +229,7 @@ public class MaceDMGPlus extends Module {
     private int silentSwapPrevSlot = -1;
     private final List<Entity> targets = new ArrayList<>();
     private Entity currentTarget;
-    private Vec3d previouspos;
+    private Vec3 previouspos;
     private boolean isSendingTotem = false;
 
     public MaceDMGPlus() {
@@ -261,14 +260,14 @@ public class MaceDMGPlus extends Module {
     // --- 自动光环逻辑 ---
     @EventHandler
     private void onTick(TickEvent.Pre event) {
-        if (mc.player == null || mc.world == null) return;
+        if (mc.player == null || mc.level == null) return;
 
         if (timer > 0) {
             timer--;
             return;
         }
 
-        boolean holdingMace = mc.player.getMainHandStack().getItem().toString().contains("mace");
+        boolean holdingMace = mc.player.getMainHandItem().getItem().toString().contains("mace");
         if (autoSwitch.get()) {
             if (!holdingMace && !checkAndSwapWeapon()) return;
         } else if (!holdingMace) {
@@ -298,8 +297,8 @@ public class MaceDMGPlus extends Module {
             }
         } else {
             performMaceExploit(currentTarget);
-            mc.getNetworkHandler().sendPacket(PlayerInteractEntityC2SPacket.attack(currentTarget, mc.player.isSneaking()));
-            mc.getNetworkHandler().sendPacket(new HandSwingC2SPacket(Hand.MAIN_HAND));
+            mc.getConnection().send(new ServerboundAttackPacket(currentTarget.getId()));
+            mc.getConnection().send(new ServerboundSwingPacket(InteractionHand.MAIN_HAND));
         }
         swapBackWeapon();
 
@@ -310,14 +309,13 @@ public class MaceDMGPlus extends Module {
     @EventHandler
     private void onSendPacket(PacketEvent.Send event) {
         if (mc.player == null) return;
-        if (mc.player.getMainHandStack().getItem() != Items.MACE) return;
+        if (mc.player.getMainHandItem().getItem() != Items.MACE) return;
         
-        if (!(event.packet instanceof PlayerInteractEntityC2SPacket)) return;
-        
-        // 绕过 1.21.4 private 枚举检查
-        if (!String.valueOf(((IPlayerInteractEntityC2SPacket) event.packet).meteor$getType()).equals("ATTACK")) return;
+        // 26.1.2: 攻击是独立的 ServerboundAttackPacket，不再是 interact 的一种 action
+        if (!(event.packet instanceof ServerboundAttackPacket attackPacket)) return;
+        if (mc.level == null) return;
 
-        Entity target = ((IPlayerInteractEntityC2SPacket) event.packet).meteor$getEntity();
+        Entity target = mc.level.getEntity(attackPacket.entityId());
         if (target == null || !entityCheck(target)) return;
 
         if (isSendingTotem) return;
@@ -351,8 +349,8 @@ public class MaceDMGPlus extends Module {
             }
 
             sendExploitPackets(height);
-            mc.getNetworkHandler().sendPacket(PlayerInteractEntityC2SPacket.attack(target, mc.player.isSneaking()));
-            mc.getNetworkHandler().sendPacket(new HandSwingC2SPacket(Hand.MAIN_HAND));
+            mc.getConnection().send(new ServerboundAttackPacket(target.getId()));
+            mc.getConnection().send(new ServerboundSwingPacket(InteractionHand.MAIN_HAND));
         }
     }
 
@@ -364,8 +362,8 @@ public class MaceDMGPlus extends Module {
         if (airCheck.get()) {
             // [Safe Mode] 检查头顶空气，防止反作弊回弹
             blocks = getMaxHeightAbovePlayer();
-            BlockPos isopenair1 = mc.player.getBlockPos().add(0, blocks, 0);
-            BlockPos isopenair2 = mc.player.getBlockPos().add(0, blocks + 1, 0);
+            BlockPos isopenair1 = mc.player.blockPosition().offset(0, blocks, 0);
+            BlockPos isopenair2 = mc.player.blockPosition().offset(0, blocks + 1, 0);
             if (!isSafeBlock(isopenair1) || !isSafeBlock(isopenair2)) return; // 没空气就取消
         } else {
             // [Rage Mode] 暴力模式，直接使用设定值，无视地形
@@ -379,37 +377,37 @@ public class MaceDMGPlus extends Module {
     }
 
     private void sendExploitPackets(int blocks) {
-        previouspos = new Vec3d(mc.player.getX(), mc.player.getY(), mc.player.getZ());
+        previouspos = new Vec3(mc.player.getX(), mc.player.getY(), mc.player.getZ());
 
         int packetsRequired = (int) Math.ceil(Math.abs(blocks / 10.0));
         if (packetsRequired > 20) packetsRequired = 1;
 
         // 发包逻辑
         if (blocks <= 22) {
-            if (mc.player.hasVehicle()) {
+            if (mc.player.isPassenger()) {
                 for (int i = 0; i < 4; i++) {
-                    mc.player.networkHandler.sendPacket(VehicleMoveC2SPacket.fromVehicle(mc.player.getVehicle()));
+                    mc.player.connection.send(ServerboundMoveVehiclePacket.fromEntity(mc.player.getVehicle()));
                 }
                 double maxHeight = Math.min(mc.player.getVehicle().getY() + 22, mc.player.getVehicle().getY() + blocks);
                 doVehicleTeleports(maxHeight, blocks);
             } else {
                 // 关键点：发送4个OnGroundOnly(false)包，欺骗服务器状态而不改变位置，从而在3格空间生效
                 for (int i = 0; i < 4; i++) {
-                    mc.player.networkHandler.sendPacket(new PlayerMoveC2SPacket.OnGroundOnly(false, mc.player.horizontalCollision));
+                    mc.player.connection.send(new ServerboundMovePlayerPacket.StatusOnly(false, mc.player.horizontalCollision));
                 }
                 double heightY = Math.min(mc.player.getY() + 22, mc.player.getY() + blocks);
                 doPlayerTeleports(heightY);
             }
         } else {
-            if (mc.player.hasVehicle()) {
+            if (mc.player.isPassenger()) {
                 for (int packetNumber = 0; packetNumber < (packetsRequired - 1); packetNumber++) {
-                    mc.player.networkHandler.sendPacket(VehicleMoveC2SPacket.fromVehicle(mc.player.getVehicle()));
+                    mc.player.connection.send(ServerboundMoveVehiclePacket.fromEntity(mc.player.getVehicle()));
                 }
                 double maxHeight = mc.player.getVehicle().getY() + blocks;
                 doVehicleTeleports(maxHeight, blocks);
             } else {
                 for (int i = 0; i < packetsRequired - 1; i++) {
-                    mc.player.networkHandler.sendPacket(new PlayerMoveC2SPacket.OnGroundOnly(false, mc.player.horizontalCollision));
+                    mc.player.connection.send(new ServerboundMovePlayerPacket.StatusOnly(false, mc.player.horizontalCollision));
                 }
                 double heightY = mc.player.getY() + blocks;
                 doPlayerTeleports(heightY);
@@ -418,41 +416,41 @@ public class MaceDMGPlus extends Module {
     }
 
     private void doPlayerTeleports(double height) {
-        PlayerMoveC2SPacket movepacket = new PlayerMoveC2SPacket.PositionAndOnGround(
+        ServerboundMovePlayerPacket movepacket = new ServerboundMovePlayerPacket.Pos(
                 mc.player.getX(), height, mc.player.getZ(), false, mc.player.horizontalCollision);
                 
-        PlayerMoveC2SPacket homepacket = new PlayerMoveC2SPacket.PositionAndOnGround(
-                previouspos.getX(), previouspos.getY(), previouspos.getZ(),
+        ServerboundMovePlayerPacket homepacket = new ServerboundMovePlayerPacket.Pos(
+                previouspos.x(), previouspos.y(), previouspos.z(),
                 false, mc.player.horizontalCollision);
                 
         if (preventDeath.get()) {
-            homepacket = new PlayerMoveC2SPacket.PositionAndOnGround(
-                    previouspos.getX(), previouspos.getY() + 0.25, previouspos.getZ(),
+            homepacket = new ServerboundMovePlayerPacket.Pos(
+                    previouspos.x(), previouspos.y() + 0.25, previouspos.z(),
                     false, mc.player.horizontalCollision);
         }
         
-        ((IPlayerMoveC2SPacket) homepacket).meteor$setTag(1337);
-        ((IPlayerMoveC2SPacket) movepacket).meteor$setTag(1337);
+        ((IServerboundMovePlayerPacket) homepacket).meteor$setTag(1337);
+        ((IServerboundMovePlayerPacket) movepacket).meteor$setTag(1337);
         
-        mc.player.networkHandler.sendPacket(movepacket);
-        mc.player.networkHandler.sendPacket(homepacket);
+        mc.player.connection.send(movepacket);
+        mc.player.connection.send(homepacket);
         
         if (preventDeath.get()) {
-            mc.player.setVelocity(mc.player.getVelocity().x, 0.1, mc.player.getVelocity().z);
+            mc.player.setDeltaMovement(mc.player.getDeltaMovement().x, 0.1, mc.player.getDeltaMovement().z);
             mc.player.fallDistance = 0;
         }
     }
 
     private void doVehicleTeleports(double height, int blocks) {
         if (mc.player.getVehicle() == null) return;
-        mc.player.getVehicle().setPosition(mc.player.getVehicle().getX(), height + blocks, mc.player.getVehicle().getZ());
-        mc.player.networkHandler.sendPacket(VehicleMoveC2SPacket.fromVehicle(mc.player.getVehicle()));
-        mc.player.getVehicle().setPosition(previouspos);
-        mc.player.networkHandler.sendPacket(VehicleMoveC2SPacket.fromVehicle(mc.player.getVehicle()));
+        mc.player.getVehicle().setPos(mc.player.getVehicle().getX(), height + blocks, mc.player.getVehicle().getZ());
+        mc.player.connection.send(ServerboundMoveVehiclePacket.fromEntity(mc.player.getVehicle()));
+        mc.player.getVehicle().setPos(previouspos);
+        mc.player.connection.send(ServerboundMoveVehiclePacket.fromEntity(mc.player.getVehicle()));
     }
 
     private boolean checkAndSwapWeapon() {
-        if (mc.player.getMainHandStack().getItem().toString().contains("mace")) return true;
+        if (mc.player.getMainHandItem().getItem().toString().contains("mace")) return true;
 
         if (silentSwap.get()) {
             int slot = InventoryUtil.findItemInventorySlot(Items.MACE);
@@ -462,7 +460,7 @@ public class MaceDMGPlus extends Module {
                 if (slot >= 36) {
                     InventoryUtil.switchToSlot(slot - 36);
                 } else {
-                    mc.interactionManager.clickSlot(mc.player.currentScreenHandler.syncId, slot, 0, SlotActionType.SWAP, mc.player);
+                    mc.gameMode.handleContainerInput(mc.player.containerMenu.containerId, slot, 0, ContainerInput.SWAP, mc.player);
                     InventoryUtil.switchToSlot(0);
                 }
                 return true;
@@ -483,29 +481,29 @@ public class MaceDMGPlus extends Module {
         if (silentSwapSlot >= 36) {
             InventoryUtil.switchToSlot(silentSwapPrevSlot);
         } else {
-            mc.interactionManager.clickSlot(mc.player.currentScreenHandler.syncId, silentSwapSlot, 0, SlotActionType.SWAP, mc.player);
+            mc.gameMode.handleContainerInput(mc.player.containerMenu.containerId, silentSwapSlot, 0, ContainerInput.SWAP, mc.player);
             InventoryUtil.switchToSlot(silentSwapPrevSlot);
-            mc.player.networkHandler.sendPacket(new CloseHandledScreenC2SPacket(mc.player.currentScreenHandler.syncId));
+            mc.player.connection.send(new ServerboundContainerClosePacket(mc.player.containerMenu.containerId));
         }
         silentSwapSlot = -1;
         silentSwapPrevSlot = -1;
     }
 
     private int getMaxHeightAbovePlayer() {
-        BlockPos playerPos = mc.player.getBlockPos();
+        BlockPos playerPos = mc.player.blockPosition();
         int maxHeight = playerPos.getY() + (maxPower.get() ? 170 : fallHeight.get());
         for (int i = maxHeight; i > playerPos.getY(); i--) {
             BlockPos up1 = new BlockPos(playerPos.getX(), i, playerPos.getZ());
-            BlockPos up2 = up1.up(1);
+            BlockPos up2 = up1.above(1);
             if (isSafeBlock(up1) && isSafeBlock(up2)) return i - playerPos.getY();
         }
         return 0;
     }
 
     private boolean isSafeBlock(BlockPos pos) {
-        return mc.world.getBlockState(pos).isReplaceable()
-                && mc.world.getFluidState(pos).isEmpty()
-                && !mc.world.getBlockState(pos).isOf(Blocks.POWDER_SNOW);
+        return mc.level.getBlockState(pos).canBeReplaced()
+                && mc.level.getFluidState(pos).isEmpty()
+                && !mc.level.getBlockState(pos).is(Blocks.POWDER_SNOW);
     }
 
     // --- 实体过滤检查 (含黑白名单) ---
@@ -513,10 +511,10 @@ public class MaceDMGPlus extends Module {
         if (!(entity instanceof LivingEntity) || !entity.isAlive()) return false;
         if (entity == mc.player) return false;
         if (mc.player.distanceTo(entity) > range.get()) return false;
-        if (!throughWalls.get() && !mc.player.canSee(entity)) return false;
+        if (!throughWalls.get() && !mc.player.hasLineOfSight(entity)) return false;
 
         // 玩家检查 + 名单逻辑
-        if (entity instanceof PlayerEntity p) {
+        if (entity instanceof Player p) {
             if (!players.get()) return false;
             if (p.isCreative()) return false;
             
@@ -543,7 +541,7 @@ public class MaceDMGPlus extends Module {
         if (ignoreNamed.get() && entity.hasCustomName()) return false;
         
         // 忽略宠物
-        if (ignoreTamed.get() && entity instanceof TameableEntity t && t.isTamed()) return false;
+        if (ignoreTamed.get() && entity instanceof TamableAnimal t && t.isTame()) return false;
 
         // 检查生物类型是否在允许列表中
         return entities.get().contains(entity.getType());

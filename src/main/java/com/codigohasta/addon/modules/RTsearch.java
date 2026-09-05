@@ -1,6 +1,6 @@
 package com.codigohasta.addon.modules;
 
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.phys.Vec3;
 
 import com.codigohasta.addon.AddonTemplate;
 import com.codigohasta.addon.modules.RTsearch.RTPMode;
@@ -11,12 +11,12 @@ import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.player.ChatUtils;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.network.packet.s2c.play.PlayerPositionLookS2CPacket;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.world.biome.Biome;
-import net.minecraft.registry.RegistryKeys;
-import net.minecraft.util.Identifier;
-import net.minecraft.text.Text;
+import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.biome.Biome;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.Identifier;
+import net.minecraft.network.chat.Component;
 import meteordevelopment.meteorclient.gui.GuiTheme;
 import meteordevelopment.meteorclient.gui.widgets.WWidget;
 import meteordevelopment.meteorclient.gui.widgets.WLabel;
@@ -299,7 +299,7 @@ public class RTsearch extends Module {
 
     @EventHandler
     private void onTick(TickEvent.Pre event) {
-        if (mc.player == null || mc.world == null) return;
+        if (mc.player == null || mc.level == null) return;
 
         if (rtpMode.get() == RTPMode.COORDINATES) {
             handleCoordinatesMode();
@@ -339,8 +339,8 @@ public class RTsearch extends Module {
 
             if (disconnectOnReach.get()) {
                 info("Disconnecting...");
-                if (mc.world != null) {
-                    mc.world.disconnect(net.minecraft.text.Text.of("Disconnected"));
+                if (mc.level != null) {
+                    mc.level.disconnect(net.minecraft.network.chat.Component.literal("Disconnected"));
                 }
             }
 
@@ -361,7 +361,7 @@ public class RTsearch extends Module {
                 sendWebhook("Biome Found!",
                     String.format("Found %s biome using /rt!\\nAttempts: %d\\nPosition: %d, %d, %d",
                         targetBiome.get().getDisplayName(), rtpAttempts,
-                        mc.player.getBlockPos().getX(), mc.player.getBlockPos().getY(), mc.player.getBlockPos().getZ()),
+                        mc.player.blockPosition().getX(), mc.player.blockPosition().getY(), mc.player.blockPosition().getZ()),
                     0x00FF00);
             }
 
@@ -381,18 +381,18 @@ public class RTsearch extends Module {
     }
 
     private boolean isInTargetBiome() {
-        if (mc.world == null || mc.player == null) return false;
+        if (mc.level == null || mc.player == null) return false;
 
-        BlockPos pos = mc.player.getBlockPos();
+        BlockPos pos = mc.player.blockPosition();
         String biomeId = getBiomeIdAt(pos);
         if (biomeId == null) return false;
         return biomeId.equals(targetBiome.get().getId());
     }
 
     private String getCurrentBiome() {
-        if (mc.world == null || mc.player == null) return "Unknown";
+        if (mc.level == null || mc.player == null) return "Unknown";
 
-        BlockPos pos = mc.player.getBlockPos();
+        BlockPos pos = mc.player.blockPosition();
         String biomeId = getBiomeIdAt(pos);
         if (biomeId == null) return "Unknown";
 
@@ -403,10 +403,10 @@ public class RTsearch extends Module {
     }
 
     private String getBiomeIdAt(BlockPos pos) {
-        if (mc.world == null) return null;
-        Biome biome = mc.world.getBiome(pos).value();
+        if (mc.level == null) return null;
+        Biome biome = mc.level.getBiome(pos).value();
         if (biome == null) return null;
-        Identifier id = mc.world.getRegistryManager().getOrThrow(RegistryKeys.BIOME).getId(biome);
+        Identifier id = mc.level.registryAccess().lookupOrThrow(Registries.BIOME).getKey(biome);
         return id != null ? id.toString() : null;
     }
 
@@ -428,28 +428,28 @@ public class RTsearch extends Module {
     private void disconnectWithMessage(String message) {
         try {
             if (mc != null) {
-                if (mc.getNetworkHandler() != null && mc.getNetworkHandler().getConnection() != null) {
-                    mc.getNetworkHandler().getConnection().disconnect(Text.literal(message));
+                if (mc.getConnection() != null && mc.getConnection().getConnection() != null) {
+                    mc.getConnection().getConnection().disconnect(Component.literal(message));
                     return;
                 }
-                if (mc.player != null && mc.player.networkHandler != null && mc.player.networkHandler.getConnection() != null) {
-                    mc.player.networkHandler.getConnection().disconnect(Text.literal(message));
+                if (mc.player != null && mc.player.connection != null && mc.player.connection.getConnection() != null) {
+                    mc.player.connection.getConnection().disconnect(Component.literal(message));
                     return;
                 }
-                if (mc.world != null) {
-                    mc.world.disconnect(net.minecraft.text.Text.of("Disconnected"));
+                if (mc.level != null) {
+                    mc.level.disconnect(net.minecraft.network.chat.Component.literal("Disconnected"));
                 }
             }
         } catch (Exception ignored) {
-            if (mc != null && mc.world != null) mc.world.disconnect(net.minecraft.text.Text.of("Disconnected"));
+            if (mc != null && mc.level != null) mc.level.disconnect(net.minecraft.network.chat.Component.literal("Disconnected"));
         }
     }
 
     @EventHandler
     private void onPacketReceive(PacketEvent.Receive event) {
-        if (event.packet instanceof PlayerPositionLookS2CPacket && mc.player != null) {
+        if (event.packet instanceof ClientboundPlayerPositionPacket && mc.player != null) {
             isRtping = false;
-            BlockPos currentPos = mc.player.getBlockPos();
+            BlockPos currentPos = mc.player.blockPosition();
 
             if (lastRtpPos == null || !currentPos.equals(lastRtpPos)) {
                 rtpAttempts++;
@@ -483,8 +483,8 @@ public class RTsearch extends Module {
         }
 
         // 优先使用指令包发送
-        if (mc.getNetworkHandler() != null) {
-            mc.getNetworkHandler().sendChatCommand(cmd);
+        if (mc.getConnection() != null) {
+            mc.getConnection().sendCommand(cmd);
         } else {
             ChatUtils.sendPlayerMsg("/" + cmd);
         }
@@ -508,7 +508,7 @@ public class RTsearch extends Module {
     private double getCurrentDistance() {
         if (mc.player == null) return Double.MAX_VALUE;
 
-        BlockPos pos = mc.player.getBlockPos();
+        BlockPos pos = mc.player.blockPosition();
         double dx = pos.getX() - targetX.get();
         double dz = pos.getZ() - targetZ.get();
 
@@ -544,8 +544,8 @@ public class RTsearch extends Module {
 
         CompletableFuture.runAsync(() -> {
             try {
-                String serverInfo = mc.getCurrentServerEntry() != null ?
-                    mc.getCurrentServerEntry().address : "Unknown Server";
+                String serverInfo = mc.getCurrentServer() != null ?
+                    mc.getCurrentServer().ip : "Unknown Server";
 
                 String messageContent = "";
                 if (selfPing.get() && !discordId.get().trim().isEmpty()) {

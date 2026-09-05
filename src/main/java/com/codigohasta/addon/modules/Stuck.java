@@ -4,15 +4,15 @@ import com.codigohasta.addon.AddonTemplate;
 import meteordevelopment.meteorclient.events.entity.player.PlayerMoveEvent;
 import meteordevelopment.meteorclient.events.packets.PacketEvent;
 import meteordevelopment.meteorclient.events.world.TickEvent;
-import meteordevelopment.meteorclient.mixininterface.IVec3d;
+import meteordevelopment.meteorclient.mixininterface.IVec3;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket;
-import net.minecraft.network.packet.s2c.play.EntityVelocityUpdateS2CPacket;
-import net.minecraft.network.packet.s2c.play.PlayerPositionLookS2CPacket;
-import net.minecraft.util.PlayerInput;
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
+import net.minecraft.network.protocol.game.ClientboundSetEntityMotionPacket;
+import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket;
+import net.minecraft.world.entity.player.Input;
+import net.minecraft.world.phys.Vec3;
 
 import java.lang.reflect.Field;
 
@@ -67,8 +67,8 @@ public class Stuck extends Module {
     @Override
     public void onActivate() {
         if (mc.player != null) {
-            lastYaw = mc.player.getYaw();
-            lastPitch = mc.player.getPitch();
+            lastYaw = mc.player.getYRot();
+            lastPitch = mc.player.getXRot();
         }
         bypassPacket = false;
         cycleTick = 0;
@@ -78,12 +78,12 @@ public class Stuck extends Module {
     @Override
     public void onDeactivate() {
         // Epsilon: 在空中关闭时发送 +1337 传送包，服务端接受大偏移并覆盖模拟
-        if (mode.get() == Mode.NoPacket && mc.player != null && !mc.player.isOnGround()) {
+        if (mode.get() == Mode.NoPacket && mc.player != null && !mc.player.onGround()) {
             bypassPacket = true;
-            mc.player.networkHandler.sendPacket(new PlayerMoveC2SPacket.Full(
+            mc.player.connection.send(new ServerboundMovePlayerPacket.PosRot(
                 mc.player.getX() + 1337, mc.player.getY(), mc.player.getZ() + 1337,
-                mc.player.getYaw() + 0.01f, mc.player.getPitch(),
-                mc.player.isOnGround(), mc.player.horizontalCollision
+                mc.player.getYRot() + 0.01f, mc.player.getXRot(),
+                mc.player.onGround(), mc.player.horizontalCollision
             ));
             bypassPacket = false;
         }
@@ -96,7 +96,7 @@ public class Stuck extends Module {
 
     private void initReflection() {
         try {
-            for (Field f : EntityVelocityUpdateS2CPacket.class.getDeclaredFields()) {
+            for (Field f : ClientboundSetEntityMotionPacket.class.getDeclaredFields()) {
                 f.setAccessible(true);
                 if (f.getType() == int.class || f.getType() == Integer.TYPE) {
                     velocityEntityIdField = f;
@@ -114,8 +114,8 @@ public class Stuck extends Module {
 
     private void zeroInput() {
         if (mc.player == null) return;
-        // PlayerInput 是 record，替换整个对象归零所有输入
-        mc.player.input.playerInput = new PlayerInput(false, false, false, false, false, false, false);
+        // Input 是 record，替换整个对象归零所有输入
+        mc.player.input.keyPresses = new Input(false, false, false, false, false, false, false);
     }
 
     // ========== Tick ==========
@@ -130,13 +130,13 @@ public class Stuck extends Module {
         // NoPacket: 发送旋转包（等价 Epsilon ClickEvent）
         // 通过 bypassPacket 绕过取消，保持连接存活
         if (mode.get() == Mode.NoPacket) {
-            float yaw = mc.player.getYaw();
-            float pitch = mc.player.getPitch();
+            float yaw = mc.player.getYRot();
+            float pitch = mc.player.getXRot();
 
             if (yaw != lastYaw || pitch != lastPitch) {
                 bypassPacket = true;
-                mc.player.networkHandler.sendPacket(new PlayerMoveC2SPacket.LookAndOnGround(
-                    yaw, pitch, mc.player.isOnGround(), mc.player.horizontalCollision));
+                mc.player.connection.send(new ServerboundMovePlayerPacket.Rot(
+                    yaw, pitch, mc.player.onGround(), mc.player.horizontalCollision));
                 bypassPacket = false;
             }
 
@@ -151,8 +151,8 @@ public class Stuck extends Module {
     private void onPlayerMove(PlayerMoveEvent event) {
         if (mode.get() != Mode.CancelMove) return;
         if (shouldFreeze()) {
-            ((IVec3d) event.movement).meteor$set(0, 0, 0);
-            mc.player.setVelocity(Vec3d.ZERO);
+            ((IVec3) event.movement).meteor$set(0, 0, 0);
+            mc.player.setDeltaMovement(Vec3.ZERO);
         }
     }
 
@@ -164,12 +164,12 @@ public class Stuck extends Module {
 
         if (mode.get() == Mode.NoPacket) {
             // 取消所有移动包 — GrimAC 收不到位置数据就无法运行 Simulation 检查
-            if (event.packet instanceof PlayerMoveC2SPacket) {
+            if (event.packet instanceof ServerboundMovePlayerPacket) {
                 event.cancel();
             }
 
             // 取消服务端速度同步包，防止被推走
-            if (event.packet instanceof EntityVelocityUpdateS2CPacket packet) {
+            if (event.packet instanceof ClientboundSetEntityMotionPacket packet) {
                 try {
                     if (velocityEntityIdField != null && velocityEntityIdField.getInt(packet) == mc.player.getId()) {
                         event.cancel();
@@ -183,7 +183,7 @@ public class Stuck extends Module {
 
     @EventHandler
     private void onPacketReceive(PacketEvent.Receive event) {
-        if (event.packet instanceof PlayerPositionLookS2CPacket) {
+        if (event.packet instanceof ClientboundPlayerPositionPacket) {
             toggle();
             sendToggledMsg();
         }

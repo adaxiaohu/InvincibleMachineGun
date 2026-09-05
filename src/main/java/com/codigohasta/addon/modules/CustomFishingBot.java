@@ -6,14 +6,14 @@ import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.entity.projectile.FishingBobberEntity;
-import net.minecraft.item.Items;
-import net.minecraft.network.packet.Packet;
-import net.minecraft.network.packet.s2c.play.EntityStatusS2CPacket;
-import net.minecraft.network.packet.s2c.play.EntityVelocityUpdateS2CPacket;
-import net.minecraft.text.Text;
-import net.minecraft.util.Hand;
+import net.minecraft.client.Minecraft;
+import net.minecraft.world.entity.projectile.FishingHook;
+import net.minecraft.world.item.Items;
+import net.minecraft.network.protocol.Packet;
+import net.minecraft.network.protocol.game.ClientboundEntityEventPacket;
+import net.minecraft.network.protocol.game.ClientboundSetEntityMotionPacket;
+import net.minecraft.network.chat.Component;
+import net.minecraft.world.InteractionHand;
 import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -35,7 +35,7 @@ import java.util.Set;
  */
 public class CustomFishingBot extends Module {
 
-    private static final MinecraftClient mc = MinecraftClient.getInstance();
+    private static final Minecraft mc = Minecraft.getInstance();
 
     // ================================================================
     //  字体字符常量（来自 Resource Pack for games）
@@ -242,12 +242,12 @@ public class CustomFishingBot extends Module {
         // 注意：在 1.21+，TitleS2CPacket 同时包含 title 和 subtitle
         // 必须二者都提取，不能 return 提前退出！
         boolean hasTitle = false, hasSub = false;
-        Text titleText = tryExtractTitle(packet, cn, true);
+        Component titleText = tryExtractTitle(packet, cn, true);
         if (titleText != null) {
             currentTitle = titleText.getString();
             hasTitle = true;
         }
-        Text subText = tryExtractTitle(packet, cn, false);
+        Component subText = tryExtractTitle(packet, cn, false);
         if (subText != null) {
             currentSubtitle = subText.getString();
             hasSub = true;
@@ -313,7 +313,7 @@ public class CustomFishingBot extends Module {
             double pz = (double) getZ.invoke(packet);
 
             // 检查浮标位置
-            FishingBobberEntity bobber = mc.player.fishHook;
+            FishingHook bobber = mc.player.fishing;
             if (bobber == null) return;
             double bx = bobber.getX(), by = bobber.getY(), bz = bobber.getZ();
 
@@ -356,7 +356,7 @@ public class CustomFishingBot extends Module {
             double sy = ((Number) yRaw).doubleValue() / 8.0;
             double sz = ((Number) zRaw).doubleValue() / 8.0;
 
-            FishingBobberEntity bobber = mc.player.fishHook;
+            FishingHook bobber = mc.player.fishing;
             if (bobber == null) return;
             double bx = bobber.getX(), by = bobber.getY(), bz = bobber.getZ();
             double dist = Math.sqrt(
@@ -376,22 +376,22 @@ public class CustomFishingBot extends Module {
     }
 
     @SuppressWarnings("SameParameterValue")
-    private Text tryExtractTitle(Packet<?> packet, String cn, boolean isTitle) {
+    private Component tryExtractTitle(Packet<?> packet, String cn, boolean isTitle) {
         try {
             String target = isTitle ? "SetTitle" : "SetSubtitle";
             if (cn.contains(target)) {
                 Method m = packet.getClass().getMethod("getText");
-                return (Text) m.invoke(packet);
+                return (Component) m.invoke(packet);
             }
             if ("TitleS2CPacket".equals(cn)) {
                 String mn = isTitle ? "getTitle" : "getSubtitle";
-                try { Method m = packet.getClass().getMethod(mn); return (Text) m.invoke(packet); }
+                try { Method m = packet.getClass().getMethod(mn); return (Component) m.invoke(packet); }
                 catch (NoSuchMethodException ignored) {}
             }
             if (cn.contains("Title") && !cn.contains("Animation") && !cn.contains("Clear") && !cn.contains("Time")) {
                 if ((isTitle && !cn.contains("Subtitle")) || (!isTitle && cn.contains("Subtitle"))) {
                     Method m = packet.getClass().getMethod("getText");
-                    return (Text) m.invoke(packet);
+                    return (Component) m.invoke(packet);
                 }
             }
         } catch (Exception ignored) {}
@@ -548,7 +548,7 @@ public class CustomFishingBot extends Module {
 
     // ---- v4：浮标Y轴跟踪 + 虚空检测 ----
     private void trackBobberY() {
-        if (mc.player == null || mc.player.fishHook == null || mc.world == null) {
+        if (mc.player == null || mc.player.fishing == null || mc.level == null) {
             bobberLastY = Double.NaN;
             bobberDropTicks = 0;
             bobberInVoid = false;
@@ -556,8 +556,8 @@ public class CustomFishingBot extends Module {
         }
         if (fishingState != FishingState.WAITING) return;
 
-        double currentY = mc.player.fishHook.getY();
-        int bottomY = mc.world.getBottomY();
+        double currentY = mc.player.fishing.getY();
+        int bottomY = mc.level.getMinY();
 
         // 检测是否在虚空模式（浮标 Y <= 世界最低高度）
         boolean wasInVoid = bobberInVoid;
@@ -607,14 +607,14 @@ public class CustomFishingBot extends Module {
 
             case CASTING -> {
                 castTimer++;
-                FishingBobberEntity bobber = mc.player.fishHook;
+                FishingHook bobber = mc.player.fishing;
                 if (bobber != null) {
                     bobberEntityId = bobber.getId();
                     fishingState = FishingState.WAITING;
                     waitTimer = 0;
                     bobberLastY = bobber.getY();
                     // 检测是否虚空钓鱼
-                    if (mc.world != null && bobber.getY() <= mc.world.getBottomY() + 1) {
+                    if (mc.level != null && bobber.getY() <= mc.level.getMinY() + 1) {
                         bobberInVoid = true;
                         if (verboseLog.get()) info("§5虚空钓鱼模式 等待咬钩...");
                     } else {
@@ -628,11 +628,11 @@ public class CustomFishingBot extends Module {
 
             case WAITING -> {
                 waitTimer++;
-                if (mc.player.fishHook == null) {
+                if (mc.player.fishing == null) {
                     if (waitTimer > 20) fishingState = FishingState.COOLDOWN;
                     break;
                 }
-                bobberEntityId = mc.player.fishHook.getId();
+                bobberEntityId = mc.player.fishing.getId();
 
                 // v4：三重咬钩检测聚合
                 if (bobberGoingDown) {
@@ -653,7 +653,7 @@ public class CustomFishingBot extends Module {
 
             case BITE -> {
                 stateTimer++;
-                if (mc.player.fishHook == null && currentGame == GameType.NONE) {
+                if (mc.player.fishing == null && currentGame == GameType.NONE) {
                     if (stateTimer > 5) {
                         fishingState = FishingState.COOLDOWN;
                         cooldownTimer = 0;
@@ -684,8 +684,8 @@ public class CustomFishingBot extends Module {
 
     private boolean holdingFishingRod() {
         if (mc.player == null) return false;
-        return mc.player.getMainHandStack().isOf(Items.FISHING_ROD)
-            || mc.player.getOffHandStack().isOf(Items.FISHING_ROD);
+        return mc.player.getMainHandItem().is(Items.FISHING_ROD)
+            || mc.player.getOffhandItem().is(Items.FISHING_ROD);
     }
 
     // ================================================================
@@ -711,7 +711,7 @@ public class CustomFishingBot extends Module {
                 switch (tickCounter % 4) {
                     case 0 -> rightClick();
                     case 1 -> leftClick();
-                    case 2 -> { if (mc.player != null) mc.player.jump(); }
+                    case 2 -> { if (mc.player != null) mc.player.jumpFromGround(); }
                     case 3 -> sneakTap();
                 }
                 if (tickCounter > 200) gameEnded();
@@ -908,24 +908,24 @@ public class CustomFishingBot extends Module {
     // ================================================================
 
     private void rightClick() {
-        if (mc.player != null && mc.interactionManager != null)
-            mc.interactionManager.interactItem(mc.player, Hand.MAIN_HAND);
+        if (mc.player != null && mc.gameMode != null)
+            mc.gameMode.useItem(mc.player, InteractionHand.MAIN_HAND);
     }
 
     private void leftClick() {
-        if (mc.interactionManager != null && mc.player != null)
-            mc.interactionManager.attackEntity(mc.player, mc.player);
+        if (mc.gameMode != null && mc.player != null)
+            mc.gameMode.attack(mc.player, mc.player);
     }
 
     private void startSneak() {
-        if (!sneaking && mc.options != null) { mc.options.sneakKey.setPressed(true); sneaking = true; }
+        if (!sneaking && mc.options != null) { mc.options.keyShift.setDown(true); sneaking = true; }
     }
 
     private void stopSneak() {
-        if (sneaking && mc.options != null) { mc.options.sneakKey.setPressed(false); sneaking = false; }
+        if (sneaking && mc.options != null) { mc.options.keyShift.setDown(false); sneaking = false; }
     }
 
-    private void sneakTap() { if (mc.options != null) mc.options.sneakKey.setPressed(true); }
+    private void sneakTap() { if (mc.options != null) mc.options.keyShift.setDown(true); }
 
     private void releaseKeys() { stopSneak(); }
 

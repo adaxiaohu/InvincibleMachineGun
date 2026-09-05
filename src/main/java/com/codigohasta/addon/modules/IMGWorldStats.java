@@ -10,13 +10,13 @@ import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.render.color.Color;
 import meteordevelopment.meteorclient.utils.render.color.SettingColor;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.block.Block;
-import net.minecraft.network.packet.c2s.play.ClientStatusC2SPacket;
-import net.minecraft.registry.Registries;
-import net.minecraft.stat.StatHandler;
-import net.minecraft.stat.Stats;
-import net.minecraft.text.Text;
-import net.minecraft.util.Identifier;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.network.protocol.game.ServerboundClientCommandPacket;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.stats.StatsCounter;
+import net.minecraft.stats.Stats;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -75,8 +75,8 @@ public class IMGWorldStats extends Module {
     }
 
     private void requestStats() {
-        if (mc.getNetworkHandler() != null && mc.player != null) {
-            mc.getNetworkHandler().sendPacket(new ClientStatusC2SPacket(ClientStatusC2SPacket.Mode.REQUEST_STATS));
+        if (mc.getConnection() != null && mc.player != null) {
+            mc.getConnection().send(new ServerboundClientCommandPacket(ServerboundClientCommandPacket.Action.REQUEST_STATS));
             updateCachedBlocksMined();
         }
     }
@@ -84,10 +84,10 @@ public class IMGWorldStats extends Module {
     // 耗时操作：计算挖掘总数，仅在获取数据包时调用
     private void updateCachedBlocksMined() {
         if (mc.player == null) return;
-        StatHandler stats = mc.player.getStatHandler();
+        StatsCounter stats = mc.player.getStats();
         int total = 0;
-        for (Block block : Registries.BLOCK) {
-            total += stats.getStat(Stats.MINED.getOrCreateStat(block));
+        for (Block block : BuiltInRegistries.BLOCK) {
+            total += stats.getValue(Stats.BLOCK_MINED.get(block));
         }
         cachedBlocksMined = total;
     }
@@ -111,7 +111,7 @@ public class IMGWorldStats extends Module {
 
     @EventHandler
     private void onRender2D(Render2DEvent event) {
-        if (mc.world == null || mc.player == null) return;
+        if (mc.level == null || mc.player == null) return;
 
         List<String> lines = buildDisplayLines();
         if (lines.isEmpty()) return;
@@ -145,31 +145,31 @@ public class IMGWorldStats extends Module {
 
     private List<String> buildDisplayLines() {
         List<String> lines = new ArrayList<>();
-        StatHandler stats = mc.player.getStatHandler();
+        StatsCounter stats = mc.player.getStats();
 
         if (showTicks.get()) {
-            long dayTime = mc.world.getTimeOfDay() % 24000L;
+            long dayTime = mc.level.getOverworldClockTime() % 24000L;
             lines.add(String.format("当日刻: %d", dayTime));
         }
         
         if (showDays.get()) {
-            long worldDays = mc.world.getTimeOfDay() / 24000L;
+            long worldDays = mc.level.getOverworldClockTime() / 24000L;
             lines.add("生存天数: " + worldDays + " 天");
         }
 
         // ================== 生物群系中文翻译修复 ==================
         if (showBiome.get()) {
-            Identifier biomeId = mc.world.getBiome(mc.player.getBlockPos()).getKey().get().getValue();
+            Identifier biomeId = mc.level.getBiome(mc.player.blockPosition()).unwrapKey().get().identifier();
             // 巧妙使用 toString().replace 绕开 1.21.11 可能存在的 Record 映射问题
             // 例如把 "minecraft:plains" 转换成 "biome.minecraft.plains"
             String transKey = "biome." + biomeId.toString().replace(":", ".");
             // 调用原版翻译组件获取当前语言文本 (如 "平原")
-            String localBiomeName = Text.translatable(transKey).getString();
+            String localBiomeName = Component.translatable(transKey).getString();
             lines.add("生物群系: " + localBiomeName);
         }
 
         if (showWeather.get()) {
-            String w = mc.world.isThundering() ? "雷雨 ⛈" : (mc.world.isRaining() ? "下雨 🌧" : "晴朗 ☀");
+            String w = mc.level.isThundering() ? "雷雨 ⛈" : (mc.level.isRaining() ? "下雨 🌧" : "晴朗 ☀");
             lines.add("天气: " + w);
         }
 
@@ -177,33 +177,33 @@ public class IMGWorldStats extends Module {
             double px = mc.player.getX();
             double py = mc.player.getY();
             double pz = mc.player.getZ();
-            boolean inNether = mc.world.getRegistryKey().getValue().getPath().contains("nether");
+            boolean inNether = mc.level.dimension().identifier().getPath().contains("nether");
             lines.add(String.format("主界: %.1f, %.1f, %.1f", inNether ? px * 8.0 : px, py, inNether ? pz * 8.0 : pz));
             lines.add(String.format("下界: %.1f, %.1f, %.1f", inNether ? px : px / 8.0, py, inNether ? pz : pz / 8.0));
         }
 
         if (showPlaytime.get()) {
-            int pt = stats.getStat(Stats.CUSTOM.getOrCreateStat(Stats.PLAY_TIME));
+            int pt = stats.getValue(Stats.CUSTOM.get(Stats.PLAY_TIME));
             int hrs = pt / 72000;
             int mins = (pt % 72000) / 1200;
             lines.add(String.format("总时长: %dh %dm", hrs, mins));
         }
 
         if (showDistance.get()) {
-            long cm = stats.getStat(Stats.CUSTOM.getOrCreateStat(Stats.WALK_ONE_CM)) 
-                    + stats.getStat(Stats.CUSTOM.getOrCreateStat(Stats.SPRINT_ONE_CM))
-                    + stats.getStat(Stats.CUSTOM.getOrCreateStat(Stats.FLY_ONE_CM));
+            long cm = stats.getValue(Stats.CUSTOM.get(Stats.WALK_ONE_CM)) 
+                    + stats.getValue(Stats.CUSTOM.get(Stats.SPRINT_ONE_CM))
+                    + stats.getValue(Stats.CUSTOM.get(Stats.FLY_ONE_CM));
             lines.add(String.format("总距离: %.1f km", cm / 100000.0));
         }
 
         if (showKills.get()) {
-            int pk = stats.getStat(Stats.CUSTOM.getOrCreateStat(Stats.PLAYER_KILLS));
-            int mk = stats.getStat(Stats.CUSTOM.getOrCreateStat(Stats.MOB_KILLS));
+            int pk = stats.getValue(Stats.CUSTOM.get(Stats.PLAYER_KILLS));
+            int mk = stats.getValue(Stats.CUSTOM.get(Stats.MOB_KILLS));
             lines.add("总击杀: 玩家[" + pk + "] / 怪物[" + mk + "]");
         }
 
         if (showDeaths.get()) {
-            lines.add("死亡次数: " + stats.getStat(Stats.CUSTOM.getOrCreateStat(Stats.DEATHS)));
+            lines.add("死亡次数: " + stats.getValue(Stats.CUSTOM.get(Stats.DEATHS)));
         }
 
         // ================== 挖掘总数修复 ==================

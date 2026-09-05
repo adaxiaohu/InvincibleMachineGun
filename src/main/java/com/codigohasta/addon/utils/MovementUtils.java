@@ -1,8 +1,8 @@
 package com.codigohasta.addon.utils;
 
-import net.minecraft.client.network.ClientPlayerEntity;
-import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket;
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
+import net.minecraft.world.phys.Vec3;
 
 public class MovementUtils {
     // 调整安全步长，可以尝试设置为 4.0 - 6.0 之间
@@ -15,10 +15,10 @@ public class MovementUtils {
      * @param end 目标位置
      * @param onGround 移动时的 onGround 状态
      */
-    public static void tpMove(ClientPlayerEntity player, Vec3d start, Vec3d end, boolean onGround) {
+    public static void tpMove(LocalPlayer player, Vec3 start, Vec3 end, boolean onGround) {
         if (player == null) return;
         
-        Vec3d diff = end.subtract(start);
+        Vec3 diff = end.subtract(start);
         double distance = diff.length();
         
         // 步数，确保每一步都不超过 MAX_STEP
@@ -26,20 +26,20 @@ public class MovementUtils {
         if (steps < 1) steps = 1;
 
         // 步长向量
-        Vec3d stepVector = diff.multiply(1.0 / steps);
+        Vec3 stepVector = diff.scale(1.0 / steps);
         
-        Vec3d currentPos = start;
+        Vec3 currentPos = start;
 
         for (int i = 0; i < steps; i++) {
-            Vec3d nextPos = currentPos.add(stepVector);
+            Vec3 nextPos = currentPos.add(stepVector);
 
             // 1. 发送位移包到下一跳 (isMoving=true)
             // 修复：添加第五个参数 `isMoving` (设为 true)
-            player.networkHandler.sendPacket(
-                new PlayerMoveC2SPacket.PositionAndOnGround(
-                    nextPos.getX(),
-                    nextPos.getY(),
-                    nextPos.getZ(),
+            player.connection.send(
+                new ServerboundMovePlayerPacket.Pos(
+                    nextPos.x(),
+                    nextPos.y(),
+                    nextPos.z(),
                     onGround,
                     true // 关键修复：isMoving 设为 true
                 )
@@ -47,11 +47,11 @@ public class MovementUtils {
             
             // 2. 关键优化：强制发送零位移包 (强制同步 Tick)
             // 修复：添加第五个参数 `isMoving` (设为 true)
-            player.networkHandler.sendPacket(
-                new PlayerMoveC2SPacket.PositionAndOnGround(
-                    nextPos.getX(),
-                    nextPos.getY(),
-                    nextPos.getZ(),
+            player.connection.send(
+                new ServerboundMovePlayerPacket.Pos(
+                    nextPos.x(),
+                    nextPos.y(),
+                    nextPos.z(),
                     onGround,
                     true // 关键修复：isMoving 设为 true
                 )
@@ -61,6 +61,6 @@ public class MovementUtils {
         }
         
         // 强制更新客户端玩家位置到终点，避免客户端看到画面回弹。
-        player.setPosition(end.x, end.y, end.z);
+        player.setPos(end.x, end.y, end.z);
     }
 }

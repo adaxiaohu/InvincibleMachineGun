@@ -7,21 +7,21 @@ import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.render.color.Color;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.item.Item;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
-import net.minecraft.network.packet.c2s.play.PlayerInteractItemC2SPacket;
-import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket;
-import net.minecraft.network.packet.c2s.play.UpdateSelectedSlotC2SPacket;
-import net.minecraft.screen.slot.SlotActionType;
-import net.minecraft.util.Hand;
-import net.minecraft.util.hit.HitResult;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Direction;
-import net.minecraft.util.math.MathHelper;
-import net.minecraft.util.math.Vec3d;
-import net.minecraft.world.RaycastContext;
-import net.minecraft.world.World;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.network.protocol.game.ServerboundUseItemPacket;
+import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
+import net.minecraft.network.protocol.game.ServerboundSetCarriedItemPacket;
+import net.minecraft.world.inventory.ContainerInput;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.phys.HitResult;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.util.Mth;
+import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.level.ClipContext;
+import net.minecraft.world.level.Level;
 
 import java.util.function.Predicate;
 
@@ -83,11 +83,11 @@ public class LegitNoFall extends Module {
 
     @EventHandler
     private void onRender3d(Render3DEvent event) {
-        if (mc.player == null || mc.world == null) return;
-        if (mc.world.getRegistryKey() == World.NETHER) return;
+        if (mc.player == null || mc.level == null) return;
+        if (mc.level.dimension() == Level.NETHER) return;
 
-        rotationYaw = mc.player.getYaw();
-        rotationPitch = mc.player.getPitch();
+        rotationYaw = mc.player.getYRot();
+        rotationPitch = mc.player.getXRot();
 
         int old = getSelectedSlot();
         int water = hasPlacedWater ? findItem(Items.BUCKET) : findItem(Items.WATER_BUCKET);
@@ -99,12 +99,12 @@ public class LegitNoFall extends Module {
                 event.renderer.box(lastPos, color, color, ShapeMode.Both, 0);
                 
                 // 【修复】：收水时，强制看向地板上方块的顶部中心，而不是空气的中心
-                Vec3d targetAim = new Vec3d(lastPos.getX() + 0.5, lastPos.getY(), lastPos.getZ() + 0.5);
+                Vec3 targetAim = new Vec3(lastPos.getX() + 0.5, lastPos.getY(), lastPos.getZ() + 0.5);
                 snapAt(targetAim);
-                mc.player.swingHand(Hand.MAIN_HAND);
+                mc.player.swing(InteractionHand.MAIN_HAND);
                 
                 float[] rot = getRotation(targetAim);
-                mc.getNetworkHandler().sendPacket(new PlayerInteractItemC2SPacket(Hand.MAIN_HAND, 1, rot[0], rot[1]));
+                mc.getConnection().send(new ServerboundUseItemPacket(InteractionHand.MAIN_HAND, 1, rot[0], rot[1]));
                 
                 if (inventorySwap.get()) {
                     doSwap(water);
@@ -115,38 +115,38 @@ public class LegitNoFall extends Module {
                 hasPlacedWater = false;
 
             } else if (!hasPlacedWater) {
-                BlockPos pos = mc.player.getBlockPos().down(checkDown.get());
+                BlockPos pos = mc.player.blockPosition().below(checkDown.get());
                 double[] xzOffset = new double[]{offSet.get(), -offSet.get()};
                 
                 for (double x : xzOffset) {
                     for (double z : xzOffset) {
                         // 还原原作者 BlockPosX 取整逻辑，但基于真实的浮点坐标，防止方块盲区
                         BlockPos offSetPos = new BlockPos(
-                            MathHelper.floor(mc.player.getX() + x), 
+                            Mth.floor(mc.player.getX() + x), 
                             pos.getY(), 
-                            MathHelper.floor(mc.player.getZ() + z)
+                            Mth.floor(mc.player.getZ() + z)
                         );
 
-                        if (checkFalling() && !mc.world.isAir(offSetPos) && !mc.world.getBlockState(offSetPos).isReplaceable()) {
-                            Direction side = getPlaceSide(pos.up(), null);
+                        if (checkFalling() && !mc.level.isEmptyBlock(offSetPos) && !mc.level.getBlockState(offSetPos).canBeReplaced()) {
+                            Direction side = getPlaceSide(pos.above(), null);
                             
-                            if (side != null && !behindWall(offSetPos.up())) {
+                            if (side != null && !behindWall(offSetPos.above())) {
                                 Color color = new Color(70, 177, 229, 80);
-                                event.renderer.box(offSetPos.up(), color, color, ShapeMode.Both, 0);
+                                event.renderer.box(offSetPos.above(), color, color, ShapeMode.Both, 0);
                                 
                                 doSwap(water);
                                 
                                 // 【致命漏洞修复核心】：
                                 // 不要 snapAt(offSetPos.up().toCenterPos()) (会瞄准空气)
                                 // 必须瞄准脚下方块(offSetPos)的【顶部中心】！强制玩家低头90度放水！
-                                Vec3d targetAim = new Vec3d(offSetPos.getX() + 0.5, offSetPos.getY() + 1.0, offSetPos.getZ() + 0.5);
+                                Vec3 targetAim = new Vec3(offSetPos.getX() + 0.5, offSetPos.getY() + 1.0, offSetPos.getZ() + 0.5);
                                 snapAt(targetAim);
-                                lastPos = offSetPos.up();
+                                lastPos = offSetPos.above();
                                 
-                                mc.player.swingHand(Hand.MAIN_HAND);
+                                mc.player.swing(InteractionHand.MAIN_HAND);
 
                                 float[] rot = getRotation(targetAim);
-                                mc.getNetworkHandler().sendPacket(new PlayerInteractItemC2SPacket(Hand.MAIN_HAND, 1, rot[0], rot[1]));
+                                mc.getConnection().send(new ServerboundUseItemPacket(InteractionHand.MAIN_HAND, 1, rot[0], rot[1]));
                                 
                                 if (inventorySwap.get()) {
                                     doSwap(water);
@@ -165,8 +165,8 @@ public class LegitNoFall extends Module {
     }
 
     public boolean behindWall(BlockPos pos) {
-        Vec3d testVec = new Vec3d(pos.getX() + 0.5, pos.getY() + 2 * 0.85, pos.getZ() + 0.5);
-        HitResult result = mc.world.raycast(new RaycastContext(mc.player.getEyePos(), testVec, RaycastContext.ShapeType.COLLIDER, RaycastContext.FluidHandling.NONE, mc.player));
+        Vec3 testVec = new Vec3(pos.getX() + 0.5, pos.getY() + 2 * 0.85, pos.getZ() + 0.5);
+        HitResult result = mc.level.clip(new ClipContext(mc.player.getEyePosition(), testVec, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, mc.player));
         if (result == null || result.getType() == HitResult.Type.MISS) return false;
         return false;
     }
@@ -175,8 +175,8 @@ public class LegitNoFall extends Module {
         if (pos == null) return null;
         for (Direction i : Direction.values()) {
             if (directionPredicate != null && !directionPredicate.test(i)) continue;
-            BlockPos neighbor = pos.offset(i);
-            if (!mc.world.getBlockState(neighbor).isAir() && !mc.world.getBlockState(neighbor).isReplaceable()) {
+            BlockPos neighbor = pos.relative(i);
+            if (!mc.level.getBlockState(neighbor).isAir() && !mc.level.getBlockState(neighbor).canBeReplaced()) {
                 return i;
             }
         }
@@ -184,19 +184,19 @@ public class LegitNoFall extends Module {
     }
 
     private boolean checkFalling() {
-        return mc.player.fallDistance > mc.player.getSafeFallDistance() && !mc.player.isOnGround() && !mc.player.isGliding();
+        return mc.player.fallDistance > mc.player.getMaxFallDistance() && !mc.player.onGround() && !mc.player.isFallFlying();
     }
 
     private int findItem(Item item) {
         if (inventorySwap.get()) {
             for (int i = 0; i < 45; ++i) {
-                ItemStack stack = mc.player.getInventory().getStack(i);
+                ItemStack stack = mc.player.getInventory().getItem(i);
                 if (stack.getItem() == item) return i < 9 ? i + 36 : i;
             }
             return -1;
         } else {
             for (int i = 0; i < 9; ++i) {
-                ItemStack stack = mc.player.getInventory().getStack(i);
+                ItemStack stack = mc.player.getInventory().getItem(i);
                 if (stack.getItem() == item) return i;
             }
             return -1;
@@ -213,7 +213,7 @@ public class LegitNoFall extends Module {
 
     private void switchToSlot(int slot) {
         setSelectedSlot(slot); // 使用我们之前写好的反射方法修改变量，避免 private 报错
-        mc.getNetworkHandler().sendPacket(new UpdateSelectedSlotC2SPacket(slot));
+        mc.getConnection().send(new ServerboundSetCarriedItemPacket(slot));
     }
 
     private void inventorySwap(int slot, int selectedSlot) {
@@ -230,28 +230,28 @@ public class LegitNoFall extends Module {
             switchToSlot(slot - 36);
             return;
         }
-        mc.interactionManager.clickSlot(mc.player.currentScreenHandler.syncId, slot, selectedSlot, SlotActionType.SWAP, mc.player);
+        mc.gameMode.handleContainerInput(mc.player.containerMenu.containerId, slot, selectedSlot, ContainerInput.SWAP, mc.player);
     }
 
     private void snapAt(float yaw, float pitch) {
-        mc.getNetworkHandler().sendPacket(new PlayerMoveC2SPacket.Full(
-            mc.player.getX(), mc.player.getY(), mc.player.getZ(), yaw, pitch, mc.player.isOnGround(), mc.player.horizontalCollision
+        mc.getConnection().send(new ServerboundMovePlayerPacket.PosRot(
+            mc.player.getX(), mc.player.getY(), mc.player.getZ(), yaw, pitch, mc.player.onGround(), mc.player.horizontalCollision
         ));
     }
 
     private void snapBack() {
-        mc.getNetworkHandler().sendPacket(new PlayerMoveC2SPacket.Full(
-            mc.player.getX(), mc.player.getY(), mc.player.getZ(), rotationYaw, rotationPitch, mc.player.isOnGround(), mc.player.horizontalCollision
+        mc.getConnection().send(new ServerboundMovePlayerPacket.PosRot(
+            mc.player.getX(), mc.player.getY(), mc.player.getZ(), rotationYaw, rotationPitch, mc.player.onGround(), mc.player.horizontalCollision
         ));
     }
 
-    private void snapAt(Vec3d directionVec) {
+    private void snapAt(Vec3 directionVec) {
         float[] angle = getRotation(directionVec);
         snapAt(angle[0], angle[1]);
     }
 
-    private float[] getRotation(Vec3d vec) {
-        Vec3d eyesPos = mc.player.getEyePos();
+    private float[] getRotation(Vec3 vec) {
+        Vec3 eyesPos = mc.player.getEyePosition();
         double diffX = vec.x - eyesPos.x;
         double diffY = vec.y - eyesPos.y;
         double diffZ = vec.z - eyesPos.z;
@@ -260,6 +260,6 @@ public class LegitNoFall extends Module {
         float yaw = (float) Math.toDegrees(Math.atan2(diffZ, diffX)) - 90.0f;
         float pitch = (float) (-Math.toDegrees(Math.atan2(diffY, diffXZ)));
         
-        return new float[]{MathHelper.wrapDegrees(yaw), MathHelper.wrapDegrees(pitch)};
+        return new float[]{Mth.wrapDegrees(yaw), Mth.wrapDegrees(pitch)};
     }
 }

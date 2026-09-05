@@ -13,10 +13,10 @@ import meteordevelopment.meteorclient.utils.render.WireframeEntityRenderer;
 import meteordevelopment.meteorclient.utils.render.color.Color;
 import meteordevelopment.meteorclient.utils.render.color.SettingColor;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.EntityStatuses;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.network.packet.s2c.play.EntityStatusS2CPacket;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityEvent;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.network.protocol.game.ClientboundEntityEventPacket;
 
 import java.util.concurrent.CopyOnWriteArrayList;
 
@@ -127,7 +127,7 @@ public class IMGPopChams extends Module {
 
     private final CopyOnWriteArrayList<GhostPlayer> ghostList = new CopyOnWriteArrayList<>();
 
-    public static void onFakePlayerTotemPop(PlayerEntity player) {
+    public static void onFakePlayerTotemPop(Player player) {
         if (INSTANCE != null && INSTANCE.isActive()) {
             INSTANCE.ghostList.add(INSTANCE.new GhostPlayer(player));
         }
@@ -145,11 +145,11 @@ public class IMGPopChams extends Module {
 
     @EventHandler
     private void onReceivePacket(PacketEvent.Receive event) {
-        if (!(event.packet instanceof EntityStatusS2CPacket p)) return;
-        if (p.getStatus() != EntityStatuses.USE_TOTEM_OF_UNDYING) return;
+        if (!(event.packet instanceof ClientboundEntityEventPacket p)) return;
+        if (p.getEventId() != EntityEvent.PROTECTED_FROM_DEATH) return;
 
-        Entity entity = p.getEntity(mc.world);
-        if (!(entity instanceof PlayerEntity player)) return;
+        Entity entity = p.getEntity(mc.level);
+        if (!(entity instanceof Player player)) return;
         if (noSelf.get() && entity == mc.player) return;
 
         ghostList.add(new GhostPlayer(player));
@@ -166,21 +166,21 @@ public class IMGPopChams extends Module {
         private final float origBodyYaw, origHeadYaw;
         private final int sourceId;
 
-        public GhostPlayer(PlayerEntity player) {
+        public GhostPlayer(Player player) {
             super(player, "ghost", 20, false);
             this.origX = player.getX();
             this.origY = player.getY();
             this.origZ = player.getZ();
-            this.origBodyYaw = player.bodyYaw;
-            this.origHeadYaw = player.headYaw;
+            this.origBodyYaw = player.yBodyRot;
+            this.origHeadYaw = player.yHeadRot;
             this.sourceId = player.getId();
 
-            this.copyPositionAndRotation(player);
-            this.bodyYaw = player.bodyYaw;
-            this.headYaw = player.headYaw;
+            this.copyPosition(player);
+            this.yBodyRot = player.yBodyRot;
+            this.yHeadRot = player.yHeadRot;
 
             if (forceSneak.get()) {
-                this.setSneaking(true);
+                this.setShiftKeyDown(true);
             }
         }
 
@@ -195,12 +195,12 @@ public class IMGPopChams extends Module {
             double animAlpha = alpha.get() ? 1.0 - progress : 1.0;
 
             // Update entity state for rendering
-            this.setPosition(origX, origY + animYOffset, origZ);
-            this.bodyYaw = origBodyYaw + (float) animYaw;
-            this.headYaw = origHeadYaw + (float) animYaw;
-            this.lastRenderX = this.getX();
-            this.lastRenderY = this.getY();
-            this.lastRenderZ = this.getZ();
+            this.setPos(origX, origY + animYOffset, origZ);
+            this.yBodyRot = origBodyYaw + (float) animYaw;
+            this.yHeadRot = origHeadYaw + (float) animYaw;
+            this.xOld = this.getX();
+            this.yOld = this.getY();
+            this.zOld = this.getZ();
 
             // Create animated colors
             int fillA = (int) (fillColor.get().a * animAlpha);

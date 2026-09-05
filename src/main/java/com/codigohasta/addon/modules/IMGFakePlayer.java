@@ -7,31 +7,30 @@ import com.codigohasta.addon.utils.alien.AlienDamageUtils;
 import com.mojang.authlib.GameProfile;
 import meteordevelopment.meteorclient.events.packets.PacketEvent;
 import meteordevelopment.meteorclient.events.world.TickEvent;
-import meteordevelopment.meteorclient.mixininterface.IPlayerInteractEntityC2SPacket;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.block.Blocks;
-import net.minecraft.client.network.OtherClientPlayerEntity;
-import net.minecraft.entity.Entity.RemovalReason;
-import net.minecraft.entity.EntityStatuses;
-import net.minecraft.entity.effect.StatusEffectInstance;
-import net.minecraft.entity.effect.StatusEffects;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
-import net.minecraft.network.packet.c2s.play.PlayerInteractEntityC2SPacket;
-import net.minecraft.network.packet.s2c.play.ExplosionS2CPacket;
-import net.minecraft.particle.ParticleTypes;
-import net.minecraft.sound.SoundCategory;
-import net.minecraft.sound.SoundEvents;
-import net.minecraft.util.Hand;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.client.player.RemotePlayer;
+import net.minecraft.world.entity.Entity.RemovalReason;
+import net.minecraft.world.entity.EntityEvent;
+import net.minecraft.world.effect.MobEffectInstance;
+import net.minecraft.world.effect.MobEffects;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.network.protocol.game.ClientboundExplodePacket;
+import net.minecraft.core.particles.ParticleTypes;
+import net.minecraft.sounds.SoundSource;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import net.minecraft.network.protocol.game.ServerboundAttackPacket;
 
 public class IMGFakePlayer extends Module {
     public static IMGFakePlayer INSTANCE;
@@ -100,7 +99,7 @@ public class IMGFakePlayer extends Module {
             return;
         }
         fakePlayer = new FakePlayerEntity(mc.player, name.get());
-        mc.world.addEntity(fakePlayer);
+        mc.level.addEntity(fakePlayer);
     }
 
     @Override
@@ -125,11 +124,11 @@ public class IMGFakePlayer extends Module {
         }
 
         if (autoTotem.get()) {
-            if (fakePlayer.getOffHandStack().getItem() != Items.TOTEM_OF_UNDYING) {
-                fakePlayer.setStackInHand(Hand.OFF_HAND, new ItemStack(Items.TOTEM_OF_UNDYING));
+            if (fakePlayer.getOffhandItem().getItem() != Items.TOTEM_OF_UNDYING) {
+                fakePlayer.setItemInHand(InteractionHand.OFF_HAND, new ItemStack(Items.TOTEM_OF_UNDYING));
             }
-            if (fakePlayer.getMainHandStack().getItem() != Items.TOTEM_OF_UNDYING) {
-                fakePlayer.setStackInHand(Hand.MAIN_HAND, new ItemStack(Items.TOTEM_OF_UNDYING));
+            if (fakePlayer.getMainHandItem().getItem() != Items.TOTEM_OF_UNDYING) {
+                fakePlayer.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(Items.TOTEM_OF_UNDYING));
             }
         }
 
@@ -141,7 +140,7 @@ public class IMGFakePlayer extends Module {
         if (record.get()) {
             positions.add(new PlayerState(
                 mc.player.getX(), mc.player.getY(), mc.player.getZ(),
-                mc.player.getYaw(), mc.player.getPitch()
+                mc.player.getYRot(), mc.player.getXRot()
             ));
         }
 
@@ -151,23 +150,22 @@ public class IMGFakePlayer extends Module {
                 movementTick = 0;
             }
             PlayerState p = positions.get(movementTick);
-            fakePlayer.setYaw(p.yaw);
-            fakePlayer.setPitch(p.pitch);
-            fakePlayer.setHeadYaw(p.yaw);
-            fakePlayer.updateTrackedPosition(p.x, p.y, p.z);
-            fakePlayer.updateTrackedPositionAndAngles(new Vec3d(p.x, p.y, p.z), p.yaw, p.pitch);
+            fakePlayer.setYRot(p.yaw);
+            fakePlayer.setXRot(p.pitch);
+            fakePlayer.setYHeadRot(p.yaw);
+            fakePlayer.moveOrInterpolateTo(new Vec3(p.x, p.y, p.z), p.yaw, p.pitch);
         }
 
         // Process pending visual effects (set in packet handlers on Netty thread)
         if (pendingHurtSound) {
-            mc.world.playSound(null, fakePlayer.getX(), fakePlayer.getY(), fakePlayer.getZ(),
-                SoundEvents.ENTITY_PLAYER_HURT, SoundCategory.PLAYERS, 1.0F, 1.0F);
+            mc.level.playSound(null, fakePlayer.getX(), fakePlayer.getY(), fakePlayer.getZ(),
+                SoundEvents.PLAYER_HURT, SoundSource.PLAYERS, 1.0F, 1.0F);
             pendingHurtSound = false;
         }
         if (pendingCritSound) {
-            mc.world.playSound(null, fakePlayer.getX(), fakePlayer.getY(), fakePlayer.getZ(),
-                SoundEvents.ENTITY_PLAYER_ATTACK_CRIT, SoundCategory.PLAYERS, 1.0F, 1.0F);
-            mc.player.addCritParticles(fakePlayer);
+            mc.level.playSound(null, fakePlayer.getX(), fakePlayer.getY(), fakePlayer.getZ(),
+                SoundEvents.PLAYER_ATTACK_CRIT, SoundSource.PLAYERS, 1.0F, 1.0F);
+            mc.player.crit(fakePlayer);
             pendingCritSound = false;
         }
         if (pendingTotemPopVisuals) {
@@ -179,23 +177,21 @@ public class IMGFakePlayer extends Module {
     @EventHandler
     private void onSendPacket(PacketEvent.Send event) {
         if (!damage.get() || fakePlayer == null) return;
-        if (!(event.packet instanceof PlayerInteractEntityC2SPacket packet)) return;
-
-        IPlayerInteractEntityC2SPacket accessor = (IPlayerInteractEntityC2SPacket) packet;
-        if (!String.valueOf(accessor.meteor$getType()).equals("ATTACK")) return;
-        if (accessor.meteor$getEntity() != fakePlayer) return;
+        // 26.1.2: 攻击是独立的 ServerboundAttackPacket，包里只留实体 id
+        if (!(event.packet instanceof ServerboundAttackPacket packet)) return;
+        if (mc.level == null || mc.level.getEntity(packet.entityId()) != fakePlayer) return;
 
         float dmg = AlienDamageUtils.getAttackDamage(mc.player, fakePlayer);
 
         boolean isCrit = mc.player.fallDistance > 0.0F
-            && !mc.player.isOnGround()
-            && !mc.player.isClimbing()
-            && !mc.player.isTouchingWater()
-            && !mc.player.hasStatusEffect(StatusEffects.BLINDNESS)
-            && !mc.player.hasVehicle();
+            && !mc.player.onGround()
+            && !mc.player.onClimbable()
+            && !mc.player.isInWater()
+            && !mc.player.hasEffect(MobEffects.BLINDNESS)
+            && !mc.player.isPassenger();
 
         if (fakePlayer.hurtTime <= 0) {
-            fakePlayer.onDamaged(mc.world.getDamageSources().generic());
+            fakePlayer.handleDamageEvent(mc.level.damageSources().generic());
             if (fakePlayer.getAbsorptionAmount() >= dmg) {
                 fakePlayer.setAbsorptionAmount(fakePlayer.getAbsorptionAmount() - dmg);
             } else {
@@ -204,13 +200,13 @@ public class IMGFakePlayer extends Module {
                 fakePlayer.setHealth(fakePlayer.getHealth() - remaining);
             }
 
-            if (fakePlayer.isDead()) {
+            if (fakePlayer.isDeadOrDying()) {
                 tryTotemPop(fakePlayer);
             }
 
             fakePlayer.hurtTime = 10;
-            fakePlayer.maxHurtTime = 10;
-            fakePlayer.animateDamage(0);
+            fakePlayer.hurtDuration = 10;
+            fakePlayer.animateHurt(0);
         }
 
         // Schedule visual effects for main thread
@@ -224,19 +220,19 @@ public class IMGFakePlayer extends Module {
     @EventHandler
     private void onReceivePacket(PacketEvent.Receive event) {
         if (!damage.get() || fakePlayer == null || fakePlayer.hurtTime > 0) return;
-        if (!(event.packet instanceof ExplosionS2CPacket explosion)) return;
+        if (!(event.packet instanceof ClientboundExplodePacket explosion)) return;
 
-        Vec3d explosionPos = explosion.center();
-        if (explosionPos.squaredDistanceTo(new Vec3d(fakePlayer.getX(), fakePlayer.getY(), fakePlayer.getZ())) > 100.0) return;
+        Vec3 explosionPos = explosion.center();
+        if (explosionPos.distanceToSqr(new Vec3(fakePlayer.getX(), fakePlayer.getY(), fakePlayer.getZ())) > 100.0) return;
 
         float dmg;
-        if (AlienBlockUtil.getBlock(BlockPos.ofFloored(explosionPos)) == Blocks.RESPAWN_ANCHOR) {
+        if (AlienBlockUtil.getBlock(BlockPos.containing(explosionPos)) == Blocks.RESPAWN_ANCHOR) {
             dmg = AlienDamageUtils.explosionDamage(fakePlayer, explosionPos, 10.0F);
         } else {
             dmg = AlienDamageUtils.explosionDamage(fakePlayer, explosionPos, 12.0F);
         }
 
-        fakePlayer.onDamaged(mc.world.getDamageSources().generic());
+        fakePlayer.handleDamageEvent(mc.level.damageSources().generic());
         if (fakePlayer.getAbsorptionAmount() >= dmg) {
             fakePlayer.setAbsorptionAmount(fakePlayer.getAbsorptionAmount() - dmg);
         } else {
@@ -245,26 +241,26 @@ public class IMGFakePlayer extends Module {
             fakePlayer.setHealth(fakePlayer.getHealth() - remaining);
         }
 
-        if (fakePlayer.isDead()) {
+        if (fakePlayer.isDeadOrDying()) {
             tryTotemPop(fakePlayer);
         }
     }
 
     private void tryTotemPop(FakePlayerEntity fp) {
-        boolean hasTotem = fp.getOffHandStack().getItem() == Items.TOTEM_OF_UNDYING
-            || fp.getMainHandStack().getItem() == Items.TOTEM_OF_UNDYING;
+        boolean hasTotem = fp.getOffhandItem().getItem() == Items.TOTEM_OF_UNDYING
+            || fp.getMainHandItem().getItem() == Items.TOTEM_OF_UNDYING;
 
         if (hasTotem) {
             fp.setHealth(10.0F);
-            fp.clearStatusEffects();
-            fp.addStatusEffect(new StatusEffectInstance(StatusEffects.REGENERATION, 900, 1));
-            fp.addStatusEffect(new StatusEffectInstance(StatusEffects.FIRE_RESISTANCE, 800, 0));
-            fp.addStatusEffect(new StatusEffectInstance(StatusEffects.ABSORPTION, 100, 1));
+            fp.removeAllEffects();
+            fp.addEffect(new MobEffectInstance(MobEffects.REGENERATION, 900, 1));
+            fp.addEffect(new MobEffectInstance(MobEffects.FIRE_RESISTANCE, 800, 0));
+            fp.addEffect(new MobEffectInstance(MobEffects.ABSORPTION, 100, 1));
 
-            if (fp.getOffHandStack().getItem() == Items.TOTEM_OF_UNDYING) {
-                fp.setStackInHand(Hand.OFF_HAND, ItemStack.EMPTY);
+            if (fp.getOffhandItem().getItem() == Items.TOTEM_OF_UNDYING) {
+                fp.setItemInHand(InteractionHand.OFF_HAND, ItemStack.EMPTY);
             } else {
-                fp.setStackInHand(Hand.MAIN_HAND, ItemStack.EMPTY);
+                fp.setItemInHand(InteractionHand.MAIN_HAND, ItemStack.EMPTY);
             }
 
             // Schedule visual effects for main thread (packet handlers run on Netty thread)
@@ -273,19 +269,19 @@ public class IMGFakePlayer extends Module {
     }
 
     private void spawnTotemPopVisuals(FakePlayerEntity fp) {
-        if (mc.world == null) return;
+        if (mc.level == null) return;
         for (int i = 0; i < 30; i++) {
-            double vx = (mc.world.random.nextDouble() - 0.5) * 0.5;
-            double vy = mc.world.random.nextDouble() * 0.5;
-            double vz = (mc.world.random.nextDouble() - 0.5) * 0.5;
-            mc.particleManager.addParticle(
+            double vx = (mc.level.getRandom().nextDouble() - 0.5) * 0.5;
+            double vy = mc.level.getRandom().nextDouble() * 0.5;
+            double vz = (mc.level.getRandom().nextDouble() - 0.5) * 0.5;
+            mc.particleEngine.createParticle(
                 ParticleTypes.TOTEM_OF_UNDYING,
                 fp.getX() + vx * 2, fp.getY() + 1.0 + vy * 2, fp.getZ() + vz * 2,
                 vx, vy + 0.5, vz
             );
         }
-        mc.world.playSound(null, fp.getX(), fp.getY(), fp.getZ(),
-            SoundEvents.ITEM_TOTEM_USE, SoundCategory.PLAYERS, 1.0F, 1.0F);
+        mc.level.playSound(null, fp.getX(), fp.getY(), fp.getZ(),
+            SoundEvents.TOTEM_USE, SoundSource.PLAYERS, 1.0F, 1.0F);
 
         // Notify IMGTips if active
         IMGTips.onFakePlayerTotemPop(fp.getName().getString(), fp);
@@ -294,35 +290,35 @@ public class IMGFakePlayer extends Module {
         IMGPopChams.onFakePlayerTotemPop(fp);
     }
 
-    public class FakePlayerEntity extends OtherClientPlayerEntity {
+    public class FakePlayerEntity extends RemotePlayer {
         private final boolean ground;
 
-        public FakePlayerEntity(PlayerEntity player, String name) {
-            super(mc.world, new GameProfile(UUID.fromString("66666666-6666-6666-6666-666666666666"), name));
-            copyPositionAndRotation(player);
-            this.lastRenderX = player.lastRenderX;
-            this.lastRenderZ = player.lastRenderZ;
-            this.lastRenderY = player.lastRenderY;
-            this.bodyYaw = player.bodyYaw;
-            this.headYaw = player.headYaw;
-            this.handSwingProgress = player.handSwingProgress;
-            this.handSwingTicks = player.handSwingTicks;
-            this.limbAnimator.setSpeed(player.limbAnimator.getSpeed());
+        public FakePlayerEntity(Player player, String name) {
+            super(mc.level, new GameProfile(UUID.fromString("66666666-6666-6666-6666-666666666666"), name));
+            copyPosition(player);
+            this.xOld = player.xOld;
+            this.zOld = player.zOld;
+            this.yOld = player.yOld;
+            this.yBodyRot = player.yBodyRot;
+            this.yHeadRot = player.yHeadRot;
+            this.attackAnim = player.attackAnim;
+            this.swingTime = player.swingTime;
+            this.walkAnimation.setSpeed(player.walkAnimation.speed());
             ((LivingEntityAccessor) this).setLeaningPitch(((LivingEntityAccessor) player).getLeaningPitch());
             ((LivingEntityAccessor) this).setLastLeaningPitch(((LivingEntityAccessor) player).getLeaningPitch());
-            this.touchingWater = player.isTouchingWater();
-            this.setSneaking(player.isSneaking());
+            this.wasTouchingWater = player.isInWater();
+            this.setShiftKeyDown(player.isShiftKeyDown());
             this.setPose(player.getPose());
-            this.ground = player.isOnGround();
+            this.ground = player.onGround();
             this.setOnGround(this.ground);
-            this.getInventory().clone(player.getInventory());
+            this.getInventory().replaceWith(player.getInventory());
             this.setAbsorptionAmount(player.getAbsorptionAmount());
             this.setHealth(player.getHealth());
             this.setBoundingBox(player.getBoundingBox());
         }
 
         @Override
-        public boolean isOnGround() {
+        public boolean onGround() {
             return ground;
         }
 

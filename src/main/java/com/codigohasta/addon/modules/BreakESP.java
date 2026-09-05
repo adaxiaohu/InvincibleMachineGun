@@ -9,9 +9,9 @@ import meteordevelopment.meteorclient.systems.friends.Friends;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.render.color.SettingColor;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.text.Text;
-import net.minecraft.util.math.Box;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.network.chat.Component;
+import net.minecraft.world.phys.AABB;
 
 import java.awt.Color;
 import java.text.DecimalFormat;
@@ -50,15 +50,15 @@ public class BreakESP extends Module {
         .build()
     );
 
-    // Render settings - Box
+    // Render settings - AABB
     private final Setting<Boolean> boxToggle = sgRender.add(new BoolSetting.Builder()
-        .name("Box")
+        .name("AABB")
         .description("Show box outline.")
         .defaultValue(true)
         .build()
     );
     private final Setting<SettingColor> boxColor = sgRender.add(new ColorSetting.Builder()
-        .name("Box Color")
+        .name("AABB Color")
         .description("Color of the box outline.")
         .defaultValue(new SettingColor(198, 176, 12, 255))
         .build()
@@ -78,15 +78,15 @@ public class BreakESP extends Module {
         .build()
     );
 
-    // Friend Box
+    // Friend AABB
     private final Setting<Boolean> friendBoxToggle = sgRender.add(new BoolSetting.Builder()
-        .name("Friend Box")
+        .name("Friend AABB")
         .description("Show box outline for friends.")
         .defaultValue(true)
         .build()
     );
     private final Setting<SettingColor> friendBoxColor = sgRender.add(new ColorSetting.Builder()
-        .name("Friend Box Color")
+        .name("Friend AABB Color")
         .description("Color of the box outline for friends.")
         .defaultValue(new SettingColor(30, 45, 169, 255))
         .build()
@@ -106,15 +106,15 @@ public class BreakESP extends Module {
         .build()
     );
 
-    // Second Box
+    // Second AABB
     private final Setting<Boolean> secondBoxToggle = sgRender.add(new BoolSetting.Builder()
-        .name("Second Box")
+        .name("Second AABB")
         .description("Show box outline for second break.")
         .defaultValue(true)
         .build()
     );
     private final Setting<SettingColor> secondBoxColor = sgRender.add(new ColorSetting.Builder()
-        .name("Second Box Color")
+        .name("Second AABB Color")
         .description("Color of the second box outline.")
         .defaultValue(new SettingColor(255, 255, 255, 255))
         .build()
@@ -178,19 +178,19 @@ public class BreakESP extends Module {
         }
     }
 
-    private Color getFillColor(PlayerEntity player) {
+    private Color getFillColor(Player player) {
         return Friends.get().isFriend(player) ? toAwt(friendFillColor.get()) : toAwt(fillColor.get());
     }
 
-    private Color getBoxColor(PlayerEntity player) {
+    private Color getBoxColor(Player player) {
         return Friends.get().isFriend(player) ? toAwt(friendBoxColor.get()) : toAwt(boxColor.get());
     }
 
-    private boolean isBoxVisible(PlayerEntity player) {
+    private boolean isBoxVisible(Player player) {
         return Friends.get().isFriend(player) ? friendBoxToggle.get() : boxToggle.get();
     }
 
-    private boolean isFillVisible(PlayerEntity player) {
+    private boolean isFillVisible(Player player) {
         return Friends.get().isFriend(player) ? friendFillToggle.get() : fillToggle.get();
     }
 
@@ -210,10 +210,10 @@ public class BreakESP extends Module {
         for (AlienBreakManager.BreakData breakData : manager.breakMap.values()) {
             if (breakData == null || breakData.getEntity() == null) continue;
 
-            PlayerEntity player = (PlayerEntity) breakData.getEntity();
+            Player player = (Player) breakData.getEntity();
             double easeVal = breakData.fade.ease(ease.get());
             double size = 0.5 * (1.0 - easeVal);
-            Box cbox = new Box(breakData.pos).shrink(size, size, size).shrink(-size, -size, -size);
+            AABB cbox = new AABB(breakData.pos).contract(size, size, size).contract(-size, -size, -size);
 
             if (isFillVisible(player)) {
                 AlienRender3DUtil.drawFill(event, cbox, getFillColor(player));
@@ -225,7 +225,7 @@ public class BreakESP extends Module {
             // Name text
             AlienRender3DUtil.drawText3D(
                 player.getName().getString(),
-                breakData.pos.toCenterPos().add(0.0, progress.get() ? 0.15 : 0.0, 0.0),
+                breakData.pos.getCenter().add(0.0, progress.get() ? 0.15 : 0.0, 0.0),
                 textScaleBase.get(), textScaleFactor.get(), maxTextScale.get(),
                 -1
             );
@@ -238,12 +238,12 @@ public class BreakESP extends Module {
                     : df.format(Math.min(1.0, breakData.timer.getMs() / breakData.breakTime) * 100.0));
 
                 Color progressColor = breakData.complete
-                    ? (mc.world.isAir(breakData.pos) ? endColor : startColor)
+                    ? (mc.level.isEmptyBlock(breakData.pos) ? endColor : startColor)
                     : AlienColorUtil.fadeColor(startColor, endColor, breakData.timer.getMs() / breakData.breakTime);
 
                 AlienRender3DUtil.drawText3D(
-                    Text.of(progressText),
-                    breakData.pos.toCenterPos().add(0.0, -0.15, 0.0),
+                    Component.literal(progressText),
+                    breakData.pos.getCenter().add(0.0, -0.15, 0.0),
                     0.0, 0.0, 1.0,
                     progressColor.getRGB(),
                     textScaleBase.get(), textScaleFactor.get(), maxTextScale.get()
@@ -255,7 +255,7 @@ public class BreakESP extends Module {
         if (second.get()) {
             for (int i : manager.doubleMap.keySet()) {
                 AlienBreakManager.BreakData breakDatax = manager.doubleMap.get(i);
-                if (breakDatax == null || breakDatax.getEntity() == null || mc.world.isAir(breakDatax.pos)) {
+                if (breakDatax == null || breakDatax.getEntity() == null || mc.level.isEmptyBlock(breakDatax.pos)) {
                     continue;
                 }
 
@@ -263,7 +263,7 @@ public class BreakESP extends Module {
                 if (singleBreakData == null || !singleBreakData.pos.equals(breakDatax.pos)) {
                     double easeValx = breakDatax.fade.ease(ease.get());
                     double sizex = 0.5 * (1.0 - easeValx);
-                    Box cboxx = new Box(breakDatax.pos).shrink(sizex, sizex, sizex).shrink(-sizex, -sizex, -sizex);
+                    AABB cboxx = new AABB(breakDatax.pos).contract(sizex, sizex, sizex).contract(-sizex, -sizex, -sizex);
 
                     if (secondFillToggle.get()) {
                         AlienRender3DUtil.drawFill(event, cboxx, toAwt(secondFillColor.get()));
@@ -274,13 +274,13 @@ public class BreakESP extends Module {
 
                     AlienRender3DUtil.drawText3D(
                         breakDatax.getEntity().getName().getString(),
-                        breakDatax.pos.toCenterPos().add(0.0, 0.15, 0.0),
+                        breakDatax.pos.getCenter().add(0.0, 0.15, 0.0),
                         textScaleBase.get(), textScaleFactor.get(), maxTextScale.get(),
                         -1
                     );
                     AlienRender3DUtil.drawText3D(
                         "Double",
-                        breakDatax.pos.toCenterPos().add(0.0, -0.15, 0.0),
+                        breakDatax.pos.getCenter().add(0.0, -0.15, 0.0),
                         textScaleBase.get(), textScaleFactor.get(), maxTextScale.get(),
                         doubleColor.getRGB()
                     );

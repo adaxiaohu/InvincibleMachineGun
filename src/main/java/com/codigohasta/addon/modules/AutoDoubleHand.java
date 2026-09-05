@@ -8,7 +8,7 @@ import meteordevelopment.meteorclient.settings.SettingGroup;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.player.InvUtils;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.item.Items;
+import net.minecraft.world.item.Items;
 
 public class AutoDoubleHand extends Module {
     private final SettingGroup sgGeneral = settings.getDefaultGroup();
@@ -71,7 +71,7 @@ public class AutoDoubleHand extends Module {
         if (slot != -1) {
             // 【核心修复】：1.21.11 中 selectedSlot 变为 private，无法直接读取。
             // 改为通过判断主手物品是否已经是图腾，来决定是否需要发送切换数据包。
-            if (!mc.player.getMainHandStack().isOf(Items.TOTEM_OF_UNDYING)) {
+            if (!mc.player.getMainHandItem().is(Items.TOTEM_OF_UNDYING)) {
                 
                 // 使用 Meteor Client 的安全工具类进行无缝切换
                 InvUtils.swap(slot, false);
@@ -82,7 +82,7 @@ public class AutoDoubleHand extends Module {
 
     private int findHotbarTotem() {
         for (int i = 0; i < 9; i++) {
-            if (mc.player.getInventory().getStack(i).isOf(Items.TOTEM_OF_UNDYING)) {
+            if (mc.player.getInventory().getItem(i).is(Items.TOTEM_OF_UNDYING)) {
                 return i;
             }
         }
@@ -90,6 +90,6 @@ public class AutoDoubleHand extends Module {
     }
 
     private boolean hasTotemInOffhand() {
-        return mc.player.getOffHandStack().isOf(Items.TOTEM_OF_UNDYING);
+        return mc.player.getOffhandItem().is(Items.TOTEM_OF_UNDYING);
     }
 }

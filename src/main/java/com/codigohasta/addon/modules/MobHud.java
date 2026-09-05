@@ -8,21 +8,21 @@ import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.render.color.SettingColor;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.font.TextRenderer;
-import net.minecraft.client.network.ClientPlayerEntity;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.mob.EndermanEntity;
-import net.minecraft.entity.mob.MobEntity;
-import net.minecraft.entity.mob.Angerable;
-import net.minecraft.entity.SpawnGroup;
-import net.minecraft.text.Text;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Box;
-import net.minecraft.util.math.Vec3d;
-import net.minecraft.world.Heightmap;
-import net.minecraft.world.World;
-import net.minecraft.world.biome.Biome;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.Font;
+import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.monster.EnderMan;
+import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.NeutralMob;
+import net.minecraft.world.entity.MobCategory;
+import net.minecraft.network.chat.Component;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.level.levelgen.Heightmap;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.biome.Biome;
 
 public class MobHud extends Module {
     // ─── 原版 MobHUD 常量 ───────────────────────────────
@@ -129,9 +129,9 @@ public class MobHud extends Module {
 
     @EventHandler
     private void onTick(TickEvent.Post event) {
-        MinecraftClient mc = MinecraftClient.getInstance();
-        ClientPlayerEntity player = mc.player;
-        if (player == null || mc.world == null) return;
+        Minecraft mc = Minecraft.getInstance();
+        LocalPlayer player = mc.player;
+        if (player == null || mc.level == null) return;
 
         tickCounter++;
         if (tickCounter >= 20) {
@@ -146,7 +146,7 @@ public class MobHud extends Module {
 
     @EventHandler
     private void onSendMessage(SendMessageEvent event) {
-        MinecraftClient mc = MinecraftClient.getInstance();
+        Minecraft mc = Minecraft.getInstance();
         String raw = event.message;
         if (raw == null) return;
 
@@ -195,14 +195,14 @@ public class MobHud extends Module {
         }
         if (msg.equals(ai + " disable text box")) {
             textBoxEnabled.set(false);
-            toggleMessage = capitalize(aiName.get()) + ": Text Box Disabled Sir!";
+            toggleMessage = capitalize(aiName.get()) + ": Component AABB Disabled Sir!";
             toggleMessageUntil = System.currentTimeMillis() + 3000;
             event.cancel();
             return;
         }
         if (msg.equals(ai + " enable text box")) {
             textBoxEnabled.set(true);
-            toggleMessage = capitalize(aiName.get()) + ": Text Box Enabled Sir!";
+            toggleMessage = capitalize(aiName.get()) + ": Component AABB Enabled Sir!";
             toggleMessageUntil = System.currentTimeMillis() + 3000;
             event.cancel();
             return;
@@ -212,8 +212,8 @@ public class MobHud extends Module {
                 int x = (int) mc.player.getX();
                 int y = (int) mc.player.getY();
                 int z = (int) mc.player.getZ();
-                mc.inGameHud.getChatHud().addMessage(
-                    Text.literal(capitalize(aiName.get()) + ": You are at " + x + ", " + y + ", " + z + " coordinates Sir"));
+                mc.gui.getChat().addClientSystemMessage(
+                    Component.literal(capitalize(aiName.get()) + ": You are at " + x + ", " + y + ", " + z + " coordinates Sir"));
             }
             event.cancel();
             return;
@@ -247,13 +247,13 @@ public class MobHud extends Module {
 
     @EventHandler
     private void onRender2D(Render2DEvent event) {
-        MinecraftClient mc = MinecraftClient.getInstance();
-        ClientPlayerEntity player = mc.player;
-        if (player == null || mc.world == null) return;
+        Minecraft mc = Minecraft.getInstance();
+        LocalPlayer player = mc.player;
+        if (player == null || mc.level == null) return;
 
-        TextRenderer font = mc.textRenderer;
-        int screenWidth = mc.getWindow().getScaledWidth();
-        int screenHeight = mc.getWindow().getScaledHeight();
+        Font font = mc.font;
+        int screenWidth = mc.getWindow().getGuiScaledWidth();
+        int screenHeight = mc.getWindow().getGuiScaledHeight();
 
         // 检查延迟关闭（消息显示完毕后再关）
         if (pendingDisable && System.currentTimeMillis() >= toggleMessageUntil) {
@@ -267,7 +267,7 @@ public class MobHud extends Module {
 
         // ── 切换反馈消息（居中偏下） ──
         if (showToggleMessage.get() && System.currentTimeMillis() < toggleMessageUntil && !toggleMessage.isEmpty()) {
-            int msgX = (screenWidth - font.getWidth(toggleMessage)) / 2;
+            int msgX = (screenWidth - font.width(toggleMessage)) / 2;
             int msgY = screenHeight - 62;
             drawTextWithBox(event, font, toggleMessage, msgX, msgY, argbColor);
         }
@@ -275,22 +275,22 @@ public class MobHud extends Module {
         // ── 天气 & 温度（右下角） ──
         if (showWeather.get()) {
             String weatherText;
-            if (mc.world.isThundering()) {
+            if (mc.level.isThundering()) {
                 weatherText = "Weather: Thunder";
-            } else if (mc.world.isRaining()) {
+            } else if (mc.level.isRaining()) {
                 weatherText = "Weather: Rain";
             } else {
                 weatherText = "Weather: Clear";
             }
 
-            int weatherShift = font.getWidth("We");
+            int weatherShift = font.width("We");
             int weatherX = LEFT_MARGIN + weatherShift;
             int weatherY = screenHeight - 15;
             drawTextWithBox(event, font, weatherText, weatherX, weatherY, argbColor);
 
             int tempC = computeTemperatureC(mc, player);
             String tempStr = tempC + " °C";
-            int tempX = weatherX + font.getWidth(weatherText) + 6;
+            int tempX = weatherX + font.width(weatherText) + 6;
             drawTextWithBox(event, font, tempStr, tempX, weatherY, argbColor);
         }
 
@@ -302,8 +302,8 @@ public class MobHud extends Module {
                 String mobName = lookedAt.getName().getString();
                 String mobDist = "Distance: " + ((int) dist) + " Blocks Away";
 
-                int weatherShift = font.getWidth("We");
-                int disShift = font.getWidth("Dis");
+                int weatherShift = font.width("We");
+                int disShift = font.width("Dis");
                 int mobX = LEFT_MARGIN + weatherShift + MOB_EXTRA_SHIFT + disShift;
                 int baseY = screenHeight / 2;
 
@@ -313,16 +313,16 @@ public class MobHud extends Module {
                 boolean showDanger = false;
                 boolean showPossibleDanger = false;
 
-                if (lookedAt instanceof MobEntity mob) {
-                    boolean isHostile = mob.getType().getSpawnGroup() == SpawnGroup.MONSTER && !(mob instanceof Angerable);
-                    boolean isNeutral = mob instanceof Angerable;
-                    boolean isAngry = mob.isAttacking() || mob.getTarget() == player;
+                if (lookedAt instanceof Mob mob) {
+                    boolean isHostile = mob.getType().getCategory() == MobCategory.MONSTER && !(mob instanceof NeutralMob);
+                    boolean isNeutral = mob instanceof NeutralMob;
+                    boolean isAngry = mob.isAggressive() || mob.getTarget() == player;
 
-                    if (mob instanceof EndermanEntity) {
-                        isAngry |= ((EndermanEntity) mob).isProvoked();
+                    if (mob instanceof EnderMan) {
+                        isAngry |= ((EnderMan) mob).hasBeenStaredAt();
                     }
 
-                    if (isAngry || mob.getLastAttacker() == player || mob.getAttacker() == player) {
+                    if (isAngry || mob.getLastAttacker() == player || mob.getLastHurtByMob() == player) {
                         showDanger = true;
                     } else if (isHostile) {
                         showDanger = true;
@@ -346,25 +346,25 @@ public class MobHud extends Module {
         // ── 速度（居中顶部） ──
         if (showSpeed.get()) {
             String speed = "Speed: " + String.format("%.2f", blocksPerSecond) + " b/s";
-            int speedX = (screenWidth - font.getWidth(speed)) / 2;
+            int speedX = (screenWidth - font.width(speed)) / 2;
             drawTextWithBox(event, font, speed, speedX, LEFT_MARGIN, argbColor);
         }
 
         // ── 高度 / 深度 ──
         if (showAltitude.get()) {
-            BlockPos pos = player.getBlockPos();
-            int groundY = mc.world.getTopY(Heightmap.Type.MOTION_BLOCKING, pos.getX(), pos.getZ());
+            BlockPos pos = player.blockPosition();
+            int groundY = mc.level.getHeight(Heightmap.Types.MOTION_BLOCKING, pos.getX(), pos.getZ());
             int diff = (int) (player.getY() - groundY);
 
-            if (player.isSubmergedInWater()) {
-                int surfaceY = mc.world.getTopY(Heightmap.Type.WORLD_SURFACE, pos.getX(), pos.getZ());
+            if (player.isUnderWater()) {
+                int surfaceY = mc.level.getHeight(Heightmap.Types.WORLD_SURFACE, pos.getX(), pos.getZ());
                 int depth = (int) (player.getEyeY() - surfaceY);
                 String depthStr = "Depth: " + (-Math.abs(depth));
-                int depthX = (screenWidth - font.getWidth(depthStr)) / 2;
+                int depthX = (screenWidth - font.width(depthStr)) / 2;
                 drawTextWithBox(event, font, depthStr, depthX, 20, argbColor);
             } else if (diff > LEFT_MARGIN) {
                 String altitude = "Altitude: " + diff;
-                int altX = (screenWidth - font.getWidth(altitude)) / 2;
+                int altX = (screenWidth - font.width(altitude)) / 2;
                 drawTextWithBox(event, font, altitude, altX, 20, argbColor);
             }
         }
@@ -374,14 +374,14 @@ public class MobHud extends Module {
             if (player.getHealth() < 10.0f) {
                 int pulse = (int) ((System.currentTimeMillis() / 500) % 2);
                 int lowPulse = pulse == 0 ? 0xFFFFDD44 : 0xFFFF0000;
-                int vx = (screenWidth - font.getWidth("!! Vitals Low !!")) / 2;
+                int vx = (screenWidth - font.width("!! Vitals Low !!")) / 2;
                 int vy = screenHeight - 70;
                 drawTextWithBox(event, font, "!! Vitals Low !!", vx, vy, lowPulse);
             }
-            if (player.getAir() < 120) {
+            if (player.getAirSupply() < 120) {
                 int pulse = (int) ((System.currentTimeMillis() / 500) % 2);
                 int oxygenColor = pulse == 0 ? 0xFFFFDD44 : 0xFFFF6600;
-                int oxX = (screenWidth - font.getWidth("!! Oxygen !!")) / 2;
+                int oxX = (screenWidth - font.width("!! Oxygen !!")) / 2;
                 int oxY = screenHeight - 55;
                 drawTextWithBox(event, font, "!! Oxygen !!", oxX, oxY, oxygenColor);
             }
@@ -402,7 +402,7 @@ public class MobHud extends Module {
                 toggleMessageUntil = System.currentTimeMillis() + 3000;
             } else {
                 String direction;
-                Vec3d lookVec = player.getRotationVec(1.0f);
+                Vec3 lookVec = player.getViewVector(1.0f);
                 double lookAngle = Math.toDegrees(Math.atan2(lookVec.z, lookVec.x));
                 double targetAngle = Math.toDegrees(Math.atan2(dz, dx));
                 double angleDiff = ((targetAngle - lookAngle) + 360.0) % 360.0;
@@ -412,10 +412,10 @@ public class MobHud extends Module {
                 else if (angleDiff < 225.0)                       direction = "<Turn Around>";
                 else                                              direction = "<Left>";
 
-                int dirX = (screenWidth - font.getWidth(direction)) / 2;
+                int dirX = (screenWidth - font.width(direction)) / 2;
                 drawTextWithBox(event, font, direction, dirX, 35, argbColor);
                 String distText = "Distance: " + ((int) distance);
-                int distX = (screenWidth - font.getWidth(distText)) / 2;
+                int distX = (screenWidth - font.width(distText)) / 2;
                 drawTextWithBox(event, font, distText, distX, 50, argbColor);
             }
         }
@@ -425,12 +425,12 @@ public class MobHud extends Module {
     //  原版 MobHUD 的 drawTextWithBox — 完全一致
     // ═════════════════════════════════════════════════════════
 
-    private void drawTextWithBox(Render2DEvent event, TextRenderer font, String text, int x, int y, int color) {
+    private void drawTextWithBox(Render2DEvent event, Font font, String text, int x, int y, int color) {
         if (!textBoxEnabled.get()) {
-            event.drawContext.drawText(font, text, x, y, color, true);
+            event.graphics.text(font, text, x, y, color, true);
             return;
         }
-        int textWidth = font.getWidth(text);
+        int textWidth = font.width(text);
         int boxWidth = textWidth + 8;
         int boxX = x - BOX_PADDING;
         int boxY = y - 1;
@@ -438,12 +438,12 @@ public class MobHud extends Module {
         int g = (int) (((color >> 8) & 255) * SHADOW_FACTOR);
         int b = (int) ((color & 255) * SHADOW_FACTOR);
         int boxColor = 0x80000000 | (r << 16) | (g << 8) | b;
-        event.drawContext.fill(boxX, boxY + 1, boxX + boxWidth, boxY + BOX_HEIGHT - 1, boxColor);
-        event.drawContext.fill(boxX, boxY, boxX + boxWidth, boxY + 1, BLACK_FRAME);
-        event.drawContext.fill(boxX, boxY + BOX_HEIGHT - 1, boxX + boxWidth, boxY + BOX_HEIGHT, BLACK_FRAME);
-        event.drawContext.fill(boxX, boxY, boxX + 1, boxY + BOX_HEIGHT, BLACK_FRAME);
-        event.drawContext.fill(boxX + boxWidth - 1, boxY, boxX + boxWidth, boxY + BOX_HEIGHT, BLACK_FRAME);
-        event.drawContext.drawText(font, text, x, y, color, true);
+        event.graphics.fill(boxX, boxY + 1, boxX + boxWidth, boxY + BOX_HEIGHT - 1, boxColor);
+        event.graphics.fill(boxX, boxY, boxX + boxWidth, boxY + 1, BLACK_FRAME);
+        event.graphics.fill(boxX, boxY + BOX_HEIGHT - 1, boxX + boxWidth, boxY + BOX_HEIGHT, BLACK_FRAME);
+        event.graphics.fill(boxX, boxY, boxX + 1, boxY + BOX_HEIGHT, BLACK_FRAME);
+        event.graphics.fill(boxX + boxWidth - 1, boxY, boxX + boxWidth, boxY + BOX_HEIGHT, BLACK_FRAME);
+        event.graphics.text(font, text, x, y, color, true);
     }
 
     // ═════════════════════════════════════════════════════════
@@ -477,36 +477,36 @@ public class MobHud extends Module {
         };
     }
 
-    private int computeTemperatureC(MinecraftClient mc, ClientPlayerEntity player) {
-        World world = mc.world;
+    private int computeTemperatureC(Minecraft mc, LocalPlayer player) {
+        Level world = mc.level;
         if (world == null) return 0;
-        Biome biome = world.getBiome(player.getBlockPos()).value();
-        float base = biome.getTemperature();
+        Biome biome = world.getBiome(player.blockPosition()).value();
+        float base = biome.getBaseTemperature();
         int temp = Math.round((base - 0.5f) * 20.0f);
-        long t = world.getTimeOfDay() % 24000;
+        long t = world.getOverworldClockTime() % 24000;
         boolean isNight = t >= 13000 && t <= 23000;
         if (isNight) temp -= 2;
         if (world.isThundering()) temp -= 2;
         else if (world.isRaining()) temp--;
         if (player.getY() > 120.0) temp -= 3;
-        if (player.isSubmergedInWater() && base <= 0.15f) return temp - 3;
+        if (player.isUnderWater() && base <= 0.15f) return temp - 3;
         return temp;
     }
 
-    private Entity getLookedAtEntity(MinecraftClient mc, double range) {
-        if (mc.player == null || mc.world == null) return null;
-        Vec3d eyePos = mc.player.getEyePos();
-        Vec3d lookVec = mc.player.getRotationVec(1.0f);
-        Vec3d reachVec = eyePos.add(lookVec.x * range, lookVec.y * range, lookVec.z * range);
+    private Entity getLookedAtEntity(Minecraft mc, double range) {
+        if (mc.player == null || mc.level == null) return null;
+        Vec3 eyePos = mc.player.getEyePosition();
+        Vec3 lookVec = mc.player.getViewVector(1.0f);
+        Vec3 reachVec = eyePos.add(lookVec.x * range, lookVec.y * range, lookVec.z * range);
         Entity closest = null;
         double closestDist = Double.MAX_VALUE;
-        for (Entity e : mc.world.getEntities()) {
+        for (Entity e : mc.level.entitiesForRendering()) {
             if (e == mc.player) continue;
             // 原版 isPickable() 的 Fabric 等效检查：可攻击/交互的实体才纳入检测
             if (!e.isAttackable()) continue;
-            Box aabb = e.getBoundingBox().expand(0.3);
-            if (aabb.raycast(eyePos, reachVec).isPresent()) {
-                double d = e.squaredDistanceTo(eyePos);
+            AABB aabb = e.getBoundingBox().inflate(0.3);
+            if (aabb.clip(eyePos, reachVec).isPresent()) {
+                double d = e.distanceToSqr(eyePos);
                 if (d < closestDist) {
                     closestDist = d;
                     closest = e;

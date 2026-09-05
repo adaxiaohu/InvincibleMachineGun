@@ -8,15 +8,15 @@ import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.misc.Keybind;
 import meteordevelopment.meteorclient.utils.render.color.Color; // 修复 1: 必须使用 Meteor 的 Color
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.EquipmentSlot;
-import net.minecraft.entity.projectile.ProjectileUtil;
-import net.minecraft.util.hit.BlockHitResult;
-import net.minecraft.util.hit.EntityHitResult;
-import net.minecraft.util.hit.HitResult;
-import net.minecraft.util.math.Box;
-import net.minecraft.util.math.Vec3d;
-import net.minecraft.world.RaycastContext;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.projectile.ProjectileUtil;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.EntityHitResult;
+import net.minecraft.world.phys.HitResult;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.level.ClipContext;
 
 public class ODMGear extends Module {
     private final SettingGroup sgGeneral = settings.getDefaultGroup();
@@ -50,10 +50,10 @@ public class ODMGear extends Module {
 
     @EventHandler
     private void onTick(TickEvent.Pre event) {
-        if (mc.player == null || mc.world == null) return;
+        if (mc.player == null || mc.level == null) return;
 
         if (checkGear.get()) {
-            String chestId = mc.player.getEquippedStack(EquipmentSlot.CHEST).getItem().toString();
+            String chestId = mc.player.getItemBySlot(EquipmentSlot.CHEST).getItem().toString();
             if (!chestId.contains("odm_gear") && !chestId.contains("elytra")) {
                 leftHook.reset();
                 rightHook.reset();
@@ -79,33 +79,33 @@ public class ODMGear extends Module {
             if (!hook.entity.isAlive()) {
                 hook.reset();
             } else {
-                // 修复 2: 使用 getX/Y/Z 手动构建 Vec3d，避免 getPos() 映射错误
-                Vec3d entityPos = new Vec3d(hook.entity.getX(), hook.entity.getY(), hook.entity.getZ());
-                hook.pos = entityPos.add(0, hook.entity.getHeight() * 0.7, 0);
+                // 修复 2: 使用 getX/Y/Z 手动构建 Vec3，避免 getPos() 映射错误
+                Vec3 entityPos = new Vec3(hook.entity.getX(), hook.entity.getY(), hook.entity.getZ());
+                hook.pos = entityPos.add(0, hook.entity.getBbHeight() * 0.7, 0);
             }
         }
     }
 
     private void fireHook(HookState hook) {
         double dist = range.get();
-        Vec3d eyes = mc.player.getEyePos();
-        Vec3d look = mc.player.getRotationVec(1.0F);
-        Vec3d end = eyes.add(look.multiply(dist));
+        Vec3 eyes = mc.player.getEyePosition();
+        Vec3 look = mc.player.getViewVector(1.0F);
+        Vec3 end = eyes.add(look.scale(dist));
 
-        Box box = mc.player.getBoundingBox().stretch(look.multiply(dist)).expand(1.0);
-        EntityHitResult entityHit = ProjectileUtil.raycast(
+        AABB box = mc.player.getBoundingBox().expandTowards(look.scale(dist)).inflate(1.0);
+        EntityHitResult entityHit = ProjectileUtil.getEntityHitResult(
             mc.player,
             eyes,
             end,
             box,
-            (entity) -> !entity.isSpectator() && entity.canHit(),
+            (entity) -> !entity.isSpectator() && entity.isPickable(),
             dist * dist
         );
 
-        BlockHitResult blockHit = mc.world.raycast(new RaycastContext(
+        BlockHitResult blockHit = mc.level.clip(new ClipContext(
             eyes, end,
-            RaycastContext.ShapeType.COLLIDER,
-            RaycastContext.FluidHandling.NONE,
+            ClipContext.Block.COLLIDER,
+            ClipContext.Fluid.NONE,
             mc.player
         ));
 
@@ -113,19 +113,19 @@ public class ODMGear extends Module {
         boolean hitBlock = blockHit.getType() != HitResult.Type.MISS;
 
         if (hitEntity && hitBlock) {
-            if (eyes.squaredDistanceTo(entityHit.getPos()) < eyes.squaredDistanceTo(blockHit.getPos())) {
-                setHook(hook, entityHit.getEntity(), entityHit.getPos());
+            if (eyes.distanceToSqr(entityHit.getLocation()) < eyes.distanceToSqr(blockHit.getLocation())) {
+                setHook(hook, entityHit.getEntity(), entityHit.getLocation());
             } else {
-                setHook(hook, null, blockHit.getPos());
+                setHook(hook, null, blockHit.getLocation());
             }
         } else if (hitEntity) {
-            setHook(hook, entityHit.getEntity(), entityHit.getPos());
+            setHook(hook, entityHit.getEntity(), entityHit.getLocation());
         } else if (hitBlock) {
-            setHook(hook, null, blockHit.getPos());
+            setHook(hook, null, blockHit.getLocation());
         }
     }
 
-    private void setHook(HookState hook, Entity entity, Vec3d pos) {
+    private void setHook(HookState hook, Entity entity, Vec3 pos) {
         hook.active = true;
         hook.entity = entity;
         hook.pos = pos;
@@ -134,55 +134,55 @@ public class ODMGear extends Module {
     private void applyPhysics() {
         if (!leftHook.active && !rightHook.active) return;
 
-        // 修复 2: 同样对 player 使用手动 Vec3d 构建
-        Vec3d playerPos = new Vec3d(mc.player.getX(), mc.player.getY(), mc.player.getZ());
-        Vec3d targetPos;
+        // 修复 2: 同样对 player 使用手动 Vec3 构建
+        Vec3 playerPos = new Vec3(mc.player.getX(), mc.player.getY(), mc.player.getZ());
+        Vec3 targetPos;
         boolean dualActive = leftHook.active && rightHook.active;
 
         if (dualActive) {
-            targetPos = leftHook.pos.add(rightHook.pos).multiply(0.5);
+            targetPos = leftHook.pos.add(rightHook.pos).scale(0.5);
         } else if (leftHook.active) {
             targetPos = leftHook.pos;
         } else {
             targetPos = rightHook.pos;
         }
 
-        Vec3d toHook = targetPos.subtract(playerPos);
-        Vec3d direction = toHook.normalize();
+        Vec3 toHook = targetPos.subtract(playerPos);
+        Vec3 direction = toHook.normalize();
 
-        boolean pressingForward = mc.player.input.playerInput.forward();
-        boolean pressingA = mc.player.input.playerInput.left();
-        boolean pressingD = mc.player.input.playerInput.right();
+        boolean pressingForward = mc.player.input.keyPresses.forward();
+        boolean pressingA = mc.player.input.keyPresses.left();
+        boolean pressingD = mc.player.input.keyPresses.right();
         boolean isOrbiting = (pressingA || pressingD) && !dualActive;
 
         double currentPullSpeed = pullSpeed.get();
         if (dualActive) currentPullSpeed *= dualMultiplier.get();
         if (pressingForward) currentPullSpeed *= 1.2;
 
-        Vec3d pullForce = direction.multiply(currentPullSpeed);
+        Vec3 pullForce = direction.scale(currentPullSpeed);
         
         if (playerPos.y < targetPos.y) {
             pullForce = pullForce.add(0, lift.get(), 0);
         }
 
-        Vec3d orbitForce = Vec3d.ZERO;
+        Vec3 orbitForce = Vec3.ZERO;
         if (isOrbiting) {
-            Vec3d up = new Vec3d(0, 1, 0);
-            Vec3d right = direction.crossProduct(up).normalize();
+            Vec3 up = new Vec3(0, 1, 0);
+            Vec3 right = direction.cross(up).normalize();
             
-            if (right.lengthSquared() < 0.01) {
-                right = direction.crossProduct(new Vec3d(1, 0, 0)).normalize();
+            if (right.lengthSqr() < 0.01) {
+                right = direction.cross(new Vec3(1, 0, 0)).normalize();
             }
 
             double orbitMag = orbitSpeed.get();
-            if (pressingD) orbitForce = right.multiply(orbitMag);
-            if (pressingA) orbitForce = right.multiply(-orbitMag);
+            if (pressingD) orbitForce = right.scale(orbitMag);
+            if (pressingA) orbitForce = right.scale(-orbitMag);
         }
 
-        Vec3d currentVel = mc.player.getVelocity();
-        Vec3d newVelocity = currentVel.multiply(drag.get()).add(pullForce).add(orbitForce);
+        Vec3 currentVel = mc.player.getDeltaMovement();
+        Vec3 newVelocity = currentVel.scale(drag.get()).add(pullForce).add(orbitForce);
         
-        mc.player.setVelocity(newVelocity);
+        mc.player.setDeltaMovement(newVelocity);
     }
 
     @EventHandler
@@ -191,10 +191,10 @@ public class ODMGear extends Module {
         if (rightHook.active) renderLine(event, rightHook.pos);
     }
 
-    private void renderLine(Render3DEvent event, Vec3d target) {
+    private void renderLine(Render3DEvent event, Vec3 target) {
         if (target == null) return;
         // 修复 2: 获取玩家位置避免 getPos
-        Vec3d start = new Vec3d(mc.player.getX(), mc.player.getY() + 0.8, mc.player.getZ());
+        Vec3 start = new Vec3(mc.player.getX(), mc.player.getY() + 0.8, mc.player.getZ());
         // 修复 1: 使用正确的 Color.WHITE
         event.renderer.line(start.x, start.y, start.z, target.x, target.y, target.z, Color.WHITE);
     }
@@ -204,12 +204,12 @@ public class ODMGear extends Module {
 
     private static class HookState {
         boolean active = false;
-        Vec3d pos = Vec3d.ZERO;
+        Vec3 pos = Vec3.ZERO;
         Entity entity = null;
 
         void reset() {
             active = false;
-            pos = Vec3d.ZERO;
+            pos = Vec3.ZERO;
             entity = null;
         }
     }

@@ -8,8 +8,8 @@ import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.player.InvUtils;
 import meteordevelopment.meteorclient.utils.player.FindItemResult;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.item.ItemStack;
-import net.minecraft.network.packet.c2s.play.UpdateSelectedSlotC2SPacket;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.network.protocol.game.ServerboundSetCarriedItemPacket;
 
 public class adaAttributeSwap extends Module {
     public adaAttributeSwap() {
@@ -48,7 +48,7 @@ public class adaAttributeSwap extends Module {
 
     @EventHandler
     private void onTick(TickEvent.Pre event) {
-        if (mc.player == null || mc.world == null) return;
+        if (mc.player == null || mc.level == null) return;
 
         // 1. 处理切回逻辑
         if (isSwapping) {
@@ -61,10 +61,10 @@ public class adaAttributeSwap extends Module {
         }
 
         // 2. 检测左键按下（处理长按和单击的判定）
-        boolean isAttackPressed = mc.options.attackKey.isPressed();
+        boolean isAttackPressed = mc.options.keyAttack.isDown();
         
         if (isAttackPressed && !wasAttackPressed) {
-            ItemStack mainHand = mc.player.getMainHandStack();
+            ItemStack mainHand = mc.player.getMainHandItem();
 
             if (isCorrectTrigger(mainHand)) {
                 FindItemResult target = InvUtils.findInHotbar(this::isTargetItem);
@@ -94,8 +94,8 @@ public class adaAttributeSwap extends Module {
         ((InventoryAccessor) mc.player.getInventory()).setSelectedSlot(slot);
         
         // 【关键】如果是服务器环境，发送数据包告知服务器
-        if (packetSwap.get() && mc.getNetworkHandler() != null) {
-            mc.getNetworkHandler().sendPacket(new UpdateSelectedSlotC2SPacket(slot));
+        if (packetSwap.get() && mc.getConnection() != null) {
+            mc.getConnection().send(new ServerboundSetCarriedItemPacket(slot));
         }
     }
 

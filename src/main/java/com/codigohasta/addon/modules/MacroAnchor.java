@@ -10,20 +10,20 @@ import meteordevelopment.meteorclient.utils.player.FindItemResult;
 import meteordevelopment.meteorclient.utils.player.InvUtils;
 import meteordevelopment.meteorclient.utils.player.Rotations;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.block.BlockState;
-import net.minecraft.block.Blocks;
-import net.minecraft.block.ShapeContext;
-import net.minecraft.item.Items;
-import net.minecraft.network.packet.c2s.play.ClientCommandC2SPacket;
-import net.minecraft.network.packet.c2s.play.PlayerInteractBlockC2SPacket;
-import net.minecraft.network.packet.c2s.play.UpdateSelectedSlotC2SPacket;
-import net.minecraft.util.Hand;
-import net.minecraft.util.hit.BlockHitResult;
-import net.minecraft.util.hit.HitResult;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Direction;
-import net.minecraft.util.math.Vec3d;
-import net.minecraft.world.RaycastContext;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.phys.shapes.CollisionContext;
+import net.minecraft.world.item.Items;
+import net.minecraft.network.protocol.game.ServerboundPlayerCommandPacket;
+import net.minecraft.network.protocol.game.ServerboundUseItemOnPacket;
+import net.minecraft.network.protocol.game.ServerboundSetCarriedItemPacket;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.HitResult;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.level.ClipContext;
 
 public class MacroAnchor extends Module {
     private final SettingGroup sgGeneral = settings.getDefaultGroup();
@@ -86,7 +86,7 @@ public class MacroAnchor extends Module {
         if (slot < 0 || slot > 8) return;
         if (((InventoryAccessor) mc.player.getInventory()).getSelectedSlot() != slot) {
             ((InventoryAccessor) mc.player.getInventory()).setSelectedSlot(slot);
-            mc.getNetworkHandler().sendPacket(new UpdateSelectedSlotC2SPacket(slot));
+            mc.getConnection().send(new ServerboundSetCarriedItemPacket(slot));
         }
     }
 
@@ -96,14 +96,14 @@ public class MacroAnchor extends Module {
 
     @EventHandler
     private void onPacketSend(PacketEvent.Send event) {
-        if (event.packet instanceof PlayerInteractBlockC2SPacket packet && currentState == State.IDLE) {
-            if (mc.player.getStackInHand(packet.getHand()).getItem() != Items.RESPAWN_ANCHOR) return;
+        if (event.packet instanceof ServerboundUseItemOnPacket packet && currentState == State.IDLE) {
+            if (mc.player.getItemInHand(packet.getHand()).getItem() != Items.RESPAWN_ANCHOR) return;
 
-            BlockHitResult hitResult = packet.getBlockHitResult();
-            BlockPos placedPos = hitResult.getBlockPos().offset(hitResult.getSide());
+            BlockHitResult hitResult = packet.getHitResult();
+            BlockPos placedPos = hitResult.getBlockPos().relative(hitResult.getDirection());
 
-            BlockState clickedState = mc.world.getBlockState(hitResult.getBlockPos());
-            if (clickedState.isReplaceable()) {
+            BlockState clickedState = mc.level.getBlockState(hitResult.getBlockPos());
+            if (clickedState.canBeReplaced()) {
                 placedPos = hitResult.getBlockPos();
             }
 
@@ -118,7 +118,7 @@ public class MacroAnchor extends Module {
         isRotating = false;
 
         if (blockMode.get()) {
-            blockerPos = calculateBlockerPos(anchorPos, mc.player.getEyePos());
+            blockerPos = calculateBlockerPos(anchorPos, mc.player.getEyePosition());
             if (blockerPos != null && canPlaceBlocker(blockerPos)) {
                 currentState = State.PLACE_BLOCKER;
             } else {
@@ -191,7 +191,7 @@ public class MacroAnchor extends Module {
         }
     }
 
-    private BlockPos calculateBlockerPos(BlockPos anchor, Vec3d playerEye) {
+    private BlockPos calculateBlockerPos(BlockPos anchor, Vec3 playerEye) {
         double centerX = anchor.getX() + 0.5;
         double centerZ = anchor.getZ() + 0.5;
         double dx = playerEye.x - centerX;
@@ -218,9 +218,9 @@ public class MacroAnchor extends Module {
     }
 
     private boolean canPlaceBlocker(BlockPos pos) {
-        BlockState state = mc.world.getBlockState(pos);
-        if (!state.isReplaceable()) return false;
-        return mc.world.canPlace(Blocks.GLOWSTONE.getDefaultState(), pos, ShapeContext.of(mc.player));
+        BlockState state = mc.level.getBlockState(pos);
+        if (!state.canBeReplaced()) return false;
+        return mc.level.isUnobstructed(Blocks.GLOWSTONE.defaultBlockState(), pos, CollisionContext.of(mc.player));
     }
 
     // 补全 placeBlockLegit 方法
@@ -229,25 +229,25 @@ public class MacroAnchor extends Module {
         Direction[] priorities = {Direction.DOWN, Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST, Direction.UP};
         
         for (Direction side : priorities) {
-            BlockPos neighborPos = targetPos.offset(side);
+            BlockPos neighborPos = targetPos.relative(side);
             if (neighborPos.equals(excludePos)) continue;
 
-            BlockState state = mc.world.getBlockState(neighborPos);
-            boolean isSolid = state.isFullCube(mc.world, neighborPos);
+            BlockState state = mc.level.getBlockState(neighborPos);
+            boolean isSolid = state.isCollisionShapeFullBlock(mc.level, neighborPos);
             
             if (isSolid) {
                 Direction hitSide = side.getOpposite();
-                Vec3d hitVec = new Vec3d(
-                    neighborPos.getX() + 0.5 + hitSide.getOffsetX() * 0.49,
-                    neighborPos.getY() + 0.5 + hitSide.getOffsetY() * 0.49,
-                    neighborPos.getZ() + 0.5 + hitSide.getOffsetZ() * 0.49
+                Vec3 hitVec = new Vec3(
+                    neighborPos.getX() + 0.5 + hitSide.getStepX() * 0.49,
+                    neighborPos.getY() + 0.5 + hitSide.getStepY() * 0.49,
+                    neighborPos.getZ() + 0.5 + hitSide.getStepZ() * 0.49
                 );
                 
                 // 强制 Shift 包已删除
                 Rotations.rotate(Rotations.getYaw(hitVec), Rotations.getPitch(hitVec), 50, () -> {
                     BlockHitResult result = new BlockHitResult(hitVec, hitSide, neighborPos, false);
-                    mc.interactionManager.interactBlock(mc.player, Hand.MAIN_HAND, result);
-                    mc.player.swingHand(Hand.MAIN_HAND);
+                    mc.gameMode.useItemOn(mc.player, InteractionHand.MAIN_HAND, result);
+                    mc.player.swing(InteractionHand.MAIN_HAND);
                     if (onDone != null) onDone.run();
                 });
                 return true;
@@ -260,17 +260,17 @@ public class MacroAnchor extends Module {
     private void interactBlockLegit(BlockPos pos, Runnable onDone) {
         Direction bestSide = null;
         double shortestDist = Double.MAX_VALUE;
-        Vec3d eyePos = mc.player.getEyePos();
+        Vec3 eyePos = mc.player.getEyePosition();
 
         for (Direction dir : Direction.values()) {
-            Vec3d faceCenter = new Vec3d(
-                pos.getX() + 0.5 + dir.getOffsetX() * 0.5,
-                pos.getY() + 0.5 + dir.getOffsetY() * 0.5,
-                pos.getZ() + 0.5 + dir.getOffsetZ() * 0.5
+            Vec3 faceCenter = new Vec3(
+                pos.getX() + 0.5 + dir.getStepX() * 0.5,
+                pos.getY() + 0.5 + dir.getStepY() * 0.5,
+                pos.getZ() + 0.5 + dir.getStepZ() * 0.5
             );
             
             // 射线检测
-            HitResult hit = mc.world.raycast(new RaycastContext(eyePos, faceCenter, RaycastContext.ShapeType.COLLIDER, RaycastContext.FluidHandling.NONE, mc.player));
+            HitResult hit = mc.level.clip(new ClipContext(eyePos, faceCenter, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, mc.player));
             
             // 修复：确保 hit 是 BlockHitResult 类型，然后再获取 BlockPos
             if (hit instanceof BlockHitResult blockHit) {
@@ -279,7 +279,7 @@ public class MacroAnchor extends Module {
                 }
             }
 
-            double dist = eyePos.squaredDistanceTo(faceCenter);
+            double dist = eyePos.distanceToSqr(faceCenter);
             if (dist < shortestDist) {
                 shortestDist = dist;
                 bestSide = dir;
@@ -288,17 +288,17 @@ public class MacroAnchor extends Module {
 
         if (bestSide == null) bestSide = Direction.UP;
 
-        Vec3d hitVec = new Vec3d(
-            pos.getX() + 0.5 + bestSide.getOffsetX() * 0.49,
-            pos.getY() + 0.5 + bestSide.getOffsetY() * 0.49,
-            pos.getZ() + 0.5 + bestSide.getOffsetZ() * 0.49
+        Vec3 hitVec = new Vec3(
+            pos.getX() + 0.5 + bestSide.getStepX() * 0.49,
+            pos.getY() + 0.5 + bestSide.getStepY() * 0.49,
+            pos.getZ() + 0.5 + bestSide.getStepZ() * 0.49
         );
 
         Direction finalBestSide = bestSide;
         Rotations.rotate(Rotations.getYaw(hitVec), Rotations.getPitch(hitVec), 50, () -> {
             BlockHitResult result = new BlockHitResult(hitVec, finalBestSide, pos, false);
-            mc.interactionManager.interactBlock(mc.player, Hand.MAIN_HAND, result);
-            mc.player.swingHand(Hand.MAIN_HAND);
+            mc.gameMode.useItemOn(mc.player, InteractionHand.MAIN_HAND, result);
+            mc.player.swing(InteractionHand.MAIN_HAND);
             if (onDone != null) onDone.run();
         });
     }

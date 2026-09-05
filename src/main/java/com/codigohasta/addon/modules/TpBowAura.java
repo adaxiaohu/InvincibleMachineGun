@@ -11,18 +11,18 @@ import meteordevelopment.meteorclient.utils.entity.TargetUtils;
 import meteordevelopment.meteorclient.utils.player.ChatUtils;
 import meteordevelopment.meteorclient.utils.render.color.Color;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.EntityType;
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.network.packet.c2s.play.PlayerActionC2SPacket;
-import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket;
-import net.minecraft.util.hit.HitResult;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Box;
-import net.minecraft.util.math.Direction;
-import net.minecraft.util.math.Vec3d;
-import net.minecraft.world.RaycastContext;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;
+import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
+import net.minecraft.world.phys.HitResult;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.core.Direction;
+import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.level.ClipContext;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -112,7 +112,7 @@ public class TpBowAura extends Module {
     // 内部状态
     private long lastShootTime = 0;
     private Entity target;
-    private final List<Vec3d> renderPath = new ArrayList<>();
+    private final List<Vec3> renderPath = new ArrayList<>();
 
     public TpBowAura() {
         super(AddonTemplate.CATEGORY, "明枪暗箭", "一瞬间传送到目标身边用弓射箭打他。娱乐功能，抄袭了gcore，裤子条纹");
@@ -125,11 +125,11 @@ public class TpBowAura extends Module {
 
     @EventHandler
     private void onTick(TickEvent.Pre event) {
-        if (mc.player == null || mc.world == null) return;
+        if (mc.player == null || mc.level == null) return;
 
         // 1. 检查是否拿着弓且正在拉弓
-        String mainHandName = mc.player.getMainHandStack().getItem().toString().toLowerCase();
-        String offHandName = mc.player.getOffHandStack().getItem().toString().toLowerCase();
+        String mainHandName = mc.player.getMainHandItem().getItem().toString().toLowerCase();
+        String offHandName = mc.player.getOffhandItem().getItem().toString().toLowerCase();
         boolean holdingBow = mainHandName.contains("bow") || offHandName.contains("bow");
 
         if (!holdingBow || !mc.player.isUsingItem()) {
@@ -148,7 +148,7 @@ public class TpBowAura extends Module {
         if (waitForHurtTime.get() && ((LivingEntity) target).hurtTime > 1) return;
 
         // 5. 获取爆头射击点 (必须能看到目标)
-        Vec3d shootPos = getShootPos(target);
+        Vec3 shootPos = getShootPos(target);
         if (shootPos == null) return;
 
         // 6. 寻路并执行瞬移射击
@@ -160,8 +160,8 @@ public class TpBowAura extends Module {
         if (render.get() && renderPath.size() >= 2) {
             for (int i = 0; i < renderPath.size() - 1; i++) {
                 event.renderer.line(
-                    renderPath.get(i).getX(), renderPath.get(i).getY(), renderPath.get(i).getZ(),
-                    renderPath.get(i + 1).getX(), renderPath.get(i + 1).getY(), renderPath.get(i + 1).getZ(),
+                    renderPath.get(i).x(), renderPath.get(i).y(), renderPath.get(i).z(),
+                    renderPath.get(i + 1).x(), renderPath.get(i + 1).y(), renderPath.get(i + 1).z(),
                     Color.RED
                 );
             }
@@ -178,16 +178,16 @@ public class TpBowAura extends Module {
         if (!(entity instanceof LivingEntity) || !entity.isAlive() || entity == mc.player) return false;
         if (!entities.get().contains(entity.getType())) return false;
         if (mc.player.distanceTo(entity) > range.get()) return false;
-        if (entity instanceof PlayerEntity p && (p.isCreative() || p.isSpectator())) return false;
+        if (entity instanceof Player p && (p.isCreative() || p.isSpectator())) return false;
         return true;
     }
 
-    private void doTpShoot(Vec3d shootPos) {
+    private void doTpShoot(Vec3 shootPos) {
         // [修复1] 手动构造玩家坐标
-        Vec3d playerPos = new Vec3d(mc.player.getX(), mc.player.getY(), mc.player.getZ());
+        Vec3 playerPos = new Vec3(mc.player.getX(), mc.player.getY(), mc.player.getZ());
 
-        Vec3d vClipStart = null;
-        Vec3d vClipEnd = null;
+        Vec3 vClipStart = null;
+        Vec3 vClipEnd = null;
         boolean foundPath = false;
 
         // === 寻路逻辑 (VClip 结合直连) ===
@@ -203,8 +203,8 @@ public class TpBowAura extends Module {
             double startSearchHeight = maxHeight + 1.0; // 从高点往上找
 
             for (double yLevel = startSearchHeight; yLevel < startSearchHeight + 50.0; yLevel += 1.0) {
-                Vec3d testUp = new Vec3d(playerPos.x, yLevel, playerPos.z);
-                Vec3d testTargetUp = new Vec3d(shootPos.x, yLevel, shootPos.z);
+                Vec3 testUp = new Vec3(playerPos.x, yLevel, playerPos.z);
+                Vec3 testTargetUp = new Vec3(shootPos.x, yLevel, shootPos.z);
 
                 if (isSpaceEmpty(testUp) && isSpaceEmpty(testTargetUp) && hasClearPath(testUp, testTargetUp)) {
                     vClipStart = testUp;
@@ -247,7 +247,7 @@ public class TpBowAura extends Module {
         sendPosPacket(shootPos.x, shootPos.y, shootPos.z, false);
 
         // 3. 计算爆头角度
-        Vec3d targetCenter = target.getBoundingBox().getCenter();
+        Vec3 targetCenter = target.getBoundingBox().getCenter();
         double dX = targetCenter.x - shootPos.x;
         double dY = targetCenter.y - (shootPos.y + 1.62); // 减去视角高度
         double dZ = targetCenter.z - shootPos.z;
@@ -255,11 +255,11 @@ public class TpBowAura extends Module {
         float pitch = (float) -Math.toDegrees(Math.atan2(dY, Math.sqrt(dX * dX + dZ * dZ)));
 
         // 4. 发送转身与开火包
-        mc.getNetworkHandler().sendPacket(new PlayerMoveC2SPacket.Full(shootPos.x, shootPos.y, shootPos.z, yaw, pitch, false, mc.player.horizontalCollision));
+        mc.getConnection().send(new ServerboundMovePlayerPacket.PosRot(shootPos.x, shootPos.y, shootPos.z, yaw, pitch, false, mc.player.horizontalCollision));
         
         // 发送松手开弓包 (1.21.x sequence = 0)
-        mc.getNetworkHandler().sendPacket(new PlayerActionC2SPacket(
-            PlayerActionC2SPacket.Action.RELEASE_USE_ITEM, BlockPos.ORIGIN, Direction.DOWN, 0 
+        mc.getConnection().send(new ServerboundPlayerActionPacket(
+            ServerboundPlayerActionPacket.Action.RELEASE_USE_ITEM, BlockPos.ZERO, Direction.DOWN, 0 
         ));
         mc.player.stopUsingItem();
         lastShootTime = System.currentTimeMillis();
@@ -274,29 +274,29 @@ public class TpBowAura extends Module {
             sendPosPacket(playerPos.x, playerPos.y + 0.01, playerPos.z, false);
             sendPosPacket(playerPos.x, playerPos.y, playerPos.z, true); // <== 防摔落核心包
             
-            mc.player.setPosition(playerPos.x, playerPos.y, playerPos.z);
+            mc.player.setPos(playerPos.x, playerPos.y, playerPos.z);
         } else {
-            mc.player.setPosition(shootPos.x, shootPos.y, shootPos.z);
+            mc.player.setPos(shootPos.x, shootPos.y, shootPos.z);
         }
 
         // 清理客户端摔落伤害缓存
         mc.player.fallDistance = 0.0f;
     }
 
-    private Vec3d getShootPos(Entity target) {
-        List<Vec3d> validPositions = new ArrayList<>();
+    private Vec3 getShootPos(Entity target) {
+        List<Vec3> validPositions = new ArrayList<>();
         int centerX = (int) Math.floor(target.getX());
         int centerY = (int) Math.floor(target.getY());
         int centerZ = (int) Math.floor(target.getZ());
         int border = 2; // 搜索半径
 
-        // [修复2] 提前构造目标坐标 Vec3d，防止多次调用
-        Vec3d targetPosVec = new Vec3d(target.getX(), target.getY(), target.getZ());
+        // [修复2] 提前构造目标坐标 Vec3，防止多次调用
+        Vec3 targetPosVec = new Vec3(target.getX(), target.getY(), target.getZ());
 
         for (int x = centerX - border; x <= centerX + border; x++) {
             for (int y = centerY - 1; y <= centerY + border; y++) {
                 for (int z = centerZ - border; z <= centerZ + border; z++) {
-                    Vec3d vec = new Vec3d(x + 0.5, y, z + 0.5);
+                    Vec3 vec = new Vec3(x + 0.5, y, z + 0.5);
 
                     // 不能离目标太远
                     if (vec.distanceTo(targetPosVec) > 4.0) continue;
@@ -305,8 +305,8 @@ public class TpBowAura extends Module {
                     if (!isSpaceEmpty(vec)) continue;
 
                     // 2. 必须能看到目标的中心点 (保证箭能射中)
-                    Vec3d eyePos = vec.add(0.0, 1.62, 0.0);
-                    Vec3d targetCenter = target.getBoundingBox().getCenter();
+                    Vec3 eyePos = vec.add(0.0, 1.62, 0.0);
+                    Vec3 targetCenter = target.getBoundingBox().getCenter();
                     
                     if (canSee(eyePos, targetCenter)) {
                         validPositions.add(vec);
@@ -316,42 +316,42 @@ public class TpBowAura extends Module {
         }
 
         // [修复3] 排序，找离自己最近的点，手动构造自身坐标
-        Vec3d myPos = new Vec3d(mc.player.getX(), mc.player.getY(), mc.player.getZ());
+        Vec3 myPos = new Vec3(mc.player.getX(), mc.player.getY(), mc.player.getZ());
         validPositions.sort(Comparator.comparingDouble(v -> v.distanceTo(myPos)));
         return validPositions.isEmpty() ? null : validPositions.get(0);
     }
 
     // === 核心工具方法 ===
 
-    private boolean isSpaceEmpty(Vec3d pos) {
+    private boolean isSpaceEmpty(Vec3 pos) {
         // 模拟玩家碰撞箱 0.6宽 x 1.8高
-        Box box = new Box(pos.getX() - 0.3, pos.getY(), pos.getZ() - 0.3, pos.getX() + 0.3, pos.getY() + 1.8, pos.getZ() + 0.3);
-        return mc.world.isSpaceEmpty(box);
+        AABB box = new AABB(pos.x() - 0.3, pos.y(), pos.z() - 0.3, pos.x() + 0.3, pos.y() + 1.8, pos.z() + 0.3);
+        return mc.level.noCollision(box);
     }
 
-    private boolean hasClearPath(Vec3d start, Vec3d end) {
+    private boolean hasClearPath(Vec3 start, Vec3 end) {
         double dist = start.distanceTo(end);
         int steps = (int) (dist * 2.5); // 提高精度检测
         for (int i = 0; i <= steps; i++) {
-            Vec3d check = start.lerp(end, (double) i / steps);
+            Vec3 check = start.lerp(end, (double) i / steps);
             if (!isSpaceEmpty(check)) return false;
         }
         return true;
     }
 
-    private boolean canSee(Vec3d start, Vec3d end) {
-        RaycastContext context = new RaycastContext(
+    private boolean canSee(Vec3 start, Vec3 end) {
+        ClipContext context = new ClipContext(
             start, end,
-            RaycastContext.ShapeType.COLLIDER,
-            RaycastContext.FluidHandling.NONE,
+            ClipContext.Block.COLLIDER,
+            ClipContext.Fluid.NONE,
             mc.player
         );
-        return mc.world.raycast(context).getType() == HitResult.Type.MISS;
+        return mc.level.clip(context).getType() == HitResult.Type.MISS;
     }
 
     private void sendPosPacket(double x, double y, double z, boolean onGround) {
         // 1.21.x Record Data 发包规范
-        mc.getNetworkHandler().sendPacket(new PlayerMoveC2SPacket.PositionAndOnGround(
+        mc.getConnection().send(new ServerboundMovePlayerPacket.Pos(
             x, y, z, onGround, mc.player.horizontalCollision
         ));
     }

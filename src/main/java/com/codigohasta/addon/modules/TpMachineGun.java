@@ -11,26 +11,26 @@ import meteordevelopment.meteorclient.utils.entity.TargetUtils;
 import meteordevelopment.meteorclient.utils.player.ChatUtils;
 import meteordevelopment.meteorclient.utils.render.color.Color;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.enchantment.EnchantmentHelper;
-import net.minecraft.enchantment.Enchantments;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.EntityType;
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.item.BowItem;
-import net.minecraft.item.CrossbowItem;
-import net.minecraft.item.Item;
-import net.minecraft.item.ItemStack;
-import net.minecraft.network.packet.c2s.play.PlayerActionC2SPacket;
-import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket;
-import net.minecraft.registry.RegistryKeys;
-import net.minecraft.util.Hand;
-import net.minecraft.util.hit.HitResult;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Box;
-import net.minecraft.util.math.Direction;
-import net.minecraft.util.math.Vec3d;
-import net.minecraft.world.RaycastContext;
+import net.minecraft.world.item.enchantment.EnchantmentHelper;
+import net.minecraft.world.item.enchantment.Enchantments;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.BowItem;
+import net.minecraft.world.item.CrossbowItem;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;
+import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.phys.HitResult;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.core.Direction;
+import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.level.ClipContext;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -131,7 +131,7 @@ public class TpMachineGun extends Module {
     // 内部状态
     private int timer = 0;
     private Entity target;
-    private final List<Vec3d> renderPath = new ArrayList<>();
+    private final List<Vec3> renderPath = new ArrayList<>();
 
     public TpMachineGun() {
         super(AddonTemplate.CATEGORY, "tp-machine-gun", "试验模块，娱乐功能，本来设想是弩机关枪加上tp的，但是没弄成。抄袭了gcore，裤子条纹");
@@ -144,8 +144,8 @@ public class TpMachineGun extends Module {
 
     @Override
     public void onDeactivate() {
-        mc.options.useKey.setPressed(false);
-        if (mc.player != null) mc.interactionManager.stopUsingItem(mc.player);
+        mc.options.keyUse.setDown(false);
+        if (mc.player != null) mc.gameMode.releaseUsingItem(mc.player);
     }
 
     @Override
@@ -155,34 +155,34 @@ public class TpMachineGun extends Module {
 
     @EventHandler
     private void onTick(TickEvent.Pre event) {
-        if (mc.player == null || mc.world == null) return;
+        if (mc.player == null || mc.level == null) return;
 
         // 1. 冷却计时器
         if (timer > 0) {
             timer--;
-            mc.options.useKey.setPressed(false);
+            mc.options.keyUse.setDown(false);
             return;
         }
 
         // 2. 检查主副手武器
-        Hand hand = Hand.MAIN_HAND;
-        ItemStack stack = mc.player.getMainHandStack();
+        InteractionHand hand = InteractionHand.MAIN_HAND;
+        ItemStack stack = mc.player.getMainHandItem();
         
         if (!isWeapon(stack.getItem())) {
-            stack = mc.player.getOffHandStack();
-            hand = Hand.OFF_HAND;
+            stack = mc.player.getOffhandItem();
+            hand = InteractionHand.OFF_HAND;
         }
         
         if (!isWeapon(stack.getItem())) {
             target = null;
-            mc.options.useKey.setPressed(false);
+            mc.options.keyUse.setDown(false);
             return;
         }
 
         // 3. 获取目标
         updateTarget();
         if (target == null) {
-            mc.options.useKey.setPressed(false);
+            mc.options.keyUse.setDown(false);
             return;
         }
 
@@ -194,27 +194,27 @@ public class TpMachineGun extends Module {
             if (CrossbowItem.isCharged(stack)) {
                 // 弩已上膛完毕，准备发射
                 isReadyToShoot = true;
-                mc.options.useKey.setPressed(false);
+                mc.options.keyUse.setDown(false);
             } else {
                 // 弩正在上膛
-                mc.options.useKey.setPressed(true);
+                mc.options.keyUse.setDown(true);
                 if (!mc.player.isUsingItem()) {
-                    mc.interactionManager.interactItem(mc.player, hand);
+                    mc.gameMode.useItem(mc.player, hand);
                 } else {
                     int requiredTime = getPullTime(stack) + tolerance.get();
-                    if (mc.player.getItemUseTime() >= requiredTime) {
-                        mc.interactionManager.stopUsingItem(mc.player); // 完成上膛
+                    if (mc.player.getTicksUsingItem() >= requiredTime) {
+                        mc.gameMode.releaseUsingItem(mc.player); // 完成上膛
                     }
                 }
             }
         } else {
             // 弓的拉弦逻辑
-            mc.options.useKey.setPressed(true);
+            mc.options.keyUse.setDown(true);
             if (!mc.player.isUsingItem()) {
-                mc.interactionManager.interactItem(mc.player, hand);
+                mc.gameMode.useItem(mc.player, hand);
             } else {
                 int requiredTime = getPullTime(stack) + tolerance.get();
-                if (mc.player.getItemUseTime() >= requiredTime) {
+                if (mc.player.getTicksUsingItem() >= requiredTime) {
                     // 弓已拉满，准备发射
                     isReadyToShoot = true;
                 }
@@ -229,7 +229,7 @@ public class TpMachineGun extends Module {
             }
 
             // 获取合法的贴脸爆头位置
-            Vec3d shootPos = getShootPos(target);
+            Vec3 shootPos = getShootPos(target);
             if (shootPos == null) return;
 
             // 穿墙并发包射击
@@ -242,8 +242,8 @@ public class TpMachineGun extends Module {
         if (render.get() && renderPath.size() >= 2) {
             for (int i = 0; i < renderPath.size() - 1; i++) {
                 event.renderer.line(
-                    renderPath.get(i).getX(), renderPath.get(i).getY(), renderPath.get(i).getZ(),
-                    renderPath.get(i + 1).getX(), renderPath.get(i + 1).getY(), renderPath.get(i + 1).getZ(),
+                    renderPath.get(i).x(), renderPath.get(i).y(), renderPath.get(i).z(),
+                    renderPath.get(i + 1).x(), renderPath.get(i + 1).y(), renderPath.get(i + 1).z(),
                     Color.RED
                 );
             }
@@ -267,11 +267,11 @@ public class TpMachineGun extends Module {
         if (!entities.get().contains(entity.getType())) return false;
         
         // 使用手动构造坐标避免映射差异
-        Vec3d myPos = new Vec3d(mc.player.getX(), mc.player.getY(), mc.player.getZ());
-        Vec3d entityPos = new Vec3d(entity.getX(), entity.getY(), entity.getZ());
+        Vec3 myPos = new Vec3(mc.player.getX(), mc.player.getY(), mc.player.getZ());
+        Vec3 entityPos = new Vec3(entity.getX(), entity.getY(), entity.getZ());
         if (myPos.distanceTo(entityPos) > range.get()) return false;
         
-        if (entity instanceof PlayerEntity p && (p.isCreative() || p.isSpectator())) return false;
+        if (entity instanceof Player p && (p.isCreative() || p.isSpectator())) return false;
         return true;
     }
 
@@ -282,20 +282,20 @@ public class TpMachineGun extends Module {
         }
         // 2. 如果是弩，动态获取附魔等级
         try {
-            var registry = mc.world.getRegistryManager().getOrThrow(RegistryKeys.ENCHANTMENT);
+            var registry = mc.level.registryAccess().lookupOrThrow(Registries.ENCHANTMENT);
             var quickChargeEntry = registry.getOrThrow(Enchantments.QUICK_CHARGE);
-            int level = EnchantmentHelper.getLevel(quickChargeEntry, stack);
+            int level = EnchantmentHelper.getItemEnchantmentLevel(quickChargeEntry, stack);
             return Math.max(0, 25 - 5 * level);
         } catch (Exception e) {
             return 25; // 失败时回退默认时间
         }
     }
 
-    private void doTpShoot(Vec3d shootPos, Hand hand, boolean isCrossbow) {
-        Vec3d playerPos = new Vec3d(mc.player.getX(), mc.player.getY(), mc.player.getZ());
+    private void doTpShoot(Vec3 shootPos, InteractionHand hand, boolean isCrossbow) {
+        Vec3 playerPos = new Vec3(mc.player.getX(), mc.player.getY(), mc.player.getZ());
 
-        Vec3d vClipStart = null;
-        Vec3d vClipEnd = null;
+        Vec3 vClipStart = null;
+        Vec3 vClipEnd = null;
         boolean foundPath = false;
 
         // === 寻路逻辑 (直线与 VClip) ===
@@ -308,8 +308,8 @@ public class TpMachineGun extends Module {
             double startSearchHeight = maxHeight + 1.0; 
 
             for (double yLevel = startSearchHeight; yLevel < startSearchHeight + 50.0; yLevel += 1.0) {
-                Vec3d testUp = new Vec3d(playerPos.x, yLevel, playerPos.z);
-                Vec3d testTargetUp = new Vec3d(shootPos.x, yLevel, shootPos.z);
+                Vec3 testUp = new Vec3(playerPos.x, yLevel, playerPos.z);
+                Vec3 testTargetUp = new Vec3(shootPos.x, yLevel, shootPos.z);
 
                 if (isSpaceEmpty(testUp) && isSpaceEmpty(testTargetUp) && hasClearPath(testUp, testTargetUp)) {
                     vClipStart = testUp;
@@ -348,7 +348,7 @@ public class TpMachineGun extends Module {
         sendPosPacket(shootPos.x, shootPos.y, shootPos.z, false);
 
         // 3. 计算爆头瞄准角度
-        Vec3d targetCenter = target.getBoundingBox().getCenter();
+        Vec3 targetCenter = target.getBoundingBox().getCenter();
         double dX = targetCenter.x - shootPos.x;
         double dY = targetCenter.y - (shootPos.y + 1.62); // 减去视角高度
         double dZ = targetCenter.z - shootPos.z;
@@ -356,22 +356,22 @@ public class TpMachineGun extends Module {
         float pitch = (float) -Math.toDegrees(Math.atan2(dY, Math.sqrt(dX * dX + dZ * dZ)));
 
         // 4. 发送转身瞄准包
-        mc.getNetworkHandler().sendPacket(new PlayerMoveC2SPacket.Full(shootPos.x, shootPos.y, shootPos.z, yaw, pitch, false, mc.player.horizontalCollision));
+        mc.getConnection().send(new ServerboundMovePlayerPacket.PosRot(shootPos.x, shootPos.y, shootPos.z, yaw, pitch, false, mc.player.horizontalCollision));
         
         // 5. 开火核心代码 (区分弓和弩)
         if (isCrossbow) {
             // 弩：通过发送交互包直接把装填好的箭射出去
-            mc.interactionManager.interactItem(mc.player, hand);
+            mc.gameMode.useItem(mc.player, hand);
         } else {
             // 弓：发送松手包把箭射出去
-            mc.getNetworkHandler().sendPacket(new PlayerActionC2SPacket(
-                PlayerActionC2SPacket.Action.RELEASE_USE_ITEM, BlockPos.ORIGIN, Direction.DOWN, 0 
+            mc.getConnection().send(new ServerboundPlayerActionPacket(
+                ServerboundPlayerActionPacket.Action.RELEASE_USE_ITEM, BlockPos.ZERO, Direction.DOWN, 0 
             ));
             mc.player.stopUsingItem();
         }
 
-        mc.player.swingHand(hand); // 挥手动画
-        mc.options.useKey.setPressed(false);
+        mc.player.swing(hand); // 挥手动画
+        mc.options.keyUse.setDown(false);
         timer = delay.get(); // 进入射击冷却，下一发准备
 
         // 6. 瞬间回闪与防摔落
@@ -383,33 +383,33 @@ public class TpMachineGun extends Module {
             sendPosPacket(playerPos.x, playerPos.y + 0.01, playerPos.z, false);
             sendPosPacket(playerPos.x, playerPos.y, playerPos.z, true);
             
-            mc.player.setPosition(playerPos.x, playerPos.y, playerPos.z);
+            mc.player.setPos(playerPos.x, playerPos.y, playerPos.z);
         } else {
-            mc.player.setPosition(shootPos.x, shootPos.y, shootPos.z);
+            mc.player.setPos(shootPos.x, shootPos.y, shootPos.z);
         }
 
         mc.player.fallDistance = 0.0f; // 清理客户端摔落伤害
     }
 
-    private Vec3d getShootPos(Entity target) {
-        List<Vec3d> validPositions = new ArrayList<>();
+    private Vec3 getShootPos(Entity target) {
+        List<Vec3> validPositions = new ArrayList<>();
         int centerX = (int) Math.floor(target.getX());
         int centerY = (int) Math.floor(target.getY());
         int centerZ = (int) Math.floor(target.getZ());
         int border = 2; // 搜索半径
 
-        Vec3d targetPosVec = new Vec3d(target.getX(), target.getY(), target.getZ());
+        Vec3 targetPosVec = new Vec3(target.getX(), target.getY(), target.getZ());
 
         for (int x = centerX - border; x <= centerX + border; x++) {
             for (int y = centerY - 1; y <= centerY + border; y++) {
                 for (int z = centerZ - border; z <= centerZ + border; z++) {
-                    Vec3d vec = new Vec3d(x + 0.5, y, z + 0.5);
+                    Vec3 vec = new Vec3(x + 0.5, y, z + 0.5);
 
                     if (vec.distanceTo(targetPosVec) > 4.0) continue;
                     if (!isSpaceEmpty(vec)) continue;
 
-                    Vec3d eyePos = vec.add(0.0, 1.62, 0.0);
-                    Vec3d targetCenter = target.getBoundingBox().getCenter();
+                    Vec3 eyePos = vec.add(0.0, 1.62, 0.0);
+                    Vec3 targetCenter = target.getBoundingBox().getCenter();
                     
                     if (canSee(eyePos, targetCenter)) {
                         validPositions.add(vec);
@@ -418,35 +418,35 @@ public class TpMachineGun extends Module {
             }
         }
 
-        Vec3d myPos = new Vec3d(mc.player.getX(), mc.player.getY(), mc.player.getZ());
+        Vec3 myPos = new Vec3(mc.player.getX(), mc.player.getY(), mc.player.getZ());
         validPositions.sort(Comparator.comparingDouble(v -> v.distanceTo(myPos)));
         return validPositions.isEmpty() ? null : validPositions.get(0);
     }
 
-    private boolean isSpaceEmpty(Vec3d pos) {
-        Box box = new Box(pos.getX() - 0.3, pos.getY(), pos.getZ() - 0.3, pos.getX() + 0.3, pos.getY() + 1.8, pos.getZ() + 0.3);
-        return mc.world.isSpaceEmpty(box);
+    private boolean isSpaceEmpty(Vec3 pos) {
+        AABB box = new AABB(pos.x() - 0.3, pos.y(), pos.z() - 0.3, pos.x() + 0.3, pos.y() + 1.8, pos.z() + 0.3);
+        return mc.level.noCollision(box);
     }
 
-    private boolean hasClearPath(Vec3d start, Vec3d end) {
+    private boolean hasClearPath(Vec3 start, Vec3 end) {
         double dist = start.distanceTo(end);
         int steps = (int) (dist * 2.5);
         for (int i = 0; i <= steps; i++) {
-            Vec3d check = start.lerp(end, (double) i / steps);
+            Vec3 check = start.lerp(end, (double) i / steps);
             if (!isSpaceEmpty(check)) return false;
         }
         return true;
     }
 
-    private boolean canSee(Vec3d start, Vec3d end) {
-        RaycastContext context = new RaycastContext(
-            start, end, RaycastContext.ShapeType.COLLIDER, RaycastContext.FluidHandling.NONE, mc.player
+    private boolean canSee(Vec3 start, Vec3 end) {
+        ClipContext context = new ClipContext(
+            start, end, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, mc.player
         );
-        return mc.world.raycast(context).getType() == HitResult.Type.MISS;
+        return mc.level.clip(context).getType() == HitResult.Type.MISS;
     }
 
     private void sendPosPacket(double x, double y, double z, boolean onGround) {
-        mc.getNetworkHandler().sendPacket(new PlayerMoveC2SPacket.PositionAndOnGround(
+        mc.getConnection().send(new ServerboundMovePlayerPacket.Pos(
             x, y, z, onGround, mc.player.horizontalCollision
         ));
     }

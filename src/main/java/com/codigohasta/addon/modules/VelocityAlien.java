@@ -1,6 +1,6 @@
 package com.codigohasta.addon.modules;
 
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.phys.Vec3;
 
 import com.codigohasta.addon.AddonTemplate;
 import meteordevelopment.meteorclient.events.packets.PacketEvent;
@@ -8,12 +8,15 @@ import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.entity.projectile.FishingBobberEntity;
-import net.minecraft.network.packet.c2s.play.PlayerActionC2SPacket;
-import net.minecraft.network.packet.s2c.play.*;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Direction;
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.entity.projectile.FishingHook;
+import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;
+import net.minecraft.network.protocol.game.ClientboundEntityEventPacket;
+import net.minecraft.network.protocol.game.ClientboundExplodePacket;
+import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket;
+import net.minecraft.network.protocol.game.ClientboundSetEntityMotionPacket;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.world.phys.Vec3;
 
 import java.lang.reflect.Field;
 import java.util.ArrayList;
@@ -89,7 +92,7 @@ public class VelocityAlien extends Module {
     private boolean flag;
 
     // --- 反射字段缓存 ---
-    private Field explosionVecField; // 1.21.4 新版爆炸字段 (Vec3d)
+    private Field explosionVecField; // 1.21.4 新版爆炸字段 (Vec3)
     private Field velXField, velYField, velZField; // 实体击退字段 (int)
     private Field entityIdField; // 实体ID字段 (int)
     private boolean reflectionInitialized = false;
@@ -103,21 +106,21 @@ public class VelocityAlien extends Module {
         if (reflectionInitialized) return;
         
         try {
-            // 1. 查找 ExplosionS2CPacket 的字段
-            // 1.21.4 应该有一个 Vec3d 类型的字段用来存玩家击退
-            for (Field f : ExplosionS2CPacket.class.getDeclaredFields()) {
+            // 1. 查找 ClientboundExplodePacket 的字段
+            // 1.21.4 应该有一个 Vec3 类型的字段用来存玩家击退
+            for (Field f : ClientboundExplodePacket.class.getDeclaredFields()) {
                 f.setAccessible(true);
-                // 查找类型为 Vec3d 的字段 (通常只有一个，就是 knockback)
-                if (f.getType() == Vec3d.class) {
+                // 查找类型为 Vec3 的字段 (通常只有一个，就是 knockback)
+                if (f.getType() == Vec3.class) {
                     explosionVecField = f;
                     break;
                 }
             }
 
-            // 2. 查找 EntityVelocityUpdateS2CPacket 的字段
+            // 2. 查找 ClientboundSetEntityMotionPacket 的字段
             // 这个包通常有4个int：id, x, y, z。顺序通常是 id 在前。
             List<Field> intFields = new ArrayList<>();
-            for (Field f : EntityVelocityUpdateS2CPacket.class.getDeclaredFields()) {
+            for (Field f : ClientboundSetEntityMotionPacket.class.getDeclaredFields()) {
                 f.setAccessible(true);
                 if (f.getType() == int.class || f.getType() == Integer.TYPE) {
                     intFields.add(f);
@@ -145,21 +148,21 @@ public class VelocityAlien extends Module {
 
     @EventHandler
     public void onPacketReceive(PacketEvent.Receive event) {
-        if (mc.player == null || mc.world == null) return;
+        if (mc.player == null || mc.level == null) return;
         if (!reflectionInitialized) initReflection();
 
-        if (event.packet instanceof PlayerPositionLookS2CPacket) {
+        if (event.packet instanceof ClientboundPlayerPositionPacket) {
             lastTeleportTime = System.currentTimeMillis();
         }
 
-        if (pauseInLiquid.get() && (mc.player.isTouchingWater() || mc.player.isInLava())) {
+        if (pauseInLiquid.get() && (mc.player.isInWater() || mc.player.isInLava())) {
             return;
         }
 
-        if (fishBob.get() && event.packet instanceof EntityStatusS2CPacket packet) {
-            if (packet.getStatus() == 31) {
-                if (packet.getEntity(mc.world) instanceof FishingBobberEntity fishHook) {
-                    if (fishHook.getHookedEntity() == mc.player) {
+        if (fishBob.get() && event.packet instanceof ClientboundEntityEventPacket packet) {
+            if (packet.getEventId() == 31) {
+                if (packet.getEntity(mc.level) instanceof FishingHook fishHook) {
+                    if (fishHook.getHookedIn() == mc.player) {
                         event.cancel();
                     }
                 }
@@ -171,8 +174,8 @@ public class VelocityAlien extends Module {
             float h = horizontal.get().floatValue() / 100.0F;
             float v = vertical.get().floatValue() / 100.0F;
 
-            // --- 爆炸击退 (Vec3d) ---
-            if (event.packet instanceof ExplosionS2CPacket packet) {
+            // --- 爆炸击退 (Vec3) ---
+            if (event.packet instanceof ClientboundExplodePacket packet) {
                 if (noExplosions.get()) {
                     event.cancel();
                     return;
@@ -180,9 +183,9 @@ public class VelocityAlien extends Module {
                 
                 if (explosionVecField != null) {
                     try {
-                        Vec3d original = (Vec3d) explosionVecField.get(packet);
+                        Vec3 original = (Vec3) explosionVecField.get(packet);
                         if (original != null) {
-                            Vec3d modified = new Vec3d(original.x * h, original.y * v, original.z * h);
+                            Vec3 modified = new Vec3(original.x * h, original.y * v, original.z * h);
                             explosionVecField.set(packet, modified);
                         }
                     } catch (Exception e) {
@@ -193,7 +196,7 @@ public class VelocityAlien extends Module {
             }
 
             // --- 实体击退 (Ints) ---
-            if (event.packet instanceof EntityVelocityUpdateS2CPacket packet) {
+            if (event.packet instanceof ClientboundSetEntityMotionPacket packet) {
                 try {
                     if (entityIdField != null && entityIdField.getInt(packet) == mc.player.getId()) {
                         if (horizontal.get() == 0 && vertical.get() == 0) {
@@ -226,18 +229,18 @@ public class VelocityAlien extends Module {
                 return;
             }
 
-            if (event.packet instanceof ExplosionS2CPacket) {
+            if (event.packet instanceof ClientboundExplodePacket) {
                 // Grim 模式直接设为 Zero
                 if (explosionVecField != null) {
                     try {
-                        explosionVecField.set(event.packet, Vec3d.ZERO);
+                        explosionVecField.set(event.packet, Vec3.ZERO);
                     } catch (Exception ignored) {}
                 }
                 this.flag = true;
                 return;
             }
 
-            if (event.packet instanceof EntityVelocityUpdateS2CPacket packet) {
+            if (event.packet instanceof ClientboundSetEntityMotionPacket packet) {
                 try {
                     if (entityIdField != null && entityIdField.getInt(packet) == mc.player.getId()) {
                         event.cancel();
@@ -252,7 +255,7 @@ public class VelocityAlien extends Module {
     public void onTick(TickEvent.Post event) {
         if (mc.player == null) return;
 
-        if (pauseInLiquid.get() && (mc.player.isTouchingWater() || mc.player.isInLava())) {
+        if (pauseInLiquid.get() && (mc.player.isInWater() || mc.player.isInLava())) {
             return;
         }
 
@@ -260,9 +263,9 @@ public class VelocityAlien extends Module {
             if (System.currentTimeMillis() - lastTeleportTime >= 100L) {
                 boolean insideBlock = isInsideBlock();
                 if (flagInWall.get() || !insideBlock) {
-                    BlockPos pos = mc.player.getBlockPos();
-                    mc.getNetworkHandler().sendPacket(new PlayerActionC2SPacket(
-                        PlayerActionC2SPacket.Action.STOP_DESTROY_BLOCK,
+                    BlockPos pos = mc.player.blockPosition();
+                    mc.getConnection().send(new ServerboundPlayerActionPacket(
+                        ServerboundPlayerActionPacket.Action.STOP_DESTROY_BLOCK,
                         pos,
                         Direction.DOWN
                     ));
@@ -274,7 +277,7 @@ public class VelocityAlien extends Module {
 
     @SuppressWarnings("deprecation")
     private boolean isInsideBlock() {
-        return mc.world.getBlockState(mc.player.getBlockPos()).isSolid() || 
-               mc.world.getBlockState(mc.player.getBlockPos().up()).isSolid();
+        return mc.level.getBlockState(mc.player.blockPosition()).isSolid() || 
+               mc.level.getBlockState(mc.player.blockPosition().above()).isSolid();
     }
 }

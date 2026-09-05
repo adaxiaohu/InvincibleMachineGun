@@ -1,10 +1,10 @@
 package com.codigohasta.addon.mixin;
 
-import net.minecraft.client.particle.BillboardParticle;
+import net.minecraft.client.particle.SingleQuadParticle;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.gen.Invoker;
 
-@Mixin(BillboardParticle.class)
+@Mixin(SingleQuadParticle.class)
 public interface BillboardParticleInvoker {
     @Invoker("setColor")
     void invokeSetColor(float r, float g, float b);

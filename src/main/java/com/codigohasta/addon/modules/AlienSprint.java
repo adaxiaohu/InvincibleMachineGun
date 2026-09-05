@@ -9,9 +9,9 @@ import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.entity.effect.StatusEffects;
-import net.minecraft.network.packet.s2c.play.PlayerPositionLookS2CPacket;
-import net.minecraft.util.math.MathHelper;
+import net.minecraft.world.effect.MobEffects;
+import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket;
+import net.minecraft.util.Mth;
 
 public class AlienSprint extends Module {
     public static AlienSprint INSTANCE;
@@ -41,19 +41,19 @@ public class AlienSprint extends Module {
     }
 
     private boolean isSprintPressed() {
-        return mc.options.forwardKey.isPressed() && !mc.options.backKey.isPressed();
+        return mc.options.keyUp.isDown() && !mc.options.keyDown.isDown();
     }
 
     private boolean isBackPressed() {
-        return mc.options.backKey.isPressed() && !mc.options.forwardKey.isPressed();
+        return mc.options.keyDown.isDown() && !mc.options.keyUp.isDown();
     }
 
     private boolean isLeftPressed() {
-        return mc.options.leftKey.isPressed() && !mc.options.rightKey.isPressed();
+        return mc.options.keyLeft.isDown() && !mc.options.keyRight.isDown();
     }
 
     private boolean isRightPressed() {
-        return mc.options.rightKey.isPressed() && !mc.options.leftKey.isPressed();
+        return mc.options.keyRight.isDown() && !mc.options.keyLeft.isDown();
     }
 
     public float getSprintYaw(float yaw) {
@@ -76,7 +76,7 @@ public class AlienSprint extends Module {
             yaw += 90.0F;
         }
 
-        return MathHelper.wrapDegrees(yaw);
+        return Mth.wrapDegrees(yaw);
     }
 
     @Override
@@ -88,34 +88,34 @@ public class AlienSprint extends Module {
     public void onDeactivate() {
         AlienRotationUtil.shouldRotate = false;
         if (mc.player != null) {
-            mc.player.bodyYaw = mc.player.getYaw();
-            mc.player.headYaw = mc.player.getYaw();
+            mc.player.yBodyRot = mc.player.getYRot();
+            mc.player.yHeadRot = mc.player.getYRot();
         }
     }
 
     @EventHandler
     public void onPacket(PacketEvent.Receive event) {
-        if (lagPause.get() && event.packet instanceof PlayerPositionLookS2CPacket) {
+        if (lagPause.get() && event.packet instanceof ClientboundPlayerPositionPacket) {
             pause = true;
         }
     }
 
     @EventHandler
     public void onTick(TickEvent.Pre event) {
-        if (mc.player == null || mc.world == null) return;
+        if (mc.player == null || mc.level == null) return;
         if (mc.player.getPose().name().equals("GLIDING")) return;
 
         AlienRotationUtil.shouldRotate = false;
 
         if (mode.get() == Mode.PressKey) {
             if (!inWater()) {
-                mc.options.sprintKey.setPressed(true);
+                mc.options.keySprint.setDown(true);
             }
         } else {
             mc.player.setSprinting(shouldSprint());
 
             if (mode.get() == Mode.Rotation && AlienMovementUtil.isMoving()) {
-                AlienRotationUtil.sprintYaw = getSprintYaw(mc.player.getYaw());
+                AlienRotationUtil.sprintYaw = getSprintYaw(mc.player.getYRot());
                 AlienRotationUtil.shouldRotate = true;
             }
         }
@@ -127,21 +127,21 @@ public class AlienSprint extends Module {
     }
 
     private boolean inWater() {
-        return inWaterPause.get() && mc.player.isInFluid();
+        return inWaterPause.get() && mc.player.isInLiquid();
     }
 
     private boolean shouldSprint() {
-        if ((mc.player.getHungerManager().getFoodLevel() > 6 || mc.player.isCreative())
+        if ((mc.player.getFoodData().getFoodLevel() > 6 || mc.player.isCreative())
             && AlienMovementUtil.isMoving()
             && !pause
-            && (!mc.player.isSneaking() || !sneakingPause.get())
+            && (!mc.player.isShiftKeyDown() || !sneakingPause.get())
             && (!AlienPlayerUtil.isInWeb(mc.player) || !inWebPause.get())
             && (!mc.player.isUsingItem() || !usingPause.get())
-            && !mc.player.isRiding()
-            && (!mc.player.hasStatusEffect(StatusEffects.BLINDNESS) || !blindnessPause.get())) {
+            && !mc.player.isHandsBusy()
+            && (!mc.player.hasEffect(MobEffects.BLINDNESS) || !blindnessPause.get())) {
 
             return switch (mode.get()) {
-                case Legit -> mc.options.forwardKey.isPressed();
+                case Legit -> mc.options.keyUp.isDown();
                 case Rage -> true;
                 case Rotation -> true;
                 default -> false;

@@ -7,9 +7,9 @@ import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket;
-import net.minecraft.network.packet.s2c.play.PlayerPositionLookS2CPacket;
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
+import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket;
+import net.minecraft.world.phys.Vec3;
 
 public class NoFallimg extends Module {
     private final SettingGroup sgGeneral = settings.getDefaultGroup();
@@ -46,10 +46,10 @@ public class NoFallimg extends Module {
     // === LazyGrimPlus2 状态机 ===
     // step: 0=COMMON, 1=WAIT_RESYNC, 2=APPLY_JUMP
     private int step;
-    private Vec3d lastStartWaitPos;        // 发送等待回弹时的位置
+    private Vec3 lastStartWaitPos;        // 发送等待回弹时的位置
     private int lastStartWaitTick;          // 发送等待回弹时的 tick
     private static final int LATENCY = 5;   // 等待回弹的最大 tick 数
-    private PlayerMoveC2SPacket storedPacket; // 延迟到 Post 发送的包
+    private ServerboundMovePlayerPacket storedPacket; // 延迟到 Post 发送的包
     private boolean applyJumpThisTick;
 
     public NoFallimg() {
@@ -71,7 +71,7 @@ public class NoFallimg extends Module {
     @Override
     public void onDeactivate() {
         if (jumpInjected) {
-            mc.options.jumpKey.setPressed(false);
+            mc.options.keyJump.setDown(false);
             jumpInjected = false;
         }
     }
@@ -80,12 +80,12 @@ public class NoFallimg extends Module {
 
     @EventHandler
     private void onTick(TickEvent.Pre event) {
-        if (mc.player == null || mc.world == null) return;
+        if (mc.player == null || mc.level == null) return;
 
         tickCounter++;
 
         // 更新落地高度
-        if (mc.player.isOnGround() || mc.player.isTouchingWater()) {
+        if (mc.player.onGround() || mc.player.isInWater()) {
             lastOnGroundHeight = mc.player.getY();
         } else if (mc.player.getY() > lastOnGroundHeight) {
             lastOnGroundHeight = mc.player.getY();
@@ -93,12 +93,12 @@ public class NoFallimg extends Module {
 
         // 超出安全距离标记
         if (mc.player.fallDistance > fallDistance.get()
-                || mc.player.getY() <= lastOnGroundHeight - mc.player.getSafeFallDistance() - 3) {
+                || mc.player.getY() <= lastOnGroundHeight - mc.player.getMaxFallDistance() - 3) {
             flag = true;
         }
 
         // 重置标志（如果回到地面了）
-        if (mc.player.isOnGround() && mc.player.fallDistance < 0.5) {
+        if (mc.player.onGround() && mc.player.fallDistance < 0.5) {
             if (step == 0) flag = false;
         }
 
@@ -106,14 +106,14 @@ public class NoFallimg extends Module {
         if (step == 2) {
             // 回弹已匹配，执行跳跃
             mc.player.setOnGround(true);
-            mc.options.jumpKey.setPressed(true);
+            mc.options.keyJump.setDown(true);
             jumpInjected = true;
             step = 0; // 回到 COMMON
         }
 
         // 跳跃注入（GrimMotion 共用）
         if (jumpScheduled) {
-            mc.options.jumpKey.setPressed(true);
+            mc.options.keyJump.setDown(true);
             jumpInjected = true;
             jumpScheduled = false;
         }
@@ -131,7 +131,7 @@ public class NoFallimg extends Module {
     private void onTickPost(TickEvent.Post event) {
         // 释放跳跃键
         if (jumpInjected) {
-            mc.options.jumpKey.setPressed(false);
+            mc.options.keyJump.setDown(false);
             jumpInjected = false;
         }
     }
@@ -144,20 +144,20 @@ public class NoFallimg extends Module {
         if (mode.get() != Mode.LazyGrimPlus2) return;
         if (step != 1) return; // 只有 WAIT_RESYNC 状态才处理
 
-        if (event.packet instanceof PlayerPositionLookS2CPacket lookPacket) {
-            Vec3d setbackPos = lookPacket.change().position();
+        if (event.packet instanceof ClientboundPlayerPositionPacket lookPacket) {
+            Vec3 setbackPos = lookPacket.change().position();
             double y = setbackPos.y;
 
             // 服务端拉回：Y 明显低于当前高度
             if (mc.player.getY() - y > 0.5) {
                 // 检查回弹位置是否匹配我们记录的位置（距离 < 1）
                 if (lastStartWaitPos != null
-                        && lastStartWaitPos.squaredDistanceTo(setbackPos) < 1
+                        && lastStartWaitPos.distanceToSqr(setbackPos) < 1
                         && tickCounter <= lastStartWaitTick + LATENCY) {
                     // 匹配成功！回弹位置 = 服务端确认的位置
                     // 执行 APPLY_JUMP：瞬移 + 跳跃
                     lastStartWaitPos = null;
-                    mc.player.setPosition(setbackPos.x, y, setbackPos.z);
+                    mc.player.setPos(setbackPos.x, y, setbackPos.z);
                     mc.player.setOnGround(true);
                     step = 2; // 下个 tick 执行跳跃
                 }
@@ -172,10 +172,10 @@ public class NoFallimg extends Module {
         if (mc.player == null) return;
         if (bypass) return;
         if (!flag) return;
-        if (!(event.packet instanceof PlayerMoveC2SPacket)) return;
-        if (!mc.player.isOnGround()) return;
+        if (!(event.packet instanceof ServerboundMovePlayerPacket)) return;
+        if (!mc.player.onGround()) return;
 
-        PlayerMoveC2SPacket pkt = (PlayerMoveC2SPacket) event.packet;
+        ServerboundMovePlayerPacket pkt = (ServerboundMovePlayerPacket) event.packet;
 
         switch (mode.get()) {
 
@@ -187,8 +187,8 @@ public class NoFallimg extends Module {
             case Packet -> {
                 event.cancel();
                 bypass = true;
-                mc.getNetworkHandler().sendPacket(
-                    new PlayerMoveC2SPacket.OnGroundOnly(false, mc.player.horizontalCollision));
+                mc.getConnection().send(
+                    new ServerboundMovePlayerPacket.StatusOnly(false, mc.player.horizontalCollision));
                 bypass = false;
                 flag = false;
             }
@@ -196,7 +196,7 @@ public class NoFallimg extends Module {
             case GrimMotion -> {
                 event.cancel();
                 bypass = true;
-                mc.getNetworkHandler().sendPacket(EpsilonMovementUtil.createGrimPositionPacket(0.1));
+                mc.getConnection().send(EpsilonMovementUtil.createGrimPositionPacket(0.1));
                 bypass = false;
                 jumpScheduled = true;
                 flag = false;
@@ -214,13 +214,13 @@ public class NoFallimg extends Module {
                 // （不延迟到 Post，避免包序混乱导致 Grim PacketOrder/TickTimer 标记）
                 event.cancel();
 
-                lastStartWaitPos = new Vec3d(mc.player.getX(), mc.player.getY(), mc.player.getZ());
+                lastStartWaitPos = new Vec3(mc.player.getX(), mc.player.getY(), mc.player.getZ());
                 lastStartWaitTick = tickCounter;
 
                 mc.player.setOnGround(true);
                 bypass = true;
-                mc.getNetworkHandler().sendPacket(
-                    new PlayerMoveC2SPacket.OnGroundOnly(true, mc.player.horizontalCollision));
+                mc.getConnection().send(
+                    new ServerboundMovePlayerPacket.StatusOnly(true, mc.player.horizontalCollision));
                 bypass = false;
 
                 step = 1;

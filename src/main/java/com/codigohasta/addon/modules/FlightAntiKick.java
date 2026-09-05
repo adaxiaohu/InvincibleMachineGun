@@ -1,6 +1,6 @@
 package com.codigohasta.addon.modules;
 
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.phys.Vec3;
 
 import com.codigohasta.addon.AddonTemplate;
 import meteordevelopment.meteorclient.events.world.TickEvent;
@@ -8,8 +8,8 @@ import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.systems.modules.Modules;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket;
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
+import net.minecraft.world.phys.Vec3;
 
 import java.util.Random;
 
@@ -86,13 +86,13 @@ public class FlightAntiKick extends Module {
             if (flight == null || !flight.isActive()) return;
         }
 
-        if (mc.player.isOnGround()) return;
+        if (mc.player.onGround()) return;
 
         // 模式 3：垂直重力逻辑（每一帧都生效）
         if (mode.get() == Mode.垂直重力) {
-            Vec3d v = mc.player.getVelocity();
+            Vec3 v = mc.player.getDeltaMovement();
             if (v.y >= 0) { // 只要没在下落，就强行给一个微小的向下分量
-                mc.player.setVelocity(v.x, -0.005, v.z);
+                mc.player.setDeltaMovement(v.x, -0.005, v.z);
             }
             return;
         }
@@ -110,8 +110,8 @@ public class FlightAntiKick extends Module {
         
         if (mode.get() == Mode.物理下沉) {
             // 物理修改 Velocity，这会刷新服务器计时器，但视角会抖一下
-            Vec3d v = mc.player.getVelocity();
-            mc.player.setVelocity(v.x, -dip, v.z);
+            Vec3 v = mc.player.getDeltaMovement();
+            mc.player.setDeltaMovement(v.x, -dip, v.z);
         } 
         else if (mode.get() == Mode.数据包下潜) {
             // --- 核心修复：针对 1.21.4 的数据包下潜 ---
@@ -122,7 +122,7 @@ public class FlightAntiKick extends Module {
             double z = mc.player.getZ();
             
             // 发送一个稍微低一点的坐标包，且 OnGround 设为 false 以保持真实
-            mc.getNetworkHandler().sendPacket(new PlayerMoveC2SPacket.PositionAndOnGround(x, y - dip, z, false, mc.player.horizontalCollision));
+            mc.getConnection().send(new ServerboundMovePlayerPacket.Pos(x, y - dip, z, false, mc.player.horizontalCollision));
         }
     }
 

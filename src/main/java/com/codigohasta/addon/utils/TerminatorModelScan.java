@@ -1,9 +1,9 @@
 package com.codigohasta.addon.utils;
 
 import com.codigohasta.addon.mixin.ModelPartAccessor;
-import net.minecraft.client.model.ModelPart;
-import net.minecraft.client.render.VertexConsumer;
-import net.minecraft.client.util.math.MatrixStack;
+import net.minecraft.client.model.geom.ModelPart;
+import com.mojang.blaze3d.vertex.VertexConsumer;
+import com.mojang.blaze3d.vertex.PoseStack;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -31,7 +31,7 @@ public final class TerminatorModelScan {
     }
 
     /** Called only by MixinTerminatorModelRender at Model.render(...). */
-    public static boolean renderSelectedPart(ModelPart root, MatrixStack matrices,
+    public static boolean renderSelectedPart(ModelPart root, PoseStack matrices,
                                              VertexConsumer vertices, int light,
                                              int overlay, int color) {
         Session session = ACTIVE.get();
@@ -50,15 +50,15 @@ public final class TerminatorModelScan {
         PartBranch branch = branches.get(index);
         session.result = new Result(index, branches.size(), displayName(branch.name));
 
-        matrices.push();
+        matrices.pushPose();
         try {
             // Model.render normally starts at the root. Reapply every ancestor
             // transform, then let the selected branch render its own real cuboids
             // and descendants with their current animation pose.
-            for (ModelPart ancestor : branch.ancestors) ancestor.applyTransform(matrices);
+            for (ModelPart ancestor : branch.ancestors) ancestor.translateAndRotate(matrices);
             branch.part.render(matrices, vertices, light, overlay, color);
         } finally {
-            matrices.pop();
+            matrices.popPose();
         }
         return true;
     }

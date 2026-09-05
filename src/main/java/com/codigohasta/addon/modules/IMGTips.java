@@ -16,18 +16,18 @@ import meteordevelopment.meteorclient.systems.modules.Modules;
 import meteordevelopment.meteorclient.utils.player.ChatUtils;
 import meteordevelopment.meteorclient.utils.render.color.SettingColor;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.gui.DrawContext;
-import net.minecraft.entity.EntityStatuses;
-import net.minecraft.entity.effect.StatusEffects;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.network.packet.s2c.play.EntityStatusS2CPacket;
-import net.minecraft.network.packet.s2c.play.PlayerPositionLookS2CPacket;
-import net.minecraft.sound.SoundCategory;
-import net.minecraft.sound.SoundEvents;
-import net.minecraft.text.MutableText;
-import net.minecraft.text.Text;
-import net.minecraft.util.Formatting;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.world.entity.EntityEvent;
+import net.minecraft.world.effect.MobEffects;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.network.protocol.game.ClientboundEntityEventPacket;
+import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket;
+import net.minecraft.sounds.SoundSource;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.network.chat.Component;
+import net.minecraft.ChatFormatting;
 
 import java.text.DecimalFormat;
 import java.util.ArrayList;
@@ -196,7 +196,7 @@ public class IMGTips extends Module {
     private final AlienTimer lagBackTimer = new AlienTimer();
     private final AlienPopManager popManager = new AlienPopManager();
     private final AlienFriendManager friendManager = new AlienFriendManager();
-    private final List<PlayerEntity> deadPlayers = new ArrayList<>();
+    private final List<Player> deadPlayers = new ArrayList<>();
     int turtles = 0;
 
     public IMGTips() {
@@ -216,7 +216,7 @@ public class IMGTips extends Module {
     @EventHandler
     private void onEntityAdded(EntityAddedEvent event) {
         if (!visualRange.get()) return;
-        if (!(event.entity instanceof PlayerEntity)) return;
+        if (!(event.entity instanceof Player)) return;
         if (event.entity.getDisplayName() == null || event.entity == mc.player) return;
 
         String playerName = event.entity.getDisplayName().getString();
@@ -225,10 +225,10 @@ public class IMGTips extends Module {
             String msg = chinese.get()
                 ? playerName + " 进入你的视距范围"
                 : playerName + " entered your visual range.";
-            ChatUtils.sendMsg(event.entity.getId() + 777, Formatting.GRAY, msg);
-            if (mc.world != null) {
-                mc.world.playSound(mc.player, mc.player.getBlockPos(),
-                    SoundEvents.ENTITY_EXPERIENCE_ORB_PICKUP, SoundCategory.PLAYERS, 100.0F, 1.9F);
+            ChatUtils.sendMsg(event.entity.getId() + 777, ChatFormatting.GRAY, msg);
+            if (mc.level != null) {
+                mc.level.playSound(mc.player, mc.player.blockPosition(),
+                    SoundEvents.EXPERIENCE_ORB_PICKUP, SoundSource.PLAYERS, 100.0F, 1.9F);
             }
         }
     }
@@ -236,7 +236,7 @@ public class IMGTips extends Module {
     @EventHandler
     private void onEntityRemoved(EntityRemovedEvent event) {
         if (!visualRange.get()) return;
-        if (!(event.entity instanceof PlayerEntity)) return;
+        if (!(event.entity instanceof Player)) return;
         if (event.entity.getDisplayName() == null || event.entity == mc.player) return;
 
         String playerName = event.entity.getDisplayName().getString();
@@ -245,10 +245,10 @@ public class IMGTips extends Module {
             String msg = chinese.get()
                 ? playerName + " 离开你的视距范围"
                 : playerName + " left your visual range.";
-            ChatUtils.sendMsg(event.entity.getId() + 777, Formatting.GRAY, msg);
-            if (mc.world != null) {
-                mc.world.playSound(mc.player, mc.player.getBlockPos(),
-                    SoundEvents.ENTITY_EXPERIENCE_ORB_PICKUP, SoundCategory.PLAYERS, 100.0F, 1.9F);
+            ChatUtils.sendMsg(event.entity.getId() + 777, ChatFormatting.GRAY, msg);
+            if (mc.level != null) {
+                mc.level.playSound(mc.player, mc.player.blockPosition(),
+                    SoundEvents.EXPERIENCE_ORB_PICKUP, SoundSource.PLAYERS, 100.0F, 1.9F);
             }
         }
     }
@@ -257,16 +257,16 @@ public class IMGTips extends Module {
 
     @EventHandler
     private void onTick(TickEvent.Post event) {
-        if (mc.player == null || mc.world == null) return;
+        if (mc.player == null || mc.level == null) return;
 
         if (potion.get()) {
-            turtles = AlienInventoryUtil.getPotionCount(StatusEffects.RESISTANCE.value());
+            turtles = AlienInventoryUtil.getPotionCount(MobEffects.RESISTANCE.value());
         }
 
         if (popCounter.get()) {
-            for (PlayerEntity player : mc.world.getPlayers()) {
+            for (Player player : mc.level.players()) {
                 if (player == null) continue;
-                if (player.isDead() || player.getHealth() <= 0.0f) {
+                if (player.isDeadOrDying() || player.getHealth() <= 0.0f) {
                     if (!deadPlayers.contains(player)) {
                         deadPlayers.add(player);
                         onPlayerDeath(player);
@@ -284,13 +284,13 @@ public class IMGTips extends Module {
     private void onPacket(PacketEvent.Receive event) {
         lagTimer.reset();
 
-        if (event.packet instanceof PlayerPositionLookS2CPacket) {
+        if (event.packet instanceof ClientboundPlayerPositionPacket) {
             lagBackTimer.reset();
         }
 
-        if (popCounter.get() && event.packet instanceof EntityStatusS2CPacket packet) {
-            if (packet.getStatus() == EntityStatuses.USE_TOTEM_OF_UNDYING
-                && packet.getEntity(mc.world) instanceof PlayerEntity player) {
+        if (popCounter.get() && event.packet instanceof ClientboundEntityEventPacket packet) {
+            if (packet.getEventId() == EntityEvent.PROTECTED_FROM_DEATH
+                && packet.getEntity(mc.level) instanceof Player player) {
                 popManager.onTotemPop(player.getName().getString());
                 onTotemPop(player);
             }
@@ -309,20 +309,20 @@ public class IMGTips extends Module {
 
     @EventHandler
     private void onRender2D(Render2DEvent event) {
-        if (mc.currentScreen != null) return; // Screen mixin handles this
-        renderText(event.drawContext, event.screenWidth, event.screenHeight);
+        if (mc.screen != null) return; // Screen mixin handles this
+        renderText(event.graphics, event.screenWidth, event.screenHeight);
     }
 
     /** Called from MixinScreenOverlay — renders on top of any GUI. */
-    public static void renderOnScreen(DrawContext context) {
+    public static void renderOnScreen(GuiGraphicsExtractor context) {
         IMGTips module = Modules.get().get(IMGTips.class);
         if (module == null || !module.isActive()) return;
-        MinecraftClient mc = MinecraftClient.getInstance();
-        if (mc.currentScreen == null) return;
-        module.renderText(context, context.getScaledWindowWidth(), context.getScaledWindowHeight());
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.screen == null) return;
+        module.renderText(context, context.guiWidth(), context.guiHeight());
     }
 
-    private void renderText(DrawContext context, int screenWidth, int screenHeight) {
+    private void renderText(GuiGraphicsExtractor context, int screenWidth, int screenHeight) {
         double scale = textScale.get();
 
         try {
@@ -351,7 +351,7 @@ public class IMGTips extends Module {
                     if (potionX.get() >= 0) {
                         x = potionX.get();
                     } else {
-                        x = (screenWidth / 2.0) - (mc.textRenderer.getWidth(str) * scale / 2.0);
+                        x = (screenWidth / 2.0) - (mc.font.width(str) * scale / 2.0);
                     }
                     double py = potionY.get().intValue();
                     if (py < 0) {
@@ -365,42 +365,42 @@ public class IMGTips extends Module {
         } catch (Exception ignored) { }
     }
 
-    private void drawLagback(DrawContext context, double y, double scale, int screenWidth) {
+    private void drawLagback(GuiGraphicsExtractor context, double y, double scale, int screenWidth) {
         String label = chinese.get() ? "回弹" : "Lagback";
         String line = label + " (" + df.format((1500L - lagBackTimer.getMs()) / 1000.0) + "s)";
         drawString(context, line, warningX.get(), y, warningColor.get(), scale, screenWidth);
     }
 
     /** Draw scaled text with shadow, auto-centered when settingX < 0. */
-    private void drawString(DrawContext context, String text, double settingX, double settingY,
+    private void drawString(GuiGraphicsExtractor context, String text, double settingX, double settingY,
                             SettingColor color, double scale, int screenWidth) {
         drawString(context, text, settingX, settingY, color, scale, screenWidth, true, true);
     }
 
-    private void drawString(DrawContext context, String text, double settingX, double settingY,
+    private void drawString(GuiGraphicsExtractor context, String text, double settingX, double settingY,
                             SettingColor color, double scale, int screenWidth,
                             boolean shadow, boolean centerWhenAuto) {
         double x;
         if (settingX >= 0) {
             x = settingX;
         } else if (centerWhenAuto) {
-            float textWidth = mc.textRenderer.getWidth(text);
+            float textWidth = mc.font.width(text);
             x = (screenWidth / 2.0) - (textWidth * scale / 2.0);
         } else {
             x = 0;
         }
 
-        var matrices = context.getMatrices();
+        var matrices = context.pose();
         matrices.pushMatrix();
         matrices.translate((float) x, (float) settingY);
         matrices.scale((float) scale, (float) scale);
-        context.drawText(mc.textRenderer, text, 0, 0, color.getPacked(), shadow);
+        context.text(mc.font, text, 0, 0, color.getPacked(), shadow);
         matrices.popMatrix();
     }
 
     /** Height of one line of text at the current scale (including shadow offset). */
     private double getTextHeight(double scale) {
-        return (mc.textRenderer.fontHeight + 1) * scale;
+        return (mc.font.lineHeight + 1) * scale;
     }
 
     // ==================== Potion string builder ====================
@@ -412,20 +412,20 @@ public class IMGTips extends Module {
             sb.append("§e").append(turtles);
         }
 
-        if (mc.player.hasStatusEffect(StatusEffects.RESISTANCE)
-            && (!resistanceLevelCheck.get() || mc.player.getStatusEffect(StatusEffects.RESISTANCE).getAmplifier() > 0)) {
+        if (mc.player.hasEffect(MobEffects.RESISTANCE)
+            && (!resistanceLevelCheck.get() || mc.player.getEffect(MobEffects.RESISTANCE).getAmplifier() > 0)) {
             if (!sb.isEmpty()) sb.append(" ");
-            sb.append("§9").append(mc.player.getStatusEffect(StatusEffects.RESISTANCE).getDuration() / 20 + 1);
+            sb.append("§9").append(mc.player.getEffect(MobEffects.RESISTANCE).getDuration() / 20 + 1);
         }
 
-        if (mc.player.hasStatusEffect(StatusEffects.STRENGTH)) {
+        if (mc.player.hasEffect(MobEffects.STRENGTH)) {
             if (!sb.isEmpty()) sb.append(" ");
-            sb.append("§4").append(mc.player.getStatusEffect(StatusEffects.STRENGTH).getDuration() / 20 + 1);
+            sb.append("§4").append(mc.player.getEffect(MobEffects.STRENGTH).getDuration() / 20 + 1);
         }
 
-        if (mc.player.hasStatusEffect(StatusEffects.SPEED)) {
+        if (mc.player.hasEffect(MobEffects.SPEED)) {
             if (!sb.isEmpty()) sb.append(" ");
-            sb.append("§b").append(mc.player.getStatusEffect(StatusEffects.SPEED).getDuration() / 20 + 1);
+            sb.append("§b").append(mc.player.getEffect(MobEffects.SPEED).getDuration() / 20 + 1);
         }
 
         return sb;
@@ -433,37 +433,37 @@ public class IMGTips extends Module {
 
     // ==================== Death ====================
 
-    private void onPlayerDeath(PlayerEntity player) {
+    private void onPlayerDeath(Player player) {
         String name = player.getName().getString();
         int popCount = popManager.getPop(name);
         boolean cn = chinese.get();
 
-        MutableText msg;
+        MutableComponent msg;
         if (player.equals(mc.player)) {
             if (popCount > 0) {
-                msg = Text.literal(cn ? "你在弹出 " : "You died after popping ").formatted(Formatting.GREEN);
-                msg.append(Text.literal(String.valueOf(popCount)).formatted(Formatting.WHITE));
-                msg.append(Text.literal(cn ? " 个图腾后死亡。" : (popCount == 1 ? " totem." : " totems.")).formatted(Formatting.GREEN));
+                msg = Component.literal(cn ? "你在弹出 " : "You died after popping ").withStyle(ChatFormatting.GREEN);
+                msg.append(Component.literal(String.valueOf(popCount)).withStyle(ChatFormatting.WHITE));
+                msg.append(Component.literal(cn ? " 个图腾后死亡。" : (popCount == 1 ? " totem." : " totems.")).withStyle(ChatFormatting.GREEN));
             } else {
-                msg = Text.literal(cn ? "你死了。" : "You died.").formatted(Formatting.RESET);
+                msg = Component.literal(cn ? "你死了。" : "You died.").withStyle(ChatFormatting.RESET);
             }
         } else {
             if (popCount > 0) {
-                msg = Text.literal(name).formatted(Formatting.WHITE);
-                msg.append(Text.literal(cn ? " 在弹出 " : " died after popping ").formatted(Formatting.GREEN));
-                msg.append(Text.literal(String.valueOf(popCount)).formatted(Formatting.WHITE));
-                msg.append(Text.literal(cn ? " 个图腾后死亡。" : (popCount == 1 ? " totem." : " totems.")).formatted(Formatting.GREEN));
+                msg = Component.literal(name).withStyle(ChatFormatting.WHITE);
+                msg.append(Component.literal(cn ? " 在弹出 " : " died after popping ").withStyle(ChatFormatting.GREEN));
+                msg.append(Component.literal(String.valueOf(popCount)).withStyle(ChatFormatting.WHITE));
+                msg.append(Component.literal(cn ? " 个图腾后死亡。" : (popCount == 1 ? " totem." : " totems.")).withStyle(ChatFormatting.GREEN));
             } else {
-                msg = Text.literal(name).formatted(Formatting.WHITE);
-                msg.append(Text.literal(cn ? " 死了。" : " died.").formatted(Formatting.RESET));
+                msg = Component.literal(name).withStyle(ChatFormatting.WHITE);
+                msg.append(Component.literal(cn ? " 死了。" : " died.").withStyle(ChatFormatting.RESET));
             }
         }
         info(msg);
 
         if (deathCoords.get() && player == mc.player) {
-            info(Text.literal(cn ? "你死于 " + player.getBlockX() + ", " + player.getBlockY() + ", " + player.getBlockZ()
+            info(Component.literal(cn ? "你死于 " + player.getBlockX() + ", " + player.getBlockY() + ", " + player.getBlockZ()
                     : "You died at " + player.getBlockX() + ", " + player.getBlockY() + ", " + player.getBlockZ())
-                .formatted(Formatting.DARK_RED));
+                .withStyle(ChatFormatting.DARK_RED));
         }
 
         popManager.onDeath(name);
@@ -472,7 +472,7 @@ public class IMGTips extends Module {
     // ==================== Totem pop ====================
 
     /** Called by IMGFakePlayer when its client-side fake player pops a totem. */
-    public static void onFakePlayerTotemPop(String playerName, PlayerEntity player) {
+    public static void onFakePlayerTotemPop(String playerName, Player player) {
         IMGTips module = Modules.get().get(IMGTips.class);
         if (module != null && module.isActive() && module.popCounter.get()) {
             module.popManager.onTotemPop(playerName);
@@ -480,21 +480,21 @@ public class IMGTips extends Module {
         }
     }
 
-    private void onTotemPop(PlayerEntity player) {
+    private void onTotemPop(Player player) {
         String name = player.getName().getString();
         int popCount = popManager.getPop(name);
         boolean cn = chinese.get();
 
-        MutableText msg;
+        MutableComponent msg;
         if (player.equals(mc.player)) {
-            msg = Text.literal(cn ? "你弹出了 " : "You popped ").formatted(Formatting.LIGHT_PURPLE);
-            msg.append(Text.literal(String.valueOf(popCount)).formatted(Formatting.WHITE));
-            msg.append(Text.literal(cn ? " 个图腾。" : (popCount == 1 ? " totem." : " totems.")).formatted(Formatting.LIGHT_PURPLE));
+            msg = Component.literal(cn ? "你弹出了 " : "You popped ").withStyle(ChatFormatting.LIGHT_PURPLE);
+            msg.append(Component.literal(String.valueOf(popCount)).withStyle(ChatFormatting.WHITE));
+            msg.append(Component.literal(cn ? " 个图腾。" : (popCount == 1 ? " totem." : " totems.")).withStyle(ChatFormatting.LIGHT_PURPLE));
         } else {
-            msg = Text.literal(name).formatted(Formatting.WHITE);
-            msg.append(Text.literal(cn ? " 弹出了 " : " has popped ").formatted(Formatting.RED));
-            msg.append(Text.literal(String.valueOf(popCount)).formatted(Formatting.WHITE));
-            msg.append(Text.literal(cn ? " 个图腾。" : (popCount == 1 ? " totems." : " totems.")).formatted(Formatting.RED));
+            msg = Component.literal(name).withStyle(ChatFormatting.WHITE);
+            msg.append(Component.literal(cn ? " 弹出了 " : " has popped ").withStyle(ChatFormatting.RED));
+            msg.append(Component.literal(String.valueOf(popCount)).withStyle(ChatFormatting.WHITE));
+            msg.append(Component.literal(cn ? " 个图腾。" : (popCount == 1 ? " totems." : " totems.")).withStyle(ChatFormatting.RED));
         }
         info(msg);
     }

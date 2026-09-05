@@ -2,9 +2,9 @@ package com.codigohasta.addon.mixin;
 
 import com.codigohasta.addon.events.TotemParticleEvent;
 import meteordevelopment.meteorclient.MeteorClient;
-import net.minecraft.client.particle.SpriteProvider;
+import net.minecraft.client.particle.SpriteSet;
 import net.minecraft.client.particle.TotemParticle;
-import net.minecraft.client.world.ClientWorld;
+import net.minecraft.client.multiplayer.ClientLevel;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -15,7 +15,7 @@ import java.awt.Color;
 @Mixin(TotemParticle.class)
 public abstract class MixinIMGTotemParticle {
     @Inject(method = "<init>", at = @At("TAIL"))
-    private void onTotemParticleInit(ClientWorld world, double x, double y, double z, double velocityX, double velocityY, double velocityZ, SpriteProvider spriteProvider, CallbackInfo ci) {
+    private void onTotemParticleInit(ClientLevel world, double x, double y, double z, double velocityX, double velocityY, double velocityZ, SpriteSet spriteProvider, CallbackInfo ci) {
         TotemParticleEvent event = TotemParticleEvent.get(velocityX, velocityY, velocityZ);
         MeteorClient.EVENT_BUS.post(event);
         if (event.isCancelled()) {

@@ -8,15 +8,21 @@ import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.misc.Keybind;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.item.BlockItem;
-import net.minecraft.item.ItemStack;
-import net.minecraft.network.packet.c2s.play.*;
-import net.minecraft.screen.slot.SlotActionType;
-import net.minecraft.util.Hand;
-import net.minecraft.util.hit.BlockHitResult;
-import net.minecraft.util.hit.EntityHitResult;
-import net.minecraft.util.hit.HitResult;
-import net.minecraft.util.math.BlockPos;
+import net.minecraft.world.item.BlockItem;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.network.protocol.game.ServerboundInteractPacket;
+import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;
+import net.minecraft.network.protocol.game.ServerboundSetCarriedItemPacket;
+import net.minecraft.network.protocol.game.ServerboundSwingPacket;
+import net.minecraft.network.protocol.game.ServerboundUseItemOnPacket;
+import net.minecraft.network.protocol.game.ServerboundUseItemPacket;
+import net.minecraft.world.inventory.ContainerInput;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.EntityHitResult;
+import net.minecraft.world.phys.HitResult;
+import net.minecraft.core.BlockPos;
+import net.minecraft.network.protocol.game.ServerboundAttackPacket;
 
 /**
  * ScreenActions - 界面操作快捷键
@@ -112,7 +118,7 @@ public class ScreenActions extends Module {
     // ========= 每 Tick 检测按键（和 AdaPacketMine.handleKeyToggles 相同模式） =========
     @EventHandler
     private void onTick(TickEvent.Pre event) {
-        if (mc.player == null || mc.world == null) return;
+        if (mc.player == null || mc.level == null) return;
 
         checkSlot(key1, action1, wasPressed1);
         checkSlot(key2, action2, wasPressed2);
@@ -154,70 +160,70 @@ public class ScreenActions extends Module {
 
     // ========= 放置方块 =========
     private void placeBlock() {
-        if (!(mc.crosshairTarget instanceof BlockHitResult hit)
+        if (!(mc.hitResult instanceof BlockHitResult hit)
             || hit.getType() != HitResult.Type.BLOCK) return;
-        if (mc.player.squaredDistanceTo(hit.getBlockPos().toCenterPos()) > range.get() * range.get()) return;
+        if (mc.player.distanceToSqr(hit.getBlockPos().getCenter()) > range.get() * range.get()) return;
 
         int slot = getBlockSlot();
         if (slot == -1) return;
 
         int oldSlot = ((InventoryAccessor) mc.player.getInventory()).getSelectedSlot();
         if (slot != oldSlot) {
-            mc.getNetworkHandler().sendPacket(new UpdateSelectedSlotC2SPacket(slot));
+            mc.getConnection().send(new ServerboundSetCarriedItemPacket(slot));
         }
 
-        BlockHitResult result = new BlockHitResult(hit.getPos(), hit.getSide(), hit.getBlockPos(), false);
-        mc.getNetworkHandler().sendPacket(new PlayerInteractBlockC2SPacket(Hand.MAIN_HAND, result, 0));
-        mc.getNetworkHandler().sendPacket(new HandSwingC2SPacket(Hand.MAIN_HAND));
+        BlockHitResult result = new BlockHitResult(hit.getLocation(), hit.getDirection(), hit.getBlockPos(), false);
+        mc.getConnection().send(new ServerboundUseItemOnPacket(InteractionHand.MAIN_HAND, result, 0));
+        mc.getConnection().send(new ServerboundSwingPacket(InteractionHand.MAIN_HAND));
 
         if (slot != oldSlot) {
-            mc.getNetworkHandler().sendPacket(new UpdateSelectedSlotC2SPacket(oldSlot));
+            mc.getConnection().send(new ServerboundSetCarriedItemPacket(oldSlot));
         }
     }
 
     // ========= 破坏方块 =========
     private void breakBlock() {
-        if (!(mc.crosshairTarget instanceof BlockHitResult hit)
+        if (!(mc.hitResult instanceof BlockHitResult hit)
             || hit.getType() != HitResult.Type.BLOCK) return;
         BlockPos pos = hit.getBlockPos();
-        if (mc.player.squaredDistanceTo(pos.toCenterPos()) > range.get() * range.get()) return;
-        if (mc.world.getBlockState(pos).isAir()) return;
+        if (mc.player.distanceToSqr(pos.getCenter()) > range.get() * range.get()) return;
+        if (mc.level.getBlockState(pos).isAir()) return;
 
-        mc.getNetworkHandler().sendPacket(new PlayerActionC2SPacket(
-            PlayerActionC2SPacket.Action.START_DESTROY_BLOCK, pos, hit.getSide()));
+        mc.getConnection().send(new ServerboundPlayerActionPacket(
+            ServerboundPlayerActionPacket.Action.START_DESTROY_BLOCK, pos, hit.getDirection()));
         if (instantBreak.get()) {
-            mc.getNetworkHandler().sendPacket(new PlayerActionC2SPacket(
-                PlayerActionC2SPacket.Action.STOP_DESTROY_BLOCK, pos, hit.getSide()));
+            mc.getConnection().send(new ServerboundPlayerActionPacket(
+                ServerboundPlayerActionPacket.Action.STOP_DESTROY_BLOCK, pos, hit.getDirection()));
         }
-        mc.getNetworkHandler().sendPacket(new HandSwingC2SPacket(Hand.MAIN_HAND));
+        mc.getConnection().send(new ServerboundSwingPacket(InteractionHand.MAIN_HAND));
     }
 
     // ========= 交互方块 =========
     private void interactBlock() {
-        if (!(mc.crosshairTarget instanceof BlockHitResult hit)
+        if (!(mc.hitResult instanceof BlockHitResult hit)
             || hit.getType() != HitResult.Type.BLOCK) return;
-        if (mc.player.squaredDistanceTo(hit.getBlockPos().toCenterPos()) > range.get() * range.get()) return;
+        if (mc.player.distanceToSqr(hit.getBlockPos().getCenter()) > range.get() * range.get()) return;
 
-        BlockHitResult result = new BlockHitResult(hit.getPos(), hit.getSide(), hit.getBlockPos(), false);
-        mc.getNetworkHandler().sendPacket(new PlayerInteractBlockC2SPacket(Hand.MAIN_HAND, result, 0));
-        mc.getNetworkHandler().sendPacket(new HandSwingC2SPacket(Hand.MAIN_HAND));
+        BlockHitResult result = new BlockHitResult(hit.getLocation(), hit.getDirection(), hit.getBlockPos(), false);
+        mc.getConnection().send(new ServerboundUseItemOnPacket(InteractionHand.MAIN_HAND, result, 0));
+        mc.getConnection().send(new ServerboundSwingPacket(InteractionHand.MAIN_HAND));
     }
 
     // ========= 使用物品 =========
     private void useItem() {
-        mc.getNetworkHandler().sendPacket(new PlayerInteractItemC2SPacket(
-            Hand.MAIN_HAND, 0, mc.player.getYaw(), mc.player.getPitch()));
-        mc.getNetworkHandler().sendPacket(new HandSwingC2SPacket(Hand.MAIN_HAND));
+        mc.getConnection().send(new ServerboundUseItemPacket(
+            InteractionHand.MAIN_HAND, 0, mc.player.getYRot(), mc.player.getXRot()));
+        mc.getConnection().send(new ServerboundSwingPacket(InteractionHand.MAIN_HAND));
     }
 
     // ========= 攻击实体 =========
     private void attackEntity() {
-        if (!(mc.crosshairTarget instanceof EntityHitResult hit)) return;
-        if (mc.player.squaredDistanceTo(hit.getEntity().getX(), hit.getEntity().getY(), hit.getEntity().getZ())
+        if (!(mc.hitResult instanceof EntityHitResult hit)) return;
+        if (mc.player.distanceToSqr(hit.getEntity().getX(), hit.getEntity().getY(), hit.getEntity().getZ())
             > range.get() * range.get()) return;
 
-        mc.getNetworkHandler().sendPacket(PlayerInteractEntityC2SPacket.attack(hit.getEntity(), mc.player.isSneaking()));
-        mc.getNetworkHandler().sendPacket(new HandSwingC2SPacket(Hand.MAIN_HAND));
+        mc.getConnection().send(new ServerboundAttackPacket(hit.getEntity().getId()));
+        mc.getConnection().send(new ServerboundSwingPacket(InteractionHand.MAIN_HAND));
     }
 
     // ========= 辅助方法 =========
@@ -227,19 +233,19 @@ public class ScreenActions extends Module {
         int cur = ((InventoryAccessor) mc.player.getInventory()).getSelectedSlot();
 
         // 1) 当前槽位是方块
-        if (mc.player.getInventory().getStack(cur).getItem() instanceof BlockItem) return cur;
+        if (mc.player.getInventory().getItem(cur).getItem() instanceof BlockItem) return cur;
         if (!autoSearch.get()) return -1;
 
         // 2) 鼠标拿起物品
-        if (mc.player.currentScreenHandler != null) {
-            ItemStack cursor = mc.player.currentScreenHandler.getCursorStack();
+        if (mc.player.containerMenu != null) {
+            ItemStack cursor = mc.player.containerMenu.getCarried();
             if (cursor.getItem() instanceof BlockItem) {
-                if (mc.player.getInventory().getStack(cur).isEmpty()) {
+                if (mc.player.getInventory().getItem(cur).isEmpty()) {
                     placeCursorToSlot(cur);
                     return cur;
                 }
                 for (int i = 0; i < 9; i++) {
-                    if (mc.player.getInventory().getStack(i).isEmpty()) {
+                    if (mc.player.getInventory().getItem(i).isEmpty()) {
                         placeCursorToSlot(i);
                         return i;
                     }
@@ -255,10 +261,10 @@ public class ScreenActions extends Module {
 
     /** 把鼠标拿起物品放进指定热键栏槽位 */
     private void placeCursorToSlot(int hotbarSlot) {
-        mc.interactionManager.clickSlot(
-            mc.player.currentScreenHandler.syncId,
+        mc.gameMode.handleContainerInput(
+            mc.player.containerMenu.containerId,
             hotbarSlot + 36,
-            0, SlotActionType.PICKUP, mc.player
+            0, ContainerInput.PICKUP, mc.player
         );
     }
 }

@@ -12,12 +12,12 @@ import meteordevelopment.meteorclient.utils.render.RenderUtils;
 import meteordevelopment.meteorclient.utils.render.color.Color;
 import meteordevelopment.meteorclient.utils.render.color.SettingColor;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.EntityType;
-import net.minecraft.entity.EquipmentSlot;
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.item.ItemStack;
-import net.minecraft.util.math.Vec3d; 
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.phys.Vec3; 
 import org.joml.Vector3d;
 
 import com.codigohasta.addon.AddonTemplate;
@@ -134,11 +134,11 @@ public class EntityTags extends Module {
 
     @EventHandler
     private void onRender2D(Render2DEvent event) {
-        if (mc.world == null || mc.player == null) return;
+        if (mc.level == null || mc.player == null) return;
 
         List<EntityCluster> clusters = new ArrayList<>();
 
-        for (Entity entity : mc.world.getEntities()) {
+        for (Entity entity : mc.level.entitiesForRendering()) {
             if (entity.getType() == EntityType.PLAYER) continue;
             if (!entities.get().contains(entity.getType())) continue;
 
@@ -148,7 +148,7 @@ public class EntityTags extends Module {
 
             if (shouldCluster) {
                 for (EntityCluster cluster : clusters) {
-                    Vec3d entityPos = new Vec3d(entity.getX(), entity.getY(), entity.getZ());
+                    Vec3 entityPos = new Vec3(entity.getX(), entity.getY(), entity.getZ());
                     if (cluster.type == entity.getType() && cluster.center.distanceTo(entityPos) <= clusterEntityDistance.get()) {
                         cluster.add(entity);
                         added = true;
@@ -175,14 +175,14 @@ public class EntityTags extends Module {
 
     private void renderMergedTag(Render2DEvent event, EntityCluster cluster) {
         Entity first = cluster.entities.get(0);
-        pos.set(cluster.center.getX(), cluster.center.getY() + first.getEyeHeight(first.getPose()) + yOffset.get(), cluster.center.getZ());
+        pos.set(cluster.center.x(), cluster.center.y() + first.getEyeHeight(first.getPose()) + yOffset.get(), cluster.center.z());
 
         if (!NametagUtils.to2D(pos, scale.get())) return;
 
         TextRenderer text = TextRenderer.get();
-        NametagUtils.begin(pos, event.drawContext);
+        NametagUtils.begin(pos, event.graphics);
 
-        String nameText = first.getType().getName().getString() + " x" + cluster.entities.size();
+        String nameText = first.getType().getDescription().getString() + " x" + cluster.entities.size();
         if (displayDistance.get()) {
             double dist = Math.round(PlayerUtils.distanceToCamera(cluster.center.x, cluster.center.y, cluster.center.z) * 10.0) / 10.0;
             nameText += " (" + dist + "m)";
@@ -198,7 +198,7 @@ public class EntityTags extends Module {
         text.render(nameText, -widthHalf, -height, WHITE, true);
         text.end();
 
-        NametagUtils.end(event.drawContext);
+        NametagUtils.end(event.graphics);
     }
 
     private void renderIndividualTag(Render2DEvent event, Entity entity) {
@@ -208,10 +208,10 @@ public class EntityTags extends Module {
         if (!NametagUtils.to2D(pos, scale.get())) return;
 
         TextRenderer text = TextRenderer.get();
-        NametagUtils.begin(pos, event.drawContext);
+        NametagUtils.begin(pos, event.graphics);
 
         // 1. 准备文字
-        String nameText = entity.getType().getName().getString();
+        String nameText = entity.getType().getDescription().getString();
         String healthText = "";
         String distText = "";
         Color healthColor = WHITE;
@@ -267,14 +267,14 @@ public class EntityTags extends Module {
             drawItems(event, living, -height, totalWidth);
         }
 
-        NametagUtils.end(event.drawContext);
+        NametagUtils.end(event.graphics);
     }
 
     private void drawItems(Render2DEvent event, LivingEntity entity, double currentYOffset, double tagWidth) {
         List<ItemStack> equipment = new ArrayList<>();
         // 1.21.11 必须使用 getEquippedStack
         for (EquipmentSlot slot : EquipmentSlot.values()) {
-            ItemStack stack = entity.getEquippedStack(slot);
+            ItemStack stack = entity.getItemBySlot(slot);
             if (!stack.isEmpty()) equipment.add(stack);
         }
 
@@ -289,7 +289,7 @@ public class EntityTags extends Module {
         for (int i = 0; i < equipment.size(); i++) {
             ItemStack stack = equipment.get(i);
             double x = startX + i * (itemSize + itemSpacing);
-            RenderUtils.drawItem(event.drawContext, stack, (int) x, (int) startY, 2, true, null, false);
+            RenderUtils.drawItem(event.graphics, stack, (int) x, (int) startY, 2, true, null, false);
         }
     }
 
@@ -302,12 +302,12 @@ public class EntityTags extends Module {
     private static class EntityCluster {
         EntityType<?> type;
         List<Entity> entities = new ArrayList<>();
-        Vec3d center;
+        Vec3 center;
 
         EntityCluster(Entity first) {
             this.type = first.getType();
             this.entities.add(first);
-            this.center = new Vec3d(first.getX(), first.getY(), first.getZ());
+            this.center = new Vec3(first.getX(), first.getY(), first.getZ());
         }
 
         void add(Entity e) {
@@ -318,7 +318,7 @@ public class EntityTags extends Module {
                 sumY += ent.getY();
                 sumZ += ent.getZ();
             }
-            this.center = new Vec3d(sumX / entities.size(), sumY / entities.size(), sumZ / entities.size());
+            this.center = new Vec3(sumX / entities.size(), sumY / entities.size(), sumZ / entities.size());
         }
     }
 }

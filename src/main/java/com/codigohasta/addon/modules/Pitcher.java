@@ -11,25 +11,25 @@ import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.render.color.Color;
 import meteordevelopment.meteorclient.utils.render.color.SettingColor;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.EntityType;
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.item.ItemStack;
-import net.minecraft.network.packet.c2s.play.ClientCommandC2SPacket;
-import net.minecraft.network.packet.c2s.play.PlayerActionC2SPacket;
-import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket;
-import net.minecraft.util.hit.HitResult;
-import net.minecraft.util.math.Box;
-import net.minecraft.util.math.MathHelper;
-import net.minecraft.util.math.Vec3d;
-import net.minecraft.world.RaycastContext;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.network.protocol.game.ServerboundPlayerCommandPacket;
+import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;
+import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
+import net.minecraft.world.phys.HitResult;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.util.Mth;
+import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.level.ClipContext;
 
-import meteordevelopment.meteorclient.mixininterface.IPlayerMoveC2SPacket;
-import net.minecraft.item.Items;
-import net.minecraft.network.packet.Packet;
-import net.minecraft.network.packet.c2s.play.PlayerInteractItemC2SPacket;
-import net.minecraft.util.Hand;
+import meteordevelopment.meteorclient.mixininterface.IServerboundMovePlayerPacket;
+import net.minecraft.world.item.Items;
+import net.minecraft.network.protocol.Packet;
+import net.minecraft.network.protocol.game.ServerboundUseItemPacket;
+import net.minecraft.world.InteractionHand;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -60,7 +60,7 @@ public class Pitcher extends Module {
         .build()
     );
 
-    private final Setting<List<net.minecraft.item.Item>> projectileItems = sgGeneral.add(new ItemListSetting.Builder()
+    private final Setting<List<net.minecraft.world.item.Item>> projectileItems = sgGeneral.add(new ItemListSetting.Builder()
         .name("适用物品")
         .defaultValue(Items.BOW, Items.TRIDENT, Items.ENDER_PEARL, Items.SPLASH_POTION, Items.EXPERIENCE_BOTTLE, Items.SNOWBALL)
         .build()
@@ -258,7 +258,7 @@ public class Pitcher extends Module {
     @Override
     public void onDeactivate() {
         if (forcedPressed) {
-            mc.options.useKey.setPressed(false);
+            mc.options.keyUse.setDown(false);
             forcedPressed = false;
         }
         totemStep = 0;
@@ -268,33 +268,33 @@ public class Pitcher extends Module {
 
    @EventHandler
     private void onTick(TickEvent.Pre event) {
-        if (mc.player == null || mc.world == null) return;
+        if (mc.player == null || mc.level == null) return;
 
         // 识别当前哪只手拿着远程武器
-        boolean validMain = isValidItem(mc.player.getMainHandStack());
-        boolean validOff = isValidItem(mc.player.getOffHandStack());
+        boolean validMain = isValidItem(mc.player.getMainHandItem());
+        boolean validOff = isValidItem(mc.player.getOffhandItem());
         boolean hasValidItem = validMain || validOff;
-        Hand hand = validMain ? Hand.MAIN_HAND : Hand.OFF_HAND;
+        InteractionHand hand = validMain ? InteractionHand.MAIN_HAND : InteractionHand.OFF_HAND;
 
         // --- 图腾双发状态机修复 ---
         if (totemBypass.get() && totemStep == 1) {
             // 倒计时刚开始：强制触发右键拉弓动作
             if (bypassTimer == bypassDelay.get()) {
-                mc.interactionManager.interactItem(mc.player, hand);
+                mc.gameMode.useItem(mc.player, hand);
             }
 
             if (bypassTimer > 0) {
                 // 蓄力期间：强制锁定右键按下状态
-                mc.options.useKey.setPressed(true);
+                mc.options.keyUse.setDown(true);
                 bypassTimer--;
             } 
             else if (bypassTimer == 0) {
                 // 倒计时结束：执行射击
                 // 修复：移除 mc.player.isUsingItem() 判断，防止因为延迟导致的失效
-                mc.interactionManager.stopUsingItem(mc.player);
+                mc.gameMode.releaseUsingItem(mc.player);
                 
                 // 关键修复：强制松开按键并重置状态机，防止死循环拉弓
-                mc.options.useKey.setPressed(false);
+                mc.options.keyUse.setDown(false);
                 totemStep = 0; 
                 bypassTimer = -1;
             }
@@ -304,34 +304,34 @@ public class Pitcher extends Module {
         // --- 2. 自瞄逻辑 ---
         if (aimbot.get() && hasValidItem) {
             currentTarget = null; // 重置当前目标
-            boolean isPressingRightClick = mc.options.useKey.isPressed() || forcedPressed;
+            boolean isPressingRightClick = mc.options.keyUse.isDown() || forcedPressed;
 
             if (!aimOnlyWhenHoldingRightClick.get() || isPressingRightClick) {
                 Entity bestTarget = null;
                 double bestScore = Double.MAX_VALUE;
 
-                for (Entity entity : mc.world.getEntities()) {
+                for (Entity entity : mc.level.entitiesForRendering()) {
                     if (entity == mc.player) continue;
-                    if (!(entity instanceof LivingEntity living) || living.isDead() || living.getHealth() <= 0) continue;
+                    if (!(entity instanceof LivingEntity living) || living.isDeadOrDying() || living.getHealth() <= 0) continue;
                     if (!entities.get().contains(entity.getType())) continue;
-                    if (entity instanceof PlayerEntity player && (player.isCreative() || player.isSpectator() || Friends.get().isFriend(player))) continue;
+                    if (entity instanceof Player player && (player.isCreative() || player.isSpectator() || Friends.get().isFriend(player))) continue;
 
                     double dist = mc.player.distanceTo(entity);
                     if (dist > aimRange.get()) continue;
-                    if (ignoreWalls.get() && !mc.player.canSee(entity)) continue;
+                    if (ignoreWalls.get() && !mc.player.hasLineOfSight(entity)) continue;
 
                     double score = 0;
                     switch (priority.get()) {
                         case Distance: score = dist; break;
                         case Health: score = living.getHealth(); break;
                         case Angle:
-                            Vec3d targetPos = entity.getBoundingBox().getCenter();
+                            Vec3 targetPos = entity.getBoundingBox().getCenter();
                             double dX = targetPos.x - mc.player.getX();
                             double dY = targetPos.y - mc.player.getEyeY();
                             double dZ = targetPos.z - mc.player.getZ();
-                            double yawDiff = Math.toDegrees(Math.atan2(dZ, dX)) - 90.0 - mc.player.getYaw();
-                            double pitchDiff = -Math.toDegrees(Math.atan2(dY, Math.sqrt(dX * dX + dZ * dZ))) - mc.player.getPitch();
-                            score = Math.abs(MathHelper.wrapDegrees((float)yawDiff)) + Math.abs(MathHelper.wrapDegrees((float)pitchDiff));
+                            double yawDiff = Math.toDegrees(Math.atan2(dZ, dX)) - 90.0 - mc.player.getYRot();
+                            double pitchDiff = -Math.toDegrees(Math.atan2(dY, Math.sqrt(dX * dX + dZ * dZ))) - mc.player.getXRot();
+                            score = Math.abs(Mth.wrapDegrees((float)yawDiff)) + Math.abs(Mth.wrapDegrees((float)pitchDiff));
                             break;
                     }
 
@@ -343,13 +343,13 @@ public class Pitcher extends Module {
 
                 if (bestTarget != null) {
                     currentTarget = bestTarget;
-                    Vec3d targetPos = bestTarget.getBoundingBox().getCenter();
+                    Vec3 targetPos = bestTarget.getBoundingBox().getCenter();
                     double dX = targetPos.x - mc.player.getX();
                     double dY = targetPos.y - mc.player.getEyeY();
                     double dZ = targetPos.z - mc.player.getZ();
                     double distXZ = Math.sqrt(dX * dX + dZ * dZ);
-                    mc.player.setYaw((float) Math.toDegrees(Math.atan2(dZ, dX)) - 90.0F);
-                    mc.player.setPitch((float) -Math.toDegrees(Math.atan2(dY, distXZ)));
+                    mc.player.setYRot((float) Math.toDegrees(Math.atan2(dZ, dX)) - 90.0F);
+                    mc.player.setXRot((float) -Math.toDegrees(Math.atan2(dY, distXZ)));
                 }
             }
         }
@@ -367,7 +367,7 @@ public class Pitcher extends Module {
         // 进食/喝药保护 (1.21.11 字符串安全判断)
         if (mc.player.isUsingItem() && !isValidItem(activeStack)) {
             if (forcedPressed) {
-                mc.options.useKey.setPressed(false);
+                mc.options.keyUse.setDown(false);
                 forcedPressed = false;
             }
             return;
@@ -375,13 +375,13 @@ public class Pitcher extends Module {
 
         // 第一箭拉弓逻辑
         if (!onlyWhenHoldingRightClick.get() && !mc.player.isUsingItem()) {
-            mc.options.useKey.setPressed(true);
+            mc.options.keyUse.setDown(true);
             forcedPressed = true;
         }
 
         if (mc.player.isUsingItem() && isValidItem(activeStack)) {
-            if (mc.player.getItemUseTime() >= charge.get()) {
-                mc.interactionManager.stopUsingItem(mc.player);
+            if (mc.player.getTicksUsingItem() >= charge.get()) {
+                mc.gameMode.releaseUsingItem(mc.player);
             }
         }
     }
@@ -391,15 +391,15 @@ public class Pitcher extends Module {
         if (isShooting || mc.player == null) return;
 
         // 拦截弓箭释放包
-        if (event.packet instanceof PlayerActionC2SPacket p && p.getAction() == PlayerActionC2SPacket.Action.RELEASE_USE_ITEM) {
+        if (event.packet instanceof ServerboundPlayerActionPacket p && p.getAction() == ServerboundPlayerActionPacket.Action.RELEASE_USE_ITEM) {
             if (isValidProjectile(mc.player.getActiveItem())) {
                 event.cancel();
                 processShoot(event.packet);
             }
         }
         // 拦截珍珠/药水等右键瞬发包
-        else if (event.packet instanceof PlayerInteractItemC2SPacket p) {
-            ItemStack stack = (p.getHand() == Hand.MAIN_HAND) ? mc.player.getMainHandStack() : mc.player.getOffHandStack();
+        else if (event.packet instanceof ServerboundUseItemPacket p) {
+            ItemStack stack = (p.getHand() == InteractionHand.MAIN_HAND) ? mc.player.getMainHandItem() : mc.player.getOffhandItem();
             if (isValidProjectile(stack)) {
                 event.cancel();
                 processShoot(event.packet);
@@ -407,21 +407,21 @@ public class Pitcher extends Module {
         }
     }
 
-    private void processShoot(net.minecraft.network.packet.Packet<?> originalPacket) {
+    private void processShoot(net.minecraft.network.protocol.Packet<?> originalPacket) {
         
-        if (mc.player == null || mc.getNetworkHandler() == null) return;
+        if (mc.player == null || mc.getConnection() == null) return;
 
         isShooting = true;
         
         // 判定力量：如果状态机是 1，说明这一下是补刀，用高伤
         double currentStr = (totemStep == 1) ? bypassStrength.get() : strength.get();
         // 1. 发送冲刺包（Wurst 高伤触发器）
-        mc.getNetworkHandler().sendPacket(new ClientCommandC2SPacket(mc.player, ClientCommandC2SPacket.Mode.START_SPRINTING));
+        mc.getConnection().send(new ServerboundPlayerCommandPacket(mc.player, ServerboundPlayerCommandPacket.Action.START_SPRINTING));
 
         // 2. 获取基础坐标与方向 (1.21.11 安全坐标)
         double x = mc.player.getX(), y = mc.player.getY(), z = mc.player.getZ();
-        Vec3d startPos = new Vec3d(x, y, z);
-        Vec3d lookVec = mc.player.getRotationVector();
+        Vec3 startPos = new Vec3(x, y, z);
+        Vec3 lookVec = mc.player.getLookAngle();
 
         // 3. 计算当前箭矢力量 (如果是第二箭则用破图腾力量)
         currentStr = (isSecondShot && totemBypass.get()) ? bypassStrength.get() : strength.get();
@@ -433,26 +433,26 @@ public class Pitcher extends Module {
         adjustedStrength = Math.min(adjustedStrength, maxDist);
 
         // 4. 计算位移方向 (根据 TP 模式决定向后还是向前)
-        Vec3d dir = (tpmode.get() == TPMode.Reverse) ? lookVec.multiply(-1) : lookVec;
-        Vec3d spoofOffset = new Vec3d(dir.x * adjustedStrength, (vertical.get() ? dir.y * adjustedStrength : 0), dir.z * adjustedStrength);
+        Vec3 dir = (tpmode.get() == TPMode.Reverse) ? lookVec.scale(-1) : lookVec;
+        Vec3 spoofOffset = new Vec3(dir.x * adjustedStrength, (vertical.get() ? dir.y * adjustedStrength : 0), dir.z * adjustedStrength);
 
         // 5. 自动空间检测 (Smart Strength)
         if (smartStrength.get()) {
             double safeDist = getSafeSpoofDistance(startPos, spoofOffset);
             double adjustedDist = Math.max(0.01, safeDist - 0.5);
             if (adjustedDist < spoofOffset.length()) {
-                spoofOffset = spoofOffset.normalize().multiply(adjustedDist);
+                spoofOffset = spoofOffset.normalize().scale(adjustedDist);
             }
         }
 
         // 目标 TP 点
-        Vec3d targetPos = startPos.add(spoofOffset);
+        Vec3 targetPos = startPos.add(spoofOffset);
 
         // 6. [核心绕过] 堆叠包预热 (Paper 模式发送 15+ 个包填充缓冲区)
         int spam = mode.get() == Mode.Vanilla ? 4 : paperPackets.get();
         for (int i = 0; i < spam; i++) {
             // 规则：1.21.11 必须包含 horizontalCollision
-            mc.player.networkHandler.sendPacket(new PlayerMoveC2SPacket.OnGroundOnly(true, mc.player.horizontalCollision));
+            mc.player.connection.send(new ServerboundMovePlayerPacket.StatusOnly(true, mc.player.horizontalCollision));
         }
 
         // 7. [核心绕过] 瞬间位移序列
@@ -461,7 +461,7 @@ public class Pitcher extends Module {
 
         // B. 如果是向前 TP，则在远处发包（珍珠瞬移逻辑）；如果是向后 TP，则先回传
         if (tpmode.get() == TPMode.Forward) {
-            mc.getNetworkHandler().sendPacket(originalPacket);
+            mc.getConnection().send(originalPacket);
         }
 
         // C. 飞回起点
@@ -469,14 +469,14 @@ public class Pitcher extends Module {
 
         // D. 如果是向后 TP（经典 32k 弓逻辑），则在回传后立刻发包，利用瞬间动量差
         if (tpmode.get() == TPMode.Reverse) {
-            mc.getNetworkHandler().sendPacket(originalPacket);
+            mc.getConnection().send(originalPacket);
         }
 
         // 8. [核心同步] 发送极小偏移包刷位置同步，防止被 Paper 判定为 Invalid Teleport 拉回
         // 在 y 轴增加 0.001 并随机水平偏移 0.05
-        Vec3d syncPos = startPos.add((Math.random() - 0.5) * 0.05, 0.001, (Math.random() - 0.5) * 0.05);
+        Vec3 syncPos = startPos.add((Math.random() - 0.5) * 0.05, 0.001, (Math.random() - 0.5) * 0.05);
         sendMovePacket(syncPos);
-        mc.player.setPosition(syncPos.x, syncPos.y, syncPos.z);
+        mc.player.setPos(syncPos.x, syncPos.y, syncPos.z);
 
         // 9. [防摔/防拉回] 垂直偏移补丁
         if (vertical.get() && useOffset.get() && spoofOffset.y > 0) {
@@ -502,28 +502,28 @@ public class Pitcher extends Module {
      // ================= 轨迹与渲染 ================
     @EventHandler
     private void onRender3D(Render3DEvent event) {
-        if (!doRender.get() || mc.player == null || mc.world == null) return;
-        if (!isValidItem(mc.player.getMainHandStack()) && !isValidItem(mc.player.getOffHandStack())) return;
+        if (!doRender.get() || mc.player == null || mc.level == null) return;
+        if (!isValidItem(mc.player.getMainHandItem()) && !isValidItem(mc.player.getOffhandItem())) return;
 
         float tickDelta = event.tickDelta;
 
         // 1. 平滑角度计算视线向量
-        float pitchInterp = MathHelper.lerp(tickDelta, mc.player.lastPitch, mc.player.getPitch());
-        float yawInterp = MathHelper.lerp(tickDelta, mc.player.lastYaw, mc.player.getYaw());
+        float pitchInterp = Mth.lerp(tickDelta, mc.player.xRotO, mc.player.getXRot());
+        float yawInterp = Mth.lerp(tickDelta, mc.player.yRotO, mc.player.getYRot());
         
         float radPitch = pitchInterp * 0.017453292F;
         float radYaw = -yawInterp * 0.017453292F;
-        float cosYaw = MathHelper.cos(radYaw);
-        float sinYaw = MathHelper.sin(radYaw);
-        float cosPitch = MathHelper.cos(radPitch);
-        float sinPitch = MathHelper.sin(radPitch);
+        float cosYaw = Mth.cos(radYaw);
+        float sinYaw = Mth.sin(radYaw);
+        float cosPitch = Mth.cos(radPitch);
+        float sinPitch = Mth.sin(radPitch);
         
         // 这里的方向向量 lookVec 是渲染用的平滑向量
-        Vec3d lookVec = new Vec3d((double)(sinYaw * cosPitch), (double)(-sinPitch), (double)(cosYaw * cosPitch));
+        Vec3 lookVec = new Vec3((double)(sinYaw * cosPitch), (double)(-sinPitch), (double)(cosYaw * cosPitch));
 
         // 2. 动量计算与颜色警报
         double baseStr = (strength.get() / 10.0) * Math.sqrt(500.0);
-        Vec3d spoofOffset = new Vec3d(-lookVec.x * baseStr, vertical.get() ? -lookVec.y * baseStr : 0, -lookVec.z * baseStr);
+        Vec3 spoofOffset = new Vec3(-lookVec.x * baseStr, vertical.get() ? -lookVec.y * baseStr : 0, -lookVec.z * baseStr);
         
         double maxD = spoofOffset.length();
         double finalVelAdd = maxD;
@@ -531,51 +531,51 @@ public class Pitcher extends Module {
         
         if (smartStrength.get()) {
             // 空间检测使用当前时刻的真实坐标
-            double sDist = getSafeSpoofDistance(new Vec3d(mc.player.getX(), mc.player.getY(), mc.player.getZ()), spoofOffset);
+            double sDist = getSafeSpoofDistance(new Vec3(mc.player.getX(), mc.player.getY(), mc.player.getZ()), spoofOffset);
             double adjDist = Math.max(0.01, sDist - 0.5);
             if (adjDist < maxD) finalVelAdd = adjDist;
             
-            float ratio = (float) MathHelper.clamp(sDist / maxD, 0.0, 1.0);
+            float ratio = (float) Mth.clamp(sDist / maxD, 0.0, 1.0);
             laserColor = new Color((int) ((1.0f - ratio) * 255), (int) (ratio * 255), 0, 255);
         }
 
         
-        double renderX = MathHelper.lerp(tickDelta, mc.player.lastX, mc.player.getX());
-        double renderY = MathHelper.lerp(tickDelta, mc.player.lastY, mc.player.getY()) + (mc.player.getEyeY() - mc.player.getY());
-        double renderZ = MathHelper.lerp(tickDelta, mc.player.lastZ, mc.player.getZ());
+        double renderX = Mth.lerp(tickDelta, mc.player.xo, mc.player.getX());
+        double renderY = Mth.lerp(tickDelta, mc.player.yo, mc.player.getY()) + (mc.player.getEyeY() - mc.player.getY());
+        double renderZ = Mth.lerp(tickDelta, mc.player.zo, mc.player.getZ());
         
         
-        Vec3d simPos = new Vec3d(renderX, renderY - 0.1, renderZ);
+        Vec3 simPos = new Vec3(renderX, renderY - 0.1, renderZ);
       
-        Vec3d simVel = lookVec.normalize().multiply(3.0 + finalVelAdd);
+        Vec3 simVel = lookVec.normalize().scale(3.0 + finalVelAdd);
         
-        List<Vec3d> points = new ArrayList<>();
+        List<Vec3> points = new ArrayList<>();
         points.add(simPos);
         Entity hitEnt = null;
 
        
         for (int step = 0; step < 150; step++) {
-            Vec3d nextSimPos = simPos.add(simVel);
+            Vec3 nextSimPos = simPos.add(simVel);
             
           
-            RaycastContext bCtx = new RaycastContext(simPos, nextSimPos, RaycastContext.ShapeType.COLLIDER, RaycastContext.FluidHandling.NONE, mc.player);
-            HitResult bHit = mc.world.raycast(bCtx);
+            ClipContext bCtx = new ClipContext(simPos, nextSimPos, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, mc.player);
+            HitResult bHit = mc.level.clip(bCtx);
             if (bHit != null && bHit.getType() == HitResult.Type.BLOCK) {
-                nextSimPos = bHit.getPos();
+                nextSimPos = bHit.getLocation();
             }
 
        
-            Box segBox = new Box(simPos.x, simPos.y, simPos.z, nextSimPos.x, nextSimPos.y, nextSimPos.z).expand(0.5);
+            AABB segBox = new AABB(simPos.x, simPos.y, simPos.z, nextSimPos.x, nextSimPos.y, nextSimPos.z).inflate(0.5);
             double nearest = Double.MAX_VALUE;
             
-            for (Entity e : mc.world.getOtherEntities(mc.player, segBox)) {
+            for (Entity e : mc.level.getEntities(mc.player, segBox)) {
                 if (!(e instanceof LivingEntity living) || !living.isAlive()) continue;
              
-                if (e instanceof PlayerEntity p && (p.isCreative() || p.isSpectator() || Friends.get().isFriend(p))) continue;
+                if (e instanceof Player p && (p.isCreative() || p.isSpectator() || Friends.get().isFriend(p))) continue;
 
-                Optional<Vec3d> clip = e.getBoundingBox().expand(0.3).raycast(simPos, nextSimPos);
+                Optional<Vec3> clip = e.getBoundingBox().inflate(0.3).clip(simPos, nextSimPos);
                 if (clip.isPresent()) {
-                    double d = simPos.squaredDistanceTo(clip.get());
+                    double d = simPos.distanceToSqr(clip.get());
                     if (d < nearest) {
                         nearest = d;
                         nextSimPos = clip.get();
@@ -589,23 +589,23 @@ public class Pitcher extends Module {
             
             simPos = nextSimPos;
        
-            simVel = simVel.multiply(0.99).subtract(0, 0.05, 0); 
+            simVel = simVel.scale(0.99).subtract(0, 0.05, 0); 
         }
 
    
         if (points.size() >= 2) {
-            Vec3d pStart = points.get(0);
-            Vec3d pNext = points.get(1);
+            Vec3 pStart = points.get(0);
+            Vec3 pNext = points.get(1);
             if (pStart.distanceTo(pNext) > 8) {
-                Vec3d dir = pNext.subtract(pStart).normalize();
-                points.set(0, pStart.add(dir.multiply(1.5)));
+                Vec3 dir = pNext.subtract(pStart).normalize();
+                points.set(0, pStart.add(dir.scale(1.5)));
             }
         }
 
       
         for (int renderIdx = 0; renderIdx < points.size() - 1; renderIdx++) {
-            Vec3d p1 = points.get(renderIdx);
-            Vec3d p2 = points.get(renderIdx + 1);
+            Vec3 p1 = points.get(renderIdx);
+            Vec3 p2 = points.get(renderIdx + 1);
             event.renderer.line(p1.x, p1.y, p1.z, p2.x, p2.y, p2.z, laserColor);
         }
 
@@ -621,32 +621,32 @@ public class Pitcher extends Module {
         }
     }
 
-    private double getSafeSpoofDistance(Vec3d start, Vec3d offset) {
-        Vec3d end = start.add(offset);
+    private double getSafeSpoofDistance(Vec3 start, Vec3 offset) {
+        Vec3 end = start.add(offset);
         double maxDist = offset.length();
 
-        RaycastContext footContext = new RaycastContext(start, end, RaycastContext.ShapeType.COLLIDER, RaycastContext.FluidHandling.NONE, mc.player);
-        HitResult footHit = mc.world.raycast(footContext);
+        ClipContext footContext = new ClipContext(start, end, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, mc.player);
+        HitResult footHit = mc.level.clip(footContext);
 
-        Vec3d headOffsetVec = new Vec3d(0, 1.8, 0);
-        Vec3d headStart = start.add(headOffsetVec);
-        Vec3d headEnd = end.add(headOffsetVec);
-        RaycastContext headContext = new RaycastContext(headStart, headEnd, RaycastContext.ShapeType.COLLIDER, RaycastContext.FluidHandling.NONE, mc.player);
-        HitResult headHit = mc.world.raycast(headContext);
+        Vec3 headOffsetVec = new Vec3(0, 1.8, 0);
+        Vec3 headStart = start.add(headOffsetVec);
+        Vec3 headEnd = end.add(headOffsetVec);
+        ClipContext headContext = new ClipContext(headStart, headEnd, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, mc.player);
+        HitResult headHit = mc.level.clip(headContext);
 
         double safeDist = maxDist;
 
         if (footHit != null && footHit.getType() == HitResult.Type.BLOCK) {
-            safeDist = Math.min(safeDist, start.distanceTo(footHit.getPos()));
+            safeDist = Math.min(safeDist, start.distanceTo(footHit.getLocation()));
         }
         if (headHit != null && headHit.getType() == HitResult.Type.BLOCK) {
-            safeDist = Math.min(safeDist, headStart.distanceTo(headHit.getPos()));
+            safeDist = Math.min(safeDist, headStart.distanceTo(headHit.getLocation()));
         }
         return safeDist;
     }
 
     private void sendPos(double x, double y, double z, boolean onGround) {
-        mc.getNetworkHandler().sendPacket(new PlayerMoveC2SPacket.PositionAndOnGround(x, y, z, onGround, mc.player.horizontalCollision));
+        mc.getConnection().send(new ServerboundMovePlayerPacket.Pos(x, y, z, onGround, mc.player.horizontalCollision));
     }
 
     private boolean isValidItem(ItemStack stack) {
@@ -655,14 +655,14 @@ public class Pitcher extends Module {
         return name.contains("bow") || (yeetTridents.get() && name.contains("trident"));
     }
     // 1.21.11 专用发包：必须带 horizontalCollision 参数，且使用 meteor$ 前缀
-    private void sendMovePacket(Vec3d pos) {
-        if (mc.getNetworkHandler() == null) return;
-        PlayerMoveC2SPacket packet = new PlayerMoveC2SPacket.PositionAndOnGround(
+    private void sendMovePacket(Vec3 pos) {
+        if (mc.getConnection() == null) return;
+        ServerboundMovePlayerPacket packet = new ServerboundMovePlayerPacket.Pos(
             pos.x, pos.y, pos.z, false, mc.player.horizontalCollision
         );
         // 标记此包由模块发出，防止被自己的 AntiHunger 或 NoFall 拦截
-        ((IPlayerMoveC2SPacket) packet).meteor$setTag(1337);
-        mc.player.networkHandler.sendPacket(packet);
+        ((IServerboundMovePlayerPacket) packet).meteor$setTag(1337);
+        mc.player.connection.send(packet);
     }
 
     private boolean isValidProjectile(ItemStack stack) {

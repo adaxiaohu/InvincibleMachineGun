@@ -11,28 +11,28 @@ import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.Utils;
 import meteordevelopment.meteorclient.utils.render.color.SettingColor;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.block.BlockState;
-import net.minecraft.block.Blocks;
-import net.minecraft.block.entity.AbstractFurnaceBlockEntity;
-import net.minecraft.block.entity.BlockEntity;
-import net.minecraft.client.gui.screen.ingame.HandledScreen;
-import net.minecraft.client.world.ClientWorld;
-import net.minecraft.item.ItemStack;
-import net.minecraft.recipe.RecipePropertySet;
-import net.minecraft.registry.RegistryKey;
-import net.minecraft.screen.AbstractFurnaceScreenHandler;
-import net.minecraft.screen.BlastFurnaceScreenHandler;
-import net.minecraft.screen.FurnaceScreenHandler;
-import net.minecraft.screen.SmokerScreenHandler;
-import net.minecraft.screen.slot.Slot;
-import net.minecraft.screen.slot.SlotActionType;
-import net.minecraft.state.property.Properties;
-import net.minecraft.util.ActionResult;
-import net.minecraft.util.Hand;
-import net.minecraft.util.hit.BlockHitResult;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Direction;
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.entity.AbstractFurnaceBlockEntity;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
+import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.crafting.RecipePropertySet;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.inventory.AbstractFurnaceMenu;
+import net.minecraft.world.inventory.BlastFurnaceMenu;
+import net.minecraft.world.inventory.FurnaceMenu;
+import net.minecraft.world.inventory.SmokerMenu;
+import net.minecraft.world.inventory.Slot;
+import net.minecraft.world.inventory.ContainerInput;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+import net.minecraft.world.InteractionResult;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.world.phys.Vec3;
 
 import java.util.HashMap;
 import java.util.HashSet;
@@ -40,7 +40,7 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Meteor 1.21.11 - 自动清堵熔炉（TweakerMore 点击路径版）。
+ * Meteor 26.1.2 - 自动清堵熔炉（TweakerMore 点击路径版）。
  *
  * 客户端无法在远距离、未打开容器时读取熔炉真实库存，所以远处只能标记
  * “熄灭且待检查”的候选熔炉。自动清理开启时，玩家靠近后本模块会自动打开检查；
@@ -256,7 +256,7 @@ public class FurnaceUnclogger extends Module {
     private final Set<BlockPos> confirmedClogged = new HashSet<>();
     private final Map<BlockPos, Long> nextProbeTick = new HashMap<>();
 
-    private ClientWorld trackedWorld;
+    private ClientLevel trackedWorld;
     private BlockPos target;
     private BlockPos manualOpenCandidate;
     private long manualOpenCandidateUntil;
@@ -280,7 +280,7 @@ public class FurnaceUnclogger extends Module {
     @Override
     public void onActivate() {
         resetAll();
-        trackedWorld = mc.world;
+        trackedWorld = mc.level;
     }
 
     @Override
@@ -291,11 +291,11 @@ public class FurnaceUnclogger extends Module {
 
     @EventHandler
     private void onTick(TickEvent.Post event) {
-        if (mc.player == null || mc.world == null || mc.interactionManager == null) return;
+        if (mc.player == null || mc.level == null || mc.gameMode == null) return;
 
-        if (trackedWorld != mc.world) {
+        if (trackedWorld != mc.level) {
             resetAll();
-            trackedWorld = mc.world;
+            trackedWorld = mc.level;
         }
 
         ticks++;
@@ -314,20 +314,20 @@ public class FurnaceUnclogger extends Module {
 
     @EventHandler
     private void onInteractBlock(InteractBlockEvent event) {
-        if (mc.player == null || mc.world == null || openingAutomatically) return;
+        if (mc.player == null || mc.level == null || openingAutomatically) return;
 
         BlockPos pos = event.result.getBlockPos();
-        BlockState state = mc.world.getBlockState(pos);
+        BlockState state = mc.level.getBlockState(pos);
         if (!isSupported(state)) return;
 
         // 记录玩家真正右键过的熔炉。GUI 通常在随后 1~数 Tick 内打开。
-        manualOpenCandidate = pos.toImmutable();
+        manualOpenCandidate = pos.immutable();
         manualOpenCandidateUntil = ticks + Math.max(20, openTimeout.get());
     }
 
     @EventHandler
     private void onRender(Render3DEvent event) {
-        if (mc.player == null || mc.world == null) return;
+        if (mc.player == null || mc.level == null) return;
 
         double maxDistanceSq = renderDistance.get() * renderDistance.get();
 
@@ -337,7 +337,7 @@ public class FurnaceUnclogger extends Module {
                 if (distanceSq(pos) > maxDistanceSq) continue;
                 if (ticks < nextProbeTick.getOrDefault(pos, 0L)) continue;
 
-                BlockState state = mc.world.getBlockState(pos);
+                BlockState state = mc.level.getBlockState(pos);
                 if (!isSupported(state) || isLit(state)) continue;
 
                 event.renderer.box(pos, suspectedSideColor.get(), suspectedLineColor.get(), renderMode.get().shapeMode, 0);
@@ -359,9 +359,9 @@ public class FurnaceUnclogger extends Module {
 
     private void tickIdle() {
         // 优先接管“玩家手动打开”的熔炉。这个逻辑无论自动清理开关是否开启都有效。
-        AbstractFurnaceScreenHandler openedHandler = currentAnyFurnaceHandler();
+        AbstractFurnaceMenu openedHandler = currentAnyFurnaceHandler();
         if (openedHandler != null && manualOpenCandidate != null && ticks <= manualOpenCandidateUntil) {
-            BlockState state = mc.world.getBlockState(manualOpenCandidate);
+            BlockState state = mc.level.getBlockState(manualOpenCandidate);
             if (handlerMatchesState(openedHandler, state)) {
                 target = manualOpenCandidate;
                 manualOpenCandidate = null;
@@ -381,7 +381,7 @@ public class FurnaceUnclogger extends Module {
         }
 
         // 玩家正在使用其它 GUI 时绝不抢占。
-        if (mc.currentScreen != null) return;
+        if (mc.screen != null) return;
 
         // 关闭“自动清理”后，到这里就停止；ESP 扫描/渲染仍由其它逻辑继续运行。
         if (!autoClean.get()) return;
@@ -411,7 +411,7 @@ public class FurnaceUnclogger extends Module {
         }
 
         // 出现了不是本模块打开的 GUI，就立刻放弃，不碰玩家界面。
-        if (mc.currentScreen != null) {
+        if (mc.screen != null) {
             nextProbeTick.put(target, ticks + 40);
             resetTarget();
             return;
@@ -424,7 +424,7 @@ public class FurnaceUnclogger extends Module {
     }
 
     private void tickInspecting() {
-        AbstractFurnaceScreenHandler handler = currentFurnaceHandler();
+        AbstractFurnaceMenu handler = currentFurnaceHandler();
         if (handler == null) {
             abortTarget();
             return;
@@ -433,14 +433,14 @@ public class FurnaceUnclogger extends Module {
         if (timer-- > 0) return;
 
         // 正常情况下打开容器时光标应为空。若不为空，为安全起见不自动操作。
-        if (!handler.getCursorStack().isEmpty()) {
+        if (!handler.getCarried().isEmpty()) {
             if (operationMessages.get()) warning("光标上有物品，本次跳过自动清理。位置：%s", formatPos(target));
             nextProbeTick.put(target, ticks + 40);
             startClosing();
             return;
         }
 
-        ItemStack input = handler.getSlot(INPUT_SLOT).getStack();
+        ItemStack input = handler.getSlot(INPUT_SLOT).getItem();
         if (input.isEmpty() || isSmeltable(input)) {
             confirmedClogged.remove(target);
             nextProbeTick.put(target, ticks + recheckDelay.get());
@@ -464,15 +464,15 @@ public class FurnaceUnclogger extends Module {
 
     /**
      * 按 TweakerMore + Item Scroller 的实现路径处理：
-     * 直接对“容器原槽位”调用 HandledScreen#onMouseClick(...)。
+     * 直接对“容器原槽位”调用 AbstractContainerScreen#slotClicked(...)。
      *
-     * 丢弃整组：button = 1, SlotActionType.THROW
-     * 放入背包：button = 0, SlotActionType.QUICK_MOVE
+     * 丢弃整组：button = 1, ContainerInput.THROW
+     * 放入背包：button = 0, ContainerInput.QUICK_MOVE
      *
      * 不再先把物品拿到鼠标光标，也不点击 GUI 外部。
      */
     private void tickPickingUp() {
-        AbstractFurnaceScreenHandler handler = currentFurnaceHandler();
+        AbstractFurnaceMenu handler = currentFurnaceHandler();
         if (handler == null) {
             abortTarget();
             return;
@@ -480,7 +480,7 @@ public class FurnaceUnclogger extends Module {
 
         if (timer-- > 0) return;
 
-        ItemStack input = handler.getSlot(INPUT_SLOT).getStack();
+        ItemStack input = handler.getSlot(INPUT_SLOT).getItem();
 
         // 已经清掉或已经变成可烧炼物品。
         if (input.isEmpty() || isSmeltable(input)) {
@@ -505,33 +505,33 @@ public class FurnaceUnclogger extends Module {
 
     /**
      * TweakerMore 的 ContainerCleaner 最终调用 Item Scroller 的 dropStack：
-     * 对目标 Slot 调用容器 GUI 的 slotClicked/onMouseClick，
+     * 对目标 Slot 调用容器 GUI 的 slotClicked，
      * THROW 时 mouseButton=1 代表整组丢弃。
      *
-     * 这里通过 Mixin Invoker 调用 Yarn 1.21.11 的
-     * HandledScreen#onMouseClick(Slot, int, int, SlotActionType)，
+     * 这里通过 Mixin Invoker 调用 26.1.2 的
+     * AbstractContainerScreen#slotClicked(Slot, int, int, ContainerInput)，
      * 与它的 GUI 原生路径一致。
      */
-    private boolean clickInputSlotLikeTweakerMore(AbstractFurnaceScreenHandler handler) {
-        if (!(mc.currentScreen instanceof HandledScreen<?> screen)) return false;
+    private boolean clickInputSlotLikeTweakerMore(AbstractFurnaceMenu handler) {
+        if (!(mc.screen instanceof AbstractContainerScreen<?> screen)) return false;
 
         Slot slot = handler.getSlot(INPUT_SLOT);
-        if (slot == null || slot.getStack().isEmpty()) return false;
+        if (slot == null || slot.getItem().isEmpty()) return false;
 
-        SlotActionType actionType;
+        ContainerInput actionType;
         int button;
 
         if (cleanMode.get() == CleanMode.Drop) {
-            actionType = SlotActionType.THROW;
+            actionType = ContainerInput.THROW;
             button = 1; // 整组丢弃，与 Item Scroller dropStack 完全一致
         } else {
-            actionType = SlotActionType.QUICK_MOVE;
+            actionType = ContainerInput.QUICK_MOVE;
             button = 0; // Shift+左键，将物品移入玩家背包
         }
 
         ((HandledScreenInvoker) (Object) screen).codigohasta$invokeOnMouseClick(
             slot,
-            slot.id,
+            slot.index,
             button,
             actionType
         );
@@ -544,7 +544,7 @@ public class FurnaceUnclogger extends Module {
      * 只有确认输入槽已改变/清空才关闭，不再基于鼠标光标判断。
      */
     private void tickVerifying() {
-        AbstractFurnaceScreenHandler handler = currentFurnaceHandler();
+        AbstractFurnaceMenu handler = currentFurnaceHandler();
         if (handler == null) {
             abortTarget();
             return;
@@ -552,7 +552,7 @@ public class FurnaceUnclogger extends Module {
 
         if (timer-- > 0) return;
 
-        ItemStack input = handler.getSlot(INPUT_SLOT).getStack();
+        ItemStack input = handler.getSlot(INPUT_SLOT).getItem();
 
         if (input.isEmpty() || isSmeltable(input)) {
             finishSuccessfulClean();
@@ -577,8 +577,8 @@ public class FurnaceUnclogger extends Module {
     private void tickClosing() {
         if (timer-- > 0) return;
 
-        AbstractFurnaceScreenHandler handler = currentFurnaceHandler();
-        if (handler != null && !handler.getCursorStack().isEmpty()) {
+        AbstractFurnaceMenu handler = currentFurnaceHandler();
+        if (handler != null && !handler.getCarried().isEmpty()) {
             // 上一步放回/放入背包还没同步，继续给服务端时间。
             timer = actionDelay.get();
             return;
@@ -612,62 +612,62 @@ public class FurnaceUnclogger extends Module {
         resetTarget();
     }
 
-    private AbstractFurnaceScreenHandler currentAnyFurnaceHandler() {
+    private AbstractFurnaceMenu currentAnyFurnaceHandler() {
         if (mc.player == null) return null;
-        if (mc.player.currentScreenHandler instanceof AbstractFurnaceScreenHandler handler) return handler;
+        if (mc.player.containerMenu instanceof AbstractFurnaceMenu handler) return handler;
         return null;
     }
 
-    private boolean handlerMatchesState(AbstractFurnaceScreenHandler handler, BlockState state) {
-        if (state.isOf(Blocks.FURNACE)) return handler instanceof FurnaceScreenHandler;
-        if (state.isOf(Blocks.BLAST_FURNACE)) return handler instanceof BlastFurnaceScreenHandler;
-        if (state.isOf(Blocks.SMOKER)) return handler instanceof SmokerScreenHandler;
+    private boolean handlerMatchesState(AbstractFurnaceMenu handler, BlockState state) {
+        if (state.is(Blocks.FURNACE)) return handler instanceof FurnaceMenu;
+        if (state.is(Blocks.BLAST_FURNACE)) return handler instanceof BlastFurnaceMenu;
+        if (state.is(Blocks.SMOKER)) return handler instanceof SmokerMenu;
         return false;
     }
 
-    private AbstractFurnaceScreenHandler currentFurnaceHandler() {
+    private AbstractFurnaceMenu currentFurnaceHandler() {
         if (mc.player == null) return null;
-        if (!(mc.player.currentScreenHandler instanceof AbstractFurnaceScreenHandler handler)) return null;
-        if (target == null || mc.world == null) return null;
+        if (!(mc.player.containerMenu instanceof AbstractFurnaceMenu handler)) return null;
+        if (target == null || mc.level == null) return null;
 
-        BlockState state = mc.world.getBlockState(target);
+        BlockState state = mc.level.getBlockState(target);
         return handlerMatchesState(handler, state) ? handler : null;
     }
 
     private void closeOwnedFurnaceScreen() {
         if (mc.player == null) return;
-        if (currentFurnaceHandler() != null) mc.player.closeHandledScreen();
+        if (currentFurnaceHandler() != null) mc.player.closeContainer();
     }
 
     private boolean openTarget() {
-        if (target == null || mc.world == null || mc.player == null) return false;
+        if (target == null || mc.level == null || mc.player == null) return false;
 
-        BlockState state = mc.world.getBlockState(target);
+        BlockState state = mc.level.getBlockState(target);
         if (!isSupported(state)) return false;
 
         Direction side = nearestFace(target);
-        Vec3d center = Vec3d.ofCenter(target);
-        Vec3d hitPos = center.add(
-            side.getOffsetX() * 0.5,
-            side.getOffsetY() * 0.5,
-            side.getOffsetZ() * 0.5
+        Vec3 center = Vec3.atCenterOf(target);
+        Vec3 hitPos = center.add(
+            side.getStepX() * 0.5,
+            side.getStepY() * 0.5,
+            side.getStepZ() * 0.5
         );
 
         BlockHitResult hitResult = new BlockHitResult(hitPos, side, target, false);
 
-        boolean wasSneaking = mc.player.isSneaking();
-        mc.player.setSneaking(false);
-        ActionResult result;
+        boolean wasSneaking = mc.player.isShiftKeyDown();
+        mc.player.setShiftKeyDown(false);
+        InteractionResult result;
         openingAutomatically = true;
         try {
-            result = mc.interactionManager.interactBlock(mc.player, Hand.MAIN_HAND, hitResult);
+            result = mc.gameMode.useItemOn(mc.player, InteractionHand.MAIN_HAND, hitResult);
         } finally {
             openingAutomatically = false;
-            mc.player.setSneaking(wasSneaking);
+            mc.player.setShiftKeyDown(wasSneaking);
         }
 
-        if (result.isAccepted()) mc.player.swingHand(Hand.MAIN_HAND);
-        return result.isAccepted();
+        if (result.consumesAction()) mc.player.swing(InteractionHand.MAIN_HAND);
+        return result.consumesAction();
     }
 
     private BlockPos findBestTarget() {
@@ -681,7 +681,7 @@ public class FurnaceUnclogger extends Module {
             double distanceSq = eyeDistanceSq(pos);
             if (distanceSq > maxDistanceSq) continue;
 
-            BlockState state = mc.world.getBlockState(pos);
+            BlockState state = mc.level.getBlockState(pos);
             if (!isSupported(state)) continue;
 
             boolean confirmed = confirmedClogged.contains(pos);
@@ -705,51 +705,51 @@ public class FurnaceUnclogger extends Module {
         for (BlockEntity blockEntity : Utils.blockEntities()) {
             if (!(blockEntity instanceof AbstractFurnaceBlockEntity)) continue;
 
-            BlockPos pos = blockEntity.getPos();
+            BlockPos pos = blockEntity.getBlockPos();
             if (distanceSq(pos) > maxDistanceSq) continue;
 
-            BlockState state = blockEntity.getCachedState();
+            BlockState state = blockEntity.getBlockState();
             if (!isSupported(state)) continue;
 
-            loadedFurnaces.add(pos.toImmutable());
+            loadedFurnaces.add(pos.immutable());
         }
 
         confirmedClogged.removeIf(pos ->
-            mc.world.isChunkLoaded(pos.getX() >> 4, pos.getZ() >> 4)
-                && !isSupported(mc.world.getBlockState(pos))
+            mc.level.hasChunk(pos.getX() >> 4, pos.getZ() >> 4)
+                && !isSupported(mc.level.getBlockState(pos))
         );
     }
 
     private boolean isSupported(BlockState state) {
-        if (state.isOf(Blocks.FURNACE)) return normalFurnace.get();
-        if (state.isOf(Blocks.BLAST_FURNACE)) return blastFurnace.get();
-        if (state.isOf(Blocks.SMOKER)) return smoker.get();
+        if (state.is(Blocks.FURNACE)) return normalFurnace.get();
+        if (state.is(Blocks.BLAST_FURNACE)) return blastFurnace.get();
+        if (state.is(Blocks.SMOKER)) return smoker.get();
         return false;
     }
 
     private boolean isLit(BlockState state) {
-        return state.contains(Properties.LIT) && state.get(Properties.LIT);
+        return state.hasProperty(BlockStateProperties.LIT) && state.getValue(BlockStateProperties.LIT);
     }
 
     private boolean isSmeltable(ItemStack stack) {
-        if (stack.isEmpty() || target == null || mc.world == null) return false;
+        if (stack.isEmpty() || target == null || mc.level == null) return false;
 
-        RegistryKey<RecipePropertySet> key = recipePropertySetKey(mc.world.getBlockState(target));
+        ResourceKey<RecipePropertySet> key = recipePropertySetKey(mc.level.getBlockState(target));
         if (key == null) return false;
 
-        return mc.world.getRecipeManager().getPropertySet(key).canUse(stack);
+        return mc.level.recipeAccess().propertySet(key).test(stack);
     }
 
-    private RegistryKey<RecipePropertySet> recipePropertySetKey(BlockState state) {
-        if (state.isOf(Blocks.FURNACE)) return RecipePropertySet.FURNACE_INPUT;
-        if (state.isOf(Blocks.BLAST_FURNACE)) return RecipePropertySet.BLAST_FURNACE_INPUT;
-        if (state.isOf(Blocks.SMOKER)) return RecipePropertySet.SMOKER_INPUT;
+    private ResourceKey<RecipePropertySet> recipePropertySetKey(BlockState state) {
+        if (state.is(Blocks.FURNACE)) return RecipePropertySet.FURNACE_INPUT;
+        if (state.is(Blocks.BLAST_FURNACE)) return RecipePropertySet.BLAST_FURNACE_INPUT;
+        if (state.is(Blocks.SMOKER)) return RecipePropertySet.SMOKER_INPUT;
         return null;
     }
 
     private Direction nearestFace(BlockPos pos) {
-        Vec3d center = Vec3d.ofCenter(pos);
-        Vec3d eye = mc.player.getEyePos();
+        Vec3 center = Vec3.atCenterOf(pos);
+        Vec3 eye = mc.player.getEyePosition();
 
         double dx = eye.x - center.x;
         double dy = eye.y - center.y;
@@ -771,7 +771,7 @@ public class FurnaceUnclogger extends Module {
     }
 
     private double eyeDistanceSq(BlockPos pos) {
-        Vec3d eye = mc.player.getEyePos();
+        Vec3 eye = mc.player.getEyePosition();
         double dx = (pos.getX() + 0.5) - eye.x;
         double dy = (pos.getY() + 0.5) - eye.y;
         double dz = (pos.getZ() + 0.5) - eye.z;

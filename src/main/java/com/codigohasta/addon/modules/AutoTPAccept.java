@@ -1,6 +1,6 @@
 package com.codigohasta.addon.modules;
 
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.phys.Vec3;
 
 import com.codigohasta.addon.AddonTemplate;
 import meteordevelopment.meteorclient.events.packets.PacketEvent;
@@ -9,10 +9,10 @@ import meteordevelopment.meteorclient.systems.friends.Friends;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.player.ChatUtils;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.network.packet.s2c.play.GameMessageS2CPacket;
-import net.minecraft.text.ClickEvent;
-import net.minecraft.text.Style;
-import net.minecraft.text.Text;
+import net.minecraft.network.protocol.game.ClientboundSystemChatPacket;
+import net.minecraft.network.chat.ClickEvent;
+import net.minecraft.network.chat.Style;
+import net.minecraft.network.chat.Component;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -94,9 +94,9 @@ public class AutoTPAccept extends Module {
 
     @EventHandler
     private void onReceivePacket(PacketEvent.Receive event) {
-        // 1.21.4 系统提示消息 (如 TPA) 都是 GameMessageS2CPacket
-        if (event.packet instanceof GameMessageS2CPacket packet) {
-            Text textComponent = packet.content();
+        // 1.21.4 系统提示消息 (如 TPA) 都是 ClientboundSystemChatPacket
+        if (event.packet instanceof ClientboundSystemChatPacket packet) {
+            Component textComponent = packet.content();
             String rawMessage = textComponent.getString(); // 获取去除颜色的纯文本
 
             // 调试步骤 1：看看模块有没有收到这条消息
@@ -209,18 +209,18 @@ public class AutoTPAccept extends Module {
     /**
      * 暴力递归：把所有子组件、子组件的子组件全部翻一遍
      */
-    private void collectCommands(Text text, List<String> results) {
+    private void collectCommands(Component text, List<String> results) {
         // 1. 检查自己
         Style style = text.getStyle();
         if (style != null && style.getClickEvent() != null) {
             ClickEvent click = style.getClickEvent();
-            if (click.getAction() == ClickEvent.Action.RUN_COMMAND || click.getAction() == ClickEvent.Action.SUGGEST_COMMAND) {
+            if (click.action() == ClickEvent.Action.RUN_COMMAND || click.action() == ClickEvent.Action.SUGGEST_COMMAND) {
                 results.add(click.toString());
             }
         }
 
         // 2. 检查所有子节点 (Siblings)
-        for (Text sibling : text.getSiblings()) {
+        for (Component sibling : text.getSiblings()) {
             collectCommands(sibling, results);
         }
     }

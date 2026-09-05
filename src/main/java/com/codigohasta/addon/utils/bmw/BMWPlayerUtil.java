@@ -1,7 +1,7 @@
 package com.codigohasta.addon.utils.bmw;
 
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.util.math.MathHelper;
+import net.minecraft.client.Minecraft;
+import net.minecraft.util.Mth;
 
 /**
  * BMWClient-nextgen 移植的玩家工具 —— 完全独立。
@@ -9,7 +9,7 @@ import net.minecraft.util.math.MathHelper;
  */
 public class BMWPlayerUtil {
 
-    private static final MinecraftClient mc = MinecraftClient.getInstance();
+    private static final Minecraft mc = Minecraft.getInstance();
 
     /**
      * 使用 DirectionalInput 判断玩家是否在移动。
@@ -51,7 +51,7 @@ public class BMWPlayerUtil {
             actualYaw += 90.0F * fwd;
         }
 
-        return MathHelper.wrapDegrees(actualYaw);
+        return Mth.wrapDegrees(actualYaw);
     }
 
     /**

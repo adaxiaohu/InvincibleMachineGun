@@ -4,10 +4,10 @@ import com.codigohasta.addon.modules.BMWSprint;
 import com.codigohasta.addon.utils.bmw.BMWDirectionalInput;
 import com.codigohasta.addon.utils.bmw.BMWPlayerUtil;
 import com.codigohasta.addon.utils.bmw.BMWRotationManager;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.util.math.MathHelper;
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.client.Minecraft;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.util.Mth;
+import net.minecraft.world.phys.Vec3;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
@@ -31,17 +31,17 @@ public class MixinBMWLivingEntity {
     private static float invincible$sprintYaw = Float.NaN;
 
     @Unique
-    private static Vec3d invincible$preJumpVelocity = null;
+    private static Vec3 invincible$preJumpVelocity = null;
 
     /**
      * 跳跃前：计算目标 yaw，保存当前速度。
      */
-    @Inject(method = "jump", at = @At("HEAD"))
+    @Inject(method = "jumpFromGround", at = @At("HEAD"))
     private void onJumpPre(CallbackInfo ci) {
         invincible$sprintYaw = Float.NaN;
         invincible$preJumpVelocity = null;
 
-        MinecraftClient mc = MinecraftClient.getInstance();
+        Minecraft mc = Minecraft.getInstance();
         if (mc == null || mc.player == null || (Object) this != mc.player) {
             return;
         }
@@ -57,12 +57,12 @@ public class MixinBMWLivingEntity {
             mc.player.setSprinting(true);
 
             // 保存跳前的速度
-            invincible$preJumpVelocity = mc.player.getVelocity();
+            invincible$preJumpVelocity = mc.player.getDeltaMovement();
 
             // 计算目标 yaw
             if (mode == BMWSprint.Mode.OMNIDIRECTIONAL) {
                 invincible$sprintYaw = BMWPlayerUtil.getMovementDirectionOfInput(
-                    mc.player.getYaw(), BMWDirectionalInput.fromPlayer());
+                    mc.player.getYRot(), BMWDirectionalInput.fromPlayer());
             } else if (mode == BMWSprint.Mode.OMNIROTATIONAL) {
                 if (BMWRotationManager.targetRotation != null) {
                     invincible$sprintYaw = BMWRotationManager.targetRotation.yaw;
@@ -81,9 +81,9 @@ public class MixinBMWLivingEntity {
      * 因此 X/Z 的速度增量仅来自疾跑加速。
      * 我们将其替换为 WASD 方向对应的加速向量。
      */
-    @Inject(method = "jump", at = @At("RETURN"))
+    @Inject(method = "jumpFromGround", at = @At("RETURN"))
     private void onJumpPost(CallbackInfo ci) {
-        MinecraftClient mc = MinecraftClient.getInstance();
+        Minecraft mc = Minecraft.getInstance();
         if (mc == null || mc.player == null || (Object) this != mc.player) {
             invincible$sprintYaw = Float.NaN;
             invincible$preJumpVelocity = null;
@@ -97,7 +97,7 @@ public class MixinBMWLivingEntity {
         }
 
         // jump() 后的实际速度
-        Vec3d currentVel = mc.player.getVelocity();
+        Vec3 currentVel = mc.player.getDeltaMovement();
 
         // X/Z 方向的速度增量（仅来自疾跑加速）
         double dx = currentVel.x - invincible$preJumpVelocity.x;
@@ -106,12 +106,12 @@ public class MixinBMWLivingEntity {
         // 有水平增量说明疾跑加速被应用了
         if (Math.abs(dx) > 1.0E-6 || Math.abs(dz) > 1.0E-6) {
             // 计算正确的加速向量
-            float yawRad = invincible$sprintYaw * MathHelper.RADIANS_PER_DEGREE;
-            double correctX = -MathHelper.sin(yawRad) * 0.2;
-            double correctZ = MathHelper.cos(yawRad) * 0.2;
+            float yawRad = invincible$sprintYaw * Mth.DEG_TO_RAD;
+            double correctX = -Mth.sin(yawRad) * 0.2;
+            double correctZ = Mth.cos(yawRad) * 0.2;
 
             // 替换：移除原加速，添加正确方向加速
-            mc.player.setVelocity(
+            mc.player.setDeltaMovement(
                 currentVel.x - dx + correctX,
                 currentVel.y,
                 currentVel.z - dz + correctZ

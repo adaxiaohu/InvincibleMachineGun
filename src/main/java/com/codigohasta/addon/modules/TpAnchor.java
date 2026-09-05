@@ -4,7 +4,7 @@ import com.codigohasta.addon.AddonTemplate;
 
 import meteordevelopment.meteorclient.events.render.Render3DEvent;
 import meteordevelopment.meteorclient.events.world.TickEvent;
-import meteordevelopment.meteorclient.mixininterface.IPlayerMoveC2SPacket;
+import meteordevelopment.meteorclient.mixininterface.IServerboundMovePlayerPacket;
 import meteordevelopment.meteorclient.renderer.ShapeMode;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.friends.Friends;
@@ -14,27 +14,33 @@ import meteordevelopment.meteorclient.utils.player.FindItemResult;
 import meteordevelopment.meteorclient.utils.player.InvUtils;
 import meteordevelopment.meteorclient.utils.render.color.SettingColor;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.util.math.Vec3d;
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.block.Blocks;
-import net.minecraft.block.ShapeContext;
-import net.minecraft.client.network.PlayerListEntry;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.EntityType;
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.passive.TameableEntity;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.item.BlockItem;
-import net.minecraft.item.Items;
-import net.minecraft.network.packet.c2s.play.*;
-import net.minecraft.util.Hand;
-import net.minecraft.util.hit.BlockHitResult;
-import net.minecraft.util.hit.HitResult;
-import net.minecraft.util.math.*;
-import net.minecraft.world.GameMode;
-import net.minecraft.world.RaycastContext;
-import net.minecraft.world.World;
+import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.phys.shapes.CollisionContext;
+import net.minecraft.client.multiplayer.PlayerInfo;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.TamableAnimal;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.BlockItem;
+import net.minecraft.world.item.Items;
+import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
+import net.minecraft.network.protocol.game.ServerboundMoveVehiclePacket;
+import net.minecraft.network.protocol.game.ServerboundSwingPacket;
+import net.minecraft.network.protocol.game.ServerboundUseItemOnPacket;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.HitResult;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.level.GameType;
+import net.minecraft.world.level.ClipContext;
+import net.minecraft.world.level.Level;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -187,7 +193,7 @@ public class TpAnchor extends Module {
         private final Setting<Boolean> debug = sgGeneral.add(new BoolSetting.Builder().name("调试信息").defaultValue(true).build());
     
         // 存储当前Tick的传送路径节点
-        private final List<Vec3d> renderPathNodes = new ArrayList<>();
+        private final List<Vec3> renderPathNodes = new ArrayList<>();
 
     public TpAnchor() {
         super(AddonTemplate.CATEGORY, "如来神掌·生锚打击", "射程范围内瞬间发动能力放置并引爆重生锚打击目标");
@@ -201,7 +207,7 @@ public class TpAnchor extends Module {
 
     @EventHandler
     public void onTick(TickEvent.Pre event) {
-        if (mc.player == null || mc.world == null) return;
+        if (mc.player == null || mc.level == null) return;
 
         currentTarget = findTarget();
         if (delayTimer > 0) { delayTimer--; return; }
@@ -252,11 +258,11 @@ public class TpAnchor extends Module {
     }
 
     private void executeTPAuraAttack(AttackPos info, int aSlot, int gSlot, int sSlot) {
-        Entity baseEntity = mc.player.hasVehicle() ? mc.player.getVehicle() : mc.player;
+        Entity baseEntity = mc.player.isPassenger() ? mc.player.getVehicle() : mc.player;
         
         // 1.21.11 修正：使用 getPosVec() 替代 getPos()
-         Vec3d startPos = new Vec3d(baseEntity.getX(), baseEntity.getY(), baseEntity.getZ());
-        Vec3d targetStandPos = info.tpPos;
+         Vec3 startPos = new Vec3(baseEntity.getX(), baseEntity.getY(), baseEntity.getZ());
+        Vec3 targetStandPos = info.tpPos;
     
         if (invalid(targetStandPos)) {
             targetStandPos = findNearestPos(targetStandPos);
@@ -264,9 +270,9 @@ public class TpAnchor extends Module {
         }
     
         // 1.21.11 修正：类型强转为 double，高度计算
-        double clipHeight = Math.min(range.get(), (double)mc.world.getTopYInclusive() - startPos.y - 1.0);
-        Vec3d upPos = startPos.add(0.0, clipHeight, 0.0);
-        Vec3d targetUpPos = targetStandPos.add(0.0, clipHeight, 0.0);
+        double clipHeight = Math.min(range.get(), (double)mc.level.getMaxY() - startPos.y - 1.0);
+        Vec3 upPos = startPos.add(0.0, clipHeight, 0.0);
+        Vec3 targetUpPos = targetStandPos.add(0.0, clipHeight, 0.0);
 
         // --- 记录渲染路径 ---
         renderPathNodes.clear();
@@ -282,10 +288,10 @@ public class TpAnchor extends Module {
         // 发送垃圾包 (Packet Spamming)
         int spamCount = tpMode.get() == Mode.Vanilla ? vanillaPackets.get() : paperPackets.get();
         for (int i = 0; i < spamCount; i++) {
-            if (mc.player.hasVehicle()) {
-                mc.player.networkHandler.sendPacket(VehicleMoveC2SPacket.fromVehicle(mc.player.getVehicle()));
+            if (mc.player.isPassenger()) {
+                mc.player.connection.send(ServerboundMoveVehiclePacket.fromEntity(mc.player.getVehicle()));
             } else {
-                mc.player.networkHandler.sendPacket(new PlayerMoveC2SPacket.LookAndOnGround(mc.player.getYaw(), mc.player.getPitch(), false, mc.player.horizontalCollision));
+                mc.player.connection.send(new ServerboundMovePlayerPacket.Rot(mc.player.getYRot(), mc.player.getXRot(), false, mc.player.horizontalCollision));
             }
         }
     
@@ -298,8 +304,8 @@ public class TpAnchor extends Module {
         InvUtils.swap(aSlot, true);
         placePacket(info.pos);
         if (autoProtect.get() && sSlot != -1) {
-            BlockPos shieldPos = getShieldPos(info.pos, BlockPos.ofFloored(targetStandPos));
-            if (shieldPos != null && mc.world.getBlockState(shieldPos).isReplaceable()) {
+            BlockPos shieldPos = getShieldPos(info.pos, BlockPos.containing(targetStandPos));
+            if (shieldPos != null && mc.level.getBlockState(shieldPos).canBeReplaced()) {
                 InvUtils.swap(sSlot, true);
                 placePacket(shieldPos);
             }
@@ -320,51 +326,51 @@ public class TpAnchor extends Module {
         sendMove(baseEntity, startPos);
     
         // 归位偏移
-        Vec3d finalOffset = getOffset(startPos);
+        Vec3 finalOffset = getOffset(startPos);
         sendMove(baseEntity, finalOffset);
-        baseEntity.setPosition(finalOffset.x, finalOffset.y, finalOffset.z);
+        baseEntity.setPos(finalOffset.x, finalOffset.y, finalOffset.z);
     }
 
     // --- TPAura 核心工具函数 ---
 
-   private void sendMove(Entity entity, Vec3d pos) {
-    if (mc.getNetworkHandler() == null) return;
-    if (entity instanceof PlayerEntity) {
+   private void sendMove(Entity entity, Vec3 pos) {
+    if (mc.getConnection() == null) return;
+    if (entity instanceof Player) {
         // 1.21.11 修正：Full 构造函数必须确保坐标是 double
-        PlayerMoveC2SPacket packet = new PlayerMoveC2SPacket.Full(pos.x, pos.y, pos.z, mc.player.getYaw(), mc.player.getPitch(), false, mc.player.horizontalCollision);
+        ServerboundMovePlayerPacket packet = new ServerboundMovePlayerPacket.PosRot(pos.x, pos.y, pos.z, mc.player.getYRot(), mc.player.getXRot(), false, mc.player.horizontalCollision);
         // 1.21.11 规则：Meteor Mixin 接口前缀必须是 meteor$
-        ((IPlayerMoveC2SPacket) packet).meteor$setTag(1337);
-        mc.player.networkHandler.sendPacket(packet);
+        ((IServerboundMovePlayerPacket) packet).meteor$setTag(1337);
+        mc.player.connection.send(packet);
     } else {
         // 车辆移动包
-        mc.player.networkHandler.sendPacket(new VehicleMoveC2SPacket(pos, mc.player.getVehicle().getYaw(), mc.player.getVehicle().getPitch(), false));
+        mc.player.connection.send(new ServerboundMoveVehiclePacket(pos, mc.player.getVehicle().getYRot(), mc.player.getVehicle().getXRot(), false));
     }
 }
 
-   private boolean invalid(Vec3d pos) {
-    if (mc.world == null) return true;
-    BlockPos bp = BlockPos.ofFloored(pos);
-    if (mc.world.getChunk(bp.getX() >> 4, bp.getZ() >> 4) == null) return true;
+   private boolean invalid(Vec3 pos) {
+    if (mc.level == null) return true;
+    BlockPos bp = BlockPos.containing(pos);
+    if (mc.level.getChunk(bp.getX() >> 4, bp.getZ() >> 4) == null) return true;
 
-    Entity entity = mc.player.hasVehicle() ? mc.player.getVehicle() : mc.player;
+    Entity entity = mc.player.isPassenger() ? mc.player.getVehicle() : mc.player;
     // 1.21.11 修正：使用 getPosVec() 替代 getPos()
-    Vec3d entityPos = new Vec3d(entity.getX(), entity.getY(), entity.getZ());
-    Box box = entity.getBoundingBox().offset(pos.subtract(entityPos));
+    Vec3 entityPos = new Vec3(entity.getX(), entity.getY(), entity.getZ());
+    AABB box = entity.getBoundingBox().move(pos.subtract(entityPos));
 
-    for (BlockPos b : BlockPos.iterate(BlockPos.ofFloored(box.minX, box.minY, box.minZ), BlockPos.ofFloored(box.maxX, box.maxY, box.maxZ))) {
-        BlockState state = mc.world.getBlockState(b);
+    for (BlockPos b : BlockPos.betweenClosed(BlockPos.containing(box.minX, box.minY, box.minZ), BlockPos.containing(box.maxX, box.maxY, box.maxZ))) {
+        BlockState state = mc.level.getBlockState(b);
         // 简单碰撞检查
-        if (state.isOf(Blocks.LAVA)) return true;
-        if (!state.getCollisionShape(mc.world, b).isEmpty()) return true;
+        if (state.is(Blocks.LAVA)) return true;
+        if (!state.getCollisionShape(mc.level, b).isEmpty()) return true;
     }
     return false;
 }
 
-    private Vec3d findNearestPos(Vec3d desired) {
+    private Vec3 findNearestPos(Vec3 desired) {
         for (int x = -2; x <= 2; x++) {
             for (int y = -2; y <= 2; y++) {
                 for (int z = -2; z <= 2; z++) {
-                    Vec3d test = desired.add(x, y, z);
+                    Vec3 test = desired.add(x, y, z);
                     if (!invalid(test)) return test;
                 }
             }
@@ -372,20 +378,20 @@ public class TpAnchor extends Module {
         return null;
     }
 
-    private Vec3d getOffset(Vec3d base) {
+    private Vec3 getOffset(Vec3 base) {
         double d = horizontalOffset.get();
         double dy = yOffset.get();
-        Vec3d[] list = {
+        Vec3[] list = {
             base.add(d, dy, 0), base.add(-d, dy, 0), base.add(0, dy, d), base.add(0, dy, -d),
             base.add(d, dy, d), base.add(-d, dy, -d), base.add(-d, dy, d), base.add(d, dy, -d)
         };
-        List<Vec3d> offsets = Arrays.asList(list);
+        List<Vec3> offsets = Arrays.asList(list);
         Collections.shuffle(offsets);
-        for (Vec3d p : offsets) if (!invalid(p)) return p;
+        for (Vec3 p : offsets) if (!invalid(p)) return p;
         return base.add(0, dy, 0);
     }
 
-    private boolean hasClearPath(Vec3d start, Vec3d end) {
+    private boolean hasClearPath(Vec3 start, Vec3 end) {
         int steps = Math.max(10, (int) (start.distanceTo(end) * 2.5));
         for (int i = 1; i < steps; i++) {
             if (invalid(start.lerp(end, (double) i / steps))) return false;
@@ -396,9 +402,9 @@ public class TpAnchor extends Module {
     // --- 目标与锚点逻辑 ---
 
     private AttackPos findBestPos(Entity target) {
-        BlockPos tPos = target.getBlockPos();
+        BlockPos tPos = target.blockPosition();
         double halfHeight = (target.getBoundingBox().maxY - target.getBoundingBox().minY) / 2.0;
-        Vec3d targetCenter = new Vec3d(target.getX(), target.getY() + halfHeight, target.getZ());
+        Vec3 targetCenter = new Vec3(target.getX(), target.getY() + halfHeight, target.getZ());
 
         List<AttackPos> candidates = new ArrayList<>();
         int r = placeRange.get();
@@ -409,12 +415,12 @@ public class TpAnchor extends Module {
                 for (int z = -r; z <= r; z++) {
                     if ((x*x + y*y + z*z) > rSq) continue;
 
-                    BlockPos pos = tPos.add(x, y, z);
+                    BlockPos pos = tPos.offset(x, y, z);
 
                     // 1. 检查该位置是否能放锚点
                     if (checkPlace(pos)) {
                         // 2. 寻找玩家 TP 到哪里才能摸到这个锚点且不卡墙
-                        Vec3d validTpSpot = findSmartTpSpot(pos);
+                        Vec3 validTpSpot = findSmartTpSpot(pos);
                         
                         if (validTpSpot != null) {
                             // 3. 计算该点位的分数（越小越优）
@@ -434,17 +440,17 @@ public class TpAnchor extends Module {
 
         return null;
     }
-    private Vec3d findSmartTpSpot(BlockPos anchorPos) {
+    private Vec3 findSmartTpSpot(BlockPos anchorPos) {
         // 依次尝试：锚点上方2格、四周2格、上方1格、四周1格
         BlockPos[] testOffsets = {
-            anchorPos.up(2), 
+            anchorPos.above(2), 
             anchorPos.north(2), anchorPos.south(2), anchorPos.east(2), anchorPos.west(2),
-            anchorPos.up(1),
+            anchorPos.above(1),
             anchorPos.north(1), anchorPos.south(1), anchorPos.east(1), anchorPos.west(1)
         };
 
         for (BlockPos p : testOffsets) {
-            Vec3d testVec = new Vec3d(p.getX() + 0.5, p.getY(), p.getZ() + 0.5);
+            Vec3 testVec = new Vec3(p.getX() + 0.5, p.getY(), p.getZ() + 0.5);
             // 使用 TPAura 的核心 invalid 方法检查该点是否会卡墙
             if (!invalid(testVec)) {
                 return testVec;
@@ -452,9 +458,9 @@ public class TpAnchor extends Module {
         }
         return null; 
     }
-    private double calculateScore(Entity target, Vec3d targetCenter, BlockPos anchorPos) {
-        Vec3d anchorVec = new Vec3d(anchorPos.getX() + 0.5, anchorPos.getY() + 0.5, anchorPos.getZ() + 0.5);
-        double distSq = anchorVec.squaredDistanceTo(targetCenter);
+    private double calculateScore(Entity target, Vec3 targetCenter, BlockPos anchorPos) {
+        Vec3 anchorVec = new Vec3(anchorPos.getX() + 0.5, anchorPos.getY() + 0.5, anchorPos.getZ() + 0.5);
+        double distSq = anchorVec.distanceToSqr(targetCenter);
         double score = distSq; 
 
         // 如果锚点和目标之间有方块阻挡（不暴露），分数大幅增加（劣化）
@@ -465,7 +471,7 @@ public class TpAnchor extends Module {
         // 越开阔的地方越好放，计算周围空气数量
         int openness = 0;
         for (Direction dir : Direction.values()) {
-            if (mc.world.getBlockState(anchorPos.offset(dir)).isReplaceable()) openness++;
+            if (mc.level.getBlockState(anchorPos.relative(dir)).canBeReplaced()) openness++;
         }
         score += (6 - openness) * 2.0;
 
@@ -474,25 +480,25 @@ public class TpAnchor extends Module {
 
     private boolean isExposed(Entity target, BlockPos anchorPos) {
         // 1.21.11 修正：手动构造 eyePos
-        Vec3d start = new Vec3d(target.getX(), target.getY() + target.getEyeHeight(target.getPose()), target.getZ());
-        Vec3d end = new Vec3d(anchorPos.getX() + 0.5, anchorPos.getY() + 0.5, anchorPos.getZ() + 0.5);
+        Vec3 start = new Vec3(target.getX(), target.getY() + target.getEyeHeight(target.getPose()), target.getZ());
+        Vec3 end = new Vec3(anchorPos.getX() + 0.5, anchorPos.getY() + 0.5, anchorPos.getZ() + 0.5);
         
-        BlockHitResult result = mc.world.raycast(new RaycastContext(
-            start, end, RaycastContext.ShapeType.COLLIDER, RaycastContext.FluidHandling.NONE, target
+        BlockHitResult result = mc.level.clip(new ClipContext(
+            start, end, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, target
         ));
 
         return result.getType() == HitResult.Type.MISS || result.getBlockPos().equals(anchorPos);
     }
 
     private boolean checkPlace(BlockPos pos) {
-        if (!mc.world.isInBuildLimit(pos)) return false;
+        if (!mc.level.isInWorldBounds(pos)) return false;
         
-        BlockState state = mc.world.getBlockState(pos);
+        BlockState state = mc.level.getBlockState(pos);
         // 必须是可替换方块（空气、草、雪等）
-        if (!state.isReplaceable()) return false;
+        if (!state.canBeReplaced()) return false;
         
         // 1.21.11 修正：检查是否可以在此放置重生锚
-        if (!mc.world.canPlace(Blocks.RESPAWN_ANCHOR.getDefaultState(), pos, ShapeContext.absent())) {
+        if (!mc.level.isUnobstructed(Blocks.RESPAWN_ANCHOR.defaultBlockState(), pos, CollisionContext.empty())) {
             return false;
         }
         
@@ -500,7 +506,7 @@ public class TpAnchor extends Module {
         if (!airPlace.get()) {
             boolean hasNeighbor = false;
             for (Direction d : Direction.values()) {
-                if (!mc.world.getBlockState(pos.offset(d)).isReplaceable()) {
+                if (!mc.level.getBlockState(pos.relative(d)).canBeReplaced()) {
                     hasNeighbor = true;
                     break;
                 }
@@ -514,18 +520,18 @@ public class TpAnchor extends Module {
     private BlockPos getShieldPos(BlockPos anchor, BlockPos player) {
         int dx = player.getX() - anchor.getX();
         int dz = player.getZ() - anchor.getZ();
-        if (dx == 0 && dz == 0) return anchor.up();
-        return anchor.add(Integer.compare(dx, 0), 0, Integer.compare(dz, 0));
+        if (dx == 0 && dz == 0) return anchor.above();
+        return anchor.offset(Integer.compare(dx, 0), 0, Integer.compare(dz, 0));
     }
 
     private Entity findTarget() {
-        for (Entity e : mc.world.getEntities()) {
+        for (Entity e : mc.level.entitiesForRendering()) {
             if (e == mc.player || !e.isAlive() || !(e instanceof LivingEntity)) continue;
             if (!entities.get().contains(e.getType())) continue;
             if (e.distanceTo(mc.player) > range.get()) continue;
             
             // 条件开关过滤
-            if (ignoreFriends.get() && e instanceof PlayerEntity p && Friends.get().isFriend(p)) {
+            if (ignoreFriends.get() && e instanceof Player p && Friends.get().isFriend(p)) {
                 continue; // 忽略好友
             }
             if (ignoreNamed.get() && e.hasCustomName()) {
@@ -533,16 +539,16 @@ public class TpAnchor extends Module {
             }
             if (ignoreTamed.get()) {
                 // 检查实体是否被驯服（适用于狼、猫等可驯服生物）
-                if (e instanceof TameableEntity tameable && tameable.isTamed()) {
+                if (e instanceof TamableAnimal tameable && tameable.isTame()) {
                     continue; // 忽略驯服的生物
                 }
             }
             
-            if (e instanceof PlayerEntity p) {
-                GameMode gm = getGameMode(p);
-                if (gm == GameMode.SURVIVAL && !attackSurvival.get()) continue;
-                if (gm == GameMode.CREATIVE && !attackCreative.get()) continue;
-                if (gm == GameMode.ADVENTURE && !attackAdventure.get()) continue;
+            if (e instanceof Player p) {
+                GameType gm = getGameMode(p);
+                if (gm == GameType.SURVIVAL && !attackSurvival.get()) continue;
+                if (gm == GameType.CREATIVE && !attackCreative.get()) continue;
+                if (gm == GameType.ADVENTURE && !attackAdventure.get()) continue;
                 if (!Friends.get().shouldAttack(p)) continue;
                 if (listMode.get() != ListMode.Off) {
                     List<String> names = Arrays.stream(playerList.get().split(",")).map(String::trim).collect(Collectors.toList());
@@ -555,9 +561,9 @@ public class TpAnchor extends Module {
         return null;
     }
 
-    private GameMode getGameMode(PlayerEntity p) {
-        PlayerListEntry entry = mc.getNetworkHandler().getPlayerListEntry(p.getUuid());
-        return entry == null ? GameMode.SURVIVAL : entry.getGameMode();
+    private GameType getGameMode(Player p) {
+        PlayerInfo entry = mc.getConnection().getPlayerInfo(p.getUUID());
+        return entry == null ? GameType.SURVIVAL : entry.getGameMode();
     }
 
     private int getSlot(FindItemResult res, int pref) {
@@ -570,18 +576,18 @@ public class TpAnchor extends Module {
     }
 
     private Direction findBestSide(BlockPos p) {
-        for (Direction d : Direction.values()) if (mc.world.getBlockState(p.offset(d)).isReplaceable()) return d;
+        for (Direction d : Direction.values()) if (mc.level.getBlockState(p.relative(d)).canBeReplaced()) return d;
         return Direction.UP;
     }
 
     private void placePacket(BlockPos p) {
-        mc.getNetworkHandler().sendPacket(new PlayerInteractBlockC2SPacket(Hand.MAIN_HAND, new BlockHitResult(p.toCenterPos(), Direction.UP, p, false), 0));
-        mc.getNetworkHandler().sendPacket(new HandSwingC2SPacket(Hand.MAIN_HAND));
+        mc.getConnection().send(new ServerboundUseItemOnPacket(InteractionHand.MAIN_HAND, new BlockHitResult(p.getCenter(), Direction.UP, p, false), 0));
+        mc.getConnection().send(new ServerboundSwingPacket(InteractionHand.MAIN_HAND));
     }
 
     private void interactPacket(BlockPos p, Direction d) {
-        mc.getNetworkHandler().sendPacket(new PlayerInteractBlockC2SPacket(Hand.MAIN_HAND, new BlockHitResult(p.toCenterPos(), d, p, false), 0));
-        mc.getNetworkHandler().sendPacket(new HandSwingC2SPacket(Hand.MAIN_HAND));
+        mc.getConnection().send(new ServerboundUseItemOnPacket(InteractionHand.MAIN_HAND, new BlockHitResult(p.getCenter(), d, p, false), 0));
+        mc.getConnection().send(new ServerboundSwingPacket(InteractionHand.MAIN_HAND));
     }
 
    @EventHandler
@@ -591,18 +597,18 @@ public class TpAnchor extends Module {
         }
         if (renderPath.get() && !renderPathNodes.isEmpty()) {
             for (int i = 0; i < renderPathNodes.size() - 1; i++) {
-                Vec3d n1 = renderPathNodes.get(i);
-                Vec3d n2 = renderPathNodes.get(i+1);
+                Vec3 n1 = renderPathNodes.get(i);
+                Vec3 n2 = renderPathNodes.get(i+1);
                 event.renderer.line(n1.x, n1.y + 1, n1.z, n2.x, n2.y + 1, n2.z, pathColor.get());
-                event.renderer.box(new Box(n1.x - 0.2, n1.y, n1.z - 0.2, n1.x + 0.2, n1.y + 2, n1.z + 0.2), pathColor.get(), pathColor.get(), ShapeMode.Lines, 0);
+                event.renderer.box(new AABB(n1.x - 0.2, n1.y, n1.z - 0.2, n1.x + 0.2, n1.y + 2, n1.z + 0.2), pathColor.get(), pathColor.get(), ShapeMode.Lines, 0);
             }
         }
     }
 
     private static class AttackPos {
         BlockPos pos;
-        Vec3d tpPos;
+        Vec3 tpPos;
         double score;
-        public AttackPos(BlockPos p, Vec3d tp, double s) { this.pos = p; this.tpPos = tp; this.score = s; }
+        public AttackPos(BlockPos p, Vec3 tp, double s) { this.pos = p; this.tpPos = tp; this.score = s; }
     }
 }

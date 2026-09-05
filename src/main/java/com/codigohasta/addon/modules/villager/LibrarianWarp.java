@@ -4,25 +4,25 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import meteordevelopment.meteorclient.utils.player.ChatUtils;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.enchantment.Enchantment;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.passive.VillagerEntity;
-import net.minecraft.registry.RegistryKey;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.client.Minecraft;
+import net.minecraft.world.item.enchantment.Enchantment;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.npc.villager.Villager;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.phys.Vec3;
 
 /**
  * 图书管理员专属的数据实体类 (Minecraft 1.21.11)
  * 记录了村民的坐标、冷却状态，以及他所售卖的所有附魔书数据。
  */
 public class LibrarianWarp {
-    private static final MinecraftClient mc = MinecraftClient.getInstance();
+    private static final Minecraft mc = Minecraft.getInstance();
     
     // 基础实体与坐标数据
     private final UUID uuid;
     private final BlockPos operatePos;         // 工作台(讲台)方块坐标，用于寻路终点
-    private final Vec3d operatePosCenter;      // 工作台中心点，用于计算距离
+    private final Vec3 operatePosCenter;      // 工作台中心点，用于计算距离
     
     // 交易状态与冷却数据
     private boolean discovered = false;        // 是否已经打开GUI查过他卖什么书了？
@@ -35,18 +35,18 @@ public class LibrarianWarp {
     public LibrarianWarp(UUID uuid, BlockPos operatePos) {
         this.uuid = uuid;
         this.operatePos = operatePos;
-        this.operatePosCenter = operatePos.toCenterPos();
+        this.operatePosCenter = operatePos.getCenter();
     }
 
     // ==========================================
     // 实体获取逻辑
     // ==========================================
-    public VillagerEntity getVillager() {
-        if (mc.world == null) return null;
+    public Villager getVillager() {
+        if (mc.level == null) return null;
         try {
-            for (Entity entity : mc.world.getEntities()) {
-                if (entity instanceof VillagerEntity && entity.getUuid().equals(this.uuid)) {
-                    return (VillagerEntity) entity;
+            for (Entity entity : mc.level.entitiesForRendering()) {
+                if (entity instanceof Villager && entity.getUUID().equals(this.uuid)) {
+                    return (Villager) entity;
                 }
             }
         } catch (Exception e) {
@@ -81,7 +81,7 @@ public class LibrarianWarp {
         return operatePos;
     }
 
-    public Vec3d getOperatePosCenter() {
+    public Vec3 getOperatePosCenter() {
         return operatePosCenter;
     }
 
@@ -115,13 +115,13 @@ public class LibrarianWarp {
     // ==========================================
     public static class LibrarianOffer {
         private final int tradeIndex;                           // 该交易在村民GUI中的槽位索引(0, 1, 2...)，发包专用
-        private final RegistryKey<Enchantment> enchantment;     // 附魔类型 (如 经验修补)
+        private final ResourceKey<Enchantment> enchantment;     // 附魔类型 (如 经验修补)
         private final int level;                                // 附魔等级 (如 锋利 5)
         private final int emeraldPrice;       // 当前售价 (打折后或涨价后的实际价格)
 private final int originalPrice;      // 原始售价 (用于判断是否溢价)
 private boolean outOfStock;           // 当前是否缺货
 
-public LibrarianOffer(int tradeIndex, RegistryKey<Enchantment> enchantment, int level, int emeraldPrice, int originalPrice, boolean outOfStock) {
+public LibrarianOffer(int tradeIndex, ResourceKey<Enchantment> enchantment, int level, int emeraldPrice, int originalPrice, boolean outOfStock) {
     this.tradeIndex = tradeIndex;
     this.enchantment = enchantment;
     this.level = level;
@@ -138,7 +138,7 @@ public int getOriginalPrice() {
             return tradeIndex;
         }
 
-        public RegistryKey<Enchantment> getEnchantment() {
+        public ResourceKey<Enchantment> getEnchantment() {
             return enchantment;
         }
 

@@ -1,6 +1,6 @@
 package com.codigohasta.addon.modules;
 
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.phys.Vec3;
 
 import com.codigohasta.addon.AddonTemplate;
 import meteordevelopment.meteorclient.events.entity.player.InteractBlockEvent;
@@ -9,16 +9,16 @@ import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.player.FindItemResult;
 import meteordevelopment.meteorclient.utils.player.InvUtils;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.block.Blocks;
-import net.minecraft.block.Oxidizable;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.WeatheringCopper;
 
-import net.minecraft.item.Item;
-import net.minecraft.item.Items;
-import net.minecraft.util.Hand;
-import net.minecraft.util.hit.BlockHitResult;
-import net.minecraft.util.math.BlockPos;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.core.BlockPos;
 
 import java.util.HashMap;
 import java.util.List;
@@ -88,21 +88,21 @@ public class AutoDeoxidizer extends Module {
 
     @EventHandler
     private void onInteractBlock(InteractBlockEvent event) {
-        if (mc.world == null || mc.player == null) return;
-        if (event.hand != Hand.MAIN_HAND) return;
+        if (mc.level == null || mc.player == null) return;
+        if (event.hand != InteractionHand.MAIN_HAND) return;
 
         BlockHitResult hitResult = event.result;
         BlockPos pos = hitResult.getBlockPos();
-        BlockState state = mc.world.getBlockState(pos);
+        BlockState state = mc.level.getBlockState(pos);
         Block block = state.getBlock();
 
         // 1. 检查手持斧头
-        if (checkHand.get() && mc.player.getMainHandStack().getItem().toString().contains("_axe")) {
+        if (checkHand.get() && mc.player.getMainHandItem().getItem().toString().contains("_axe")) {
             return;
         }
 
         // 2. 检查黑名单
-        if (handBlacklist.get().contains(mc.player.getMainHandStack().getItem())) {
+        if (handBlacklist.get().contains(mc.player.getMainHandItem().getItem())) {
             return;
         }
 
@@ -110,7 +110,7 @@ public class AutoDeoxidizer extends Module {
 
         // A. 检查氧化 (原生接口，这是最稳的，绝对支持所有铜)
         // 注意：Waxed(涂蜡) 的方块在这里会返回 Empty，所以必须下面单独检查 Wax
-        if (Oxidizable.getDecreasedOxidationState(state).isPresent()) {
+        if (WeatheringCopper.getPrevious(state).isPresent()) {
             shouldScrape = true;
         }
         // B. 检查蜡层 (查我们的手动表)
@@ -138,13 +138,13 @@ public class AutoDeoxidizer extends Module {
         // 执行切换和点击
         if (axe.isHotbar()) {
             InvUtils.swap(axeSlot, true);
-            mc.interactionManager.interactBlock(mc.player, Hand.MAIN_HAND, hitResult);
-            mc.player.swingHand(Hand.MAIN_HAND);
+            mc.gameMode.useItemOn(mc.player, InteractionHand.MAIN_HAND, hitResult);
+            mc.player.swing(InteractionHand.MAIN_HAND);
             InvUtils.swapBack();
         } else if (checkInventory.get()) {
             InvUtils.move().from(axeSlot).to(currentSlot);
-            mc.interactionManager.interactBlock(mc.player, Hand.MAIN_HAND, hitResult);
-            mc.player.swingHand(Hand.MAIN_HAND);
+            mc.gameMode.useItemOn(mc.player, InteractionHand.MAIN_HAND, hitResult);
+            mc.player.swing(InteractionHand.MAIN_HAND);
             InvUtils.move().from(currentSlot).to(axeSlot);
         }
     }
@@ -189,7 +189,7 @@ public class AutoDeoxidizer extends Module {
     }
 
     // === 手动注册表：去除蜡层 ===
-    // 只有涂蜡的方块才需要手动指定，没涂蜡的走 Oxidizable 接口
+    // 只有涂蜡的方块才需要手动指定，没涂蜡的走 WeatheringCopper 接口
     private void initWaxMap() {
         waxMap.clear();
         // 全氧化阶段的 Waxed Block -> Block

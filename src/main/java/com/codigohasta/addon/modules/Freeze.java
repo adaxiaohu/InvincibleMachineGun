@@ -11,16 +11,16 @@ import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
-import net.minecraft.item.consume.UseAction;
-import net.minecraft.network.packet.Packet;
-import net.minecraft.network.packet.c2s.common.CommonPongC2SPacket;
-import net.minecraft.network.packet.c2s.play.*;
-import net.minecraft.network.packet.s2c.play.PlayerPositionLookS2CPacket;
-import net.minecraft.util.Hand;
-import net.minecraft.util.math.Box;
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.item.ItemUseAnimation;
+import net.minecraft.network.protocol.Packet;
+import net.minecraft.network.protocol.common.ServerboundPongPacket;
+import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
+import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -90,7 +90,7 @@ public class Freeze extends Module {
     // --- Stationary 专用 ---
     private final Setting<Boolean> cancelC0B = sgStationary.add(new BoolSetting.Builder()
         .name("cancel-c0b")
-        .description("取消 CommonPongC2SPacket（绕过 Grim BadPacketsR）")
+        .description("取消 ServerboundPongPacket（绕过 Grim BadPacketsR）")
         .defaultValue(false)
         .visible(() -> mode.get() == FreezeMode.Stationary)
         .build()
@@ -183,8 +183,8 @@ public class Freeze extends Module {
         frozenX = mc.player.getX();
         frozenY = mc.player.getY();
         frozenZ = mc.player.getZ();
-        frozenYaw = mc.player.getYaw();
-        frozenPitch = mc.player.getPitch();
+        frozenYaw = mc.player.getYRot();
+        frozenPitch = mc.player.getXRot();
     }
 
     @Override
@@ -198,10 +198,10 @@ public class Freeze extends Module {
             warpInProgress = false;
         }
 
-        if (mode.get() == FreezeMode.Queue && !queuedPackets.isEmpty() && mc.getNetworkHandler() != null) {
+        if (mode.get() == FreezeMode.Queue && !queuedPackets.isEmpty() && mc.getConnection() != null) {
             isFlushing = true;
             for (Packet<?> packet : queuedPackets) {
-                mc.getNetworkHandler().sendPacket(packet);
+                mc.getConnection().send(packet);
             }
             queuedPackets.clear();
             isFlushing = false;
@@ -222,15 +222,15 @@ public class Freeze extends Module {
 
         if (mc.player == null) return;
 
-        mc.player.setVelocity(Vec3d.ZERO);
+        mc.player.setDeltaMovement(Vec3.ZERO);
 
         // Mace 模式：Stationary 下缓慢下沉，累计服务端 fallDistance
         if (mode.get() == FreezeMode.Stationary && maceMode.get() && accumulatedDrift < maxDrift.get()) {
             double nextY = frozenY - driftSpeed.get();
             // 检测下一 tick 的下沉位置是否会撞到方块（防止钻地+穿墙 flag）
-            if (mc.world != null && mc.player != null) {
-                Box nextBox = mc.player.getBoundingBox().offset(0, nextY - frozenY, 0);
-                if (mc.world.isSpaceEmpty(mc.player, nextBox)) {
+            if (mc.level != null && mc.player != null) {
+                AABB nextBox = mc.player.getBoundingBox().move(0, nextY - frozenY, 0);
+                if (mc.level.noCollision(mc.player, nextBox)) {
                     frozenY = nextY;
                     accumulatedDrift += driftSpeed.get();
                 } else {
@@ -242,13 +242,13 @@ public class Freeze extends Module {
             }
         }
 
-        mc.player.setPosition(frozenX, frozenY, frozenZ);
+        mc.player.setPos(frozenX, frozenY, frozenZ);
     }
 
     /** 移动发生前置零，让客户端位置不变化 */
     @EventHandler
     public void onPlayerMove(PlayerMoveEvent event) {
-        event.movement = Vec3d.ZERO;
+        event.movement = Vec3.ZERO;
     }
 
     // ===== 事件：数据包 =====
@@ -261,12 +261,12 @@ public class Freeze extends Module {
      */
     @EventHandler
     public void onPacketReceive(PacketEvent.Receive event) {
-        if (event.packet instanceof PlayerPositionLookS2CPacket) {
+        if (event.packet instanceof ClientboundPlayerPositionPacket) {
             missedOutTick = 0;
 
             if (mc.player != null) {
-                frozenYaw = mc.player.getYaw();
-                frozenPitch = mc.player.getPitch();
+                frozenYaw = mc.player.getYRot();
+                frozenPitch = mc.player.getXRot();
                 frozenX = mc.player.getX();
                 frozenY = mc.player.getY();
                 frozenZ = mc.player.getZ();
@@ -310,7 +310,7 @@ public class Freeze extends Module {
 
     @SuppressWarnings("rawtypes")
     private void handleCancel(PacketEvent.Send event, Packet<?> packet) {
-        if (packet instanceof PlayerMoveC2SPacket) {
+        if (packet instanceof ServerboundMovePlayerPacket) {
             event.cancel();
         }
     }
@@ -319,8 +319,8 @@ public class Freeze extends Module {
 
     /**
      * Stationary 策略：
-     * - PlayerMoveC2SPacket → 替换为冻结坐标包（不取消！保持包序）
-     * - CommonPongC2SPacket → 可选取消（绕过 BadPacketsR）
+     * - ServerboundMovePlayerPacket → 替换为冻结坐标包（不取消！保持包序）
+     * - ServerboundPongPacket → 可选取消（绕过 BadPacketsR）
      * - 其余所有包（交互、动画、物品使用）正常放行
      *
      * 由于移动包正常流动，Grim 不会触发 PacketOrderO。
@@ -328,8 +328,8 @@ public class Freeze extends Module {
      */
     @SuppressWarnings("rawtypes")
     private void handleStationary(PacketEvent.Send event, Packet<?> packet) {
-        if (packet instanceof PlayerMoveC2SPacket movePacket) {
-            PlayerMoveC2SPacket replacement = replaceMovePacket(movePacket);
+        if (packet instanceof ServerboundMovePlayerPacket movePacket) {
+            ServerboundMovePlayerPacket replacement = replaceMovePacket(movePacket);
             if (replacement != movePacket) {
                 event.cancel();
                 isFlushing = true;
@@ -340,7 +340,7 @@ public class Freeze extends Module {
             return;
         }
 
-        if (packet instanceof CommonPongC2SPacket) {
+        if (packet instanceof ServerboundPongPacket) {
             if (cancelC0B.get()) event.cancel();
             return;
         }
@@ -353,25 +353,25 @@ public class Freeze extends Module {
      * - LookAndOnGround → 视角锁定为 frozen（仅当 freezeLook 开启）
      * - OnGroundOnly / LookAndOnGround (无 freezeLook) → 原包通过
      */
-    private PlayerMoveC2SPacket replaceMovePacket(PlayerMoveC2SPacket original) {
-        boolean onGround = mc.player != null && mc.player.isOnGround();
+    private ServerboundMovePlayerPacket replaceMovePacket(ServerboundMovePlayerPacket original) {
+        boolean onGround = mc.player != null && mc.player.onGround();
         boolean horizCollision = mc.player != null && mc.player.horizontalCollision;
 
-        if (original.changesPosition() && original.changesLook()) {
+        if (original.hasPosition() && original.hasRotation()) {
             // Full → PositionAndOnGround: 仅替换位置，丢弃视角数据
             // 不发送 Full 包（不携带 rotation），Server 不会触发 RotationUpdate，
             // 避免连续两个 rotation 包 yaw/pitch 完全相同时 AimDuplicateLook 误判
-            return new PlayerMoveC2SPacket.PositionAndOnGround(frozenX, frozenY, frozenZ, onGround, horizCollision);
+            return new ServerboundMovePlayerPacket.Pos(frozenX, frozenY, frozenZ, onGround, horizCollision);
         }
 
-        if (original.changesPosition()) {
+        if (original.hasPosition()) {
             // PositionAndOnGround: 替换位置
-            return new PlayerMoveC2SPacket.PositionAndOnGround(frozenX, frozenY, frozenZ, onGround, horizCollision);
+            return new ServerboundMovePlayerPacket.Pos(frozenX, frozenY, frozenZ, onGround, horizCollision);
         }
 
-        if (original.changesLook() && freezeLook.get()) {
+        if (original.hasRotation() && freezeLook.get()) {
             // LookAndOnGround + freezeLook: 替换视角
-            return new PlayerMoveC2SPacket.LookAndOnGround(frozenYaw, frozenPitch, onGround, horizCollision);
+            return new ServerboundMovePlayerPacket.Rot(frozenYaw, frozenPitch, onGround, horizCollision);
         }
 
         // LookAndOnGround (无 freezeLook) 或 OnGroundOnly: 无需替换
@@ -381,8 +381,8 @@ public class Freeze extends Module {
     // ===== 工具 =====
 
     private void sendPacketRaw(Packet<?> packet) {
-        if (mc.getNetworkHandler() != null) {
-            mc.getNetworkHandler().sendPacket(packet);
+        if (mc.getConnection() != null) {
+            mc.getConnection().send(packet);
         }
     }
 
@@ -431,23 +431,23 @@ public class Freeze extends Module {
             || stack.getItem() == Items.WIND_CHARGE) {
             return false;
         }
-        UseAction action = stack.getUseAction();
-        return action != UseAction.EAT && action != UseAction.DRINK
-            && action != UseAction.BOW && action != UseAction.CROSSBOW;
+        ItemUseAnimation action = stack.getUseAnimation();
+        return action != ItemUseAnimation.EAT && action != ItemUseAnimation.DRINK
+            && action != ItemUseAnimation.BOW && action != ItemUseAnimation.CROSSBOW;
     }
 
     private void interact() {
-        if (mc.player == null || mc.interactionManager == null || mc.world == null) return;
+        if (mc.player == null || mc.gameMode == null || mc.level == null) return;
 
         InventoryAccessor inv = (InventoryAccessor) mc.player.getInventory();
 
-        Hand hand = Hand.OFF_HAND;
+        InteractionHand hand = InteractionHand.OFF_HAND;
         int prevSlot = -1;
 
-        if (!isInteractable(mc.player.getStackInHand(Hand.OFF_HAND))) {
+        if (!isInteractable(mc.player.getItemInHand(InteractionHand.OFF_HAND))) {
             for (int i = 0; i <= 8; i++) {
-                if (isInteractable(mc.player.getInventory().getStack(i))) {
-                    hand = Hand.MAIN_HAND;
+                if (isInteractable(mc.player.getInventory().getItem(i))) {
+                    hand = InteractionHand.MAIN_HAND;
                     if (i != inv.getSelectedSlot()) {
                         prevSlot = inv.getSelectedSlot();
                         inv.setSelectedSlot(i);
@@ -457,7 +457,7 @@ public class Freeze extends Module {
             }
         }
 
-        mc.interactionManager.interactItem(mc.player, hand);
+        mc.gameMode.useItem(mc.player, hand);
 
         if (prevSlot != -1) {
             inv.setSelectedSlot(prevSlot);

@@ -1,6 +1,6 @@
 package com.codigohasta.addon.modules;
 
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.phys.Vec3;
 
 import com.codigohasta.addon.AddonTemplate;
 import meteordevelopment.meteorclient.events.entity.player.AttackEntityEvent;
@@ -10,12 +10,13 @@ import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.misc.Keybind;
 import meteordevelopment.orbit.EventHandler;
 import meteordevelopment.orbit.EventPriority;
-import net.minecraft.entity.Entity;
-import net.minecraft.network.packet.c2s.play.PlayerInteractEntityC2SPacket;
-import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket;
-import net.minecraft.util.Hand;
-import net.minecraft.util.math.MathHelper;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.network.protocol.game.ServerboundInteractPacket;
+import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.util.Mth;
 import org.lwjgl.glfw.GLFW;
+import net.minecraft.network.protocol.game.ServerboundAttackPacket;
 
 public class KnockbackDirection extends Module {
     private final SettingGroup sgGeneral = settings.getDefaultGroup();
@@ -63,9 +64,9 @@ public class KnockbackDirection extends Module {
     // --- 滚轮调整偏移量 ---
     @EventHandler
     private void onMouseScroll(MouseScrollEvent event) {
-        if (mc.currentScreen != null) return;
+        if (mc.screen != null) return;
         if (modifierKey.get().isPressed()) {
-            double newOffset = MathHelper.wrapDegrees(yawOffset.get() + event.value * scrollStep.get());
+            double newOffset = Mth.wrapDegrees(yawOffset.get() + event.value * scrollStep.get());
             yawOffset.set(newOffset);
             // 提示现在的效果，比如 "Pulling (180.0)"
             info("Yaw Offset: " + String.format("%.1f", newOffset));
@@ -83,26 +84,26 @@ public class KnockbackDirection extends Module {
         isInternalAttack = true;
 
         // 1. 获取当前实时数据
-        float currentYaw = mc.player.getYaw();
-        float currentPitch = mc.player.getPitch();
-        boolean onGround = mc.player.isOnGround();
+        float currentYaw = mc.player.getYRot();
+        float currentPitch = mc.player.getXRot();
+        boolean onGround = mc.player.onGround();
 
         // 2. 计算目标绝对角度 (当前视角 + 偏移量)
-        float absoluteTargetYaw = (float) MathHelper.wrapDegrees(currentYaw + yawOffset.get());
+        float absoluteTargetYaw = (float) Mth.wrapDegrees(currentYaw + yawOffset.get());
 
         // 3. 发送 [瞬间转身] 数据包
         // 这一步告诉服务器：我已经看转向目标方向了
-        mc.getNetworkHandler().sendPacket(new PlayerMoveC2SPacket.LookAndOnGround(absoluteTargetYaw, currentPitch, onGround, mc.player.horizontalCollision));
+        mc.getConnection().send(new ServerboundMovePlayerPacket.Rot(absoluteTargetYaw, currentPitch, onGround, mc.player.horizontalCollision));
 
         // 4. 发送 [攻击] 数据包
         // 紧随其后，服务器会用 absoluteTargetYaw 来计算击退向量
-        mc.getNetworkHandler().sendPacket(PlayerInteractEntityC2SPacket.attack(target, mc.player.isSneaking()));
-        mc.player.swingHand(Hand.MAIN_HAND);
+        mc.getConnection().send(new ServerboundAttackPacket(target.getId()));
+        mc.player.swing(InteractionHand.MAIN_HAND);
 
         // 5. 发送 [回弹/抽动] 数据包
         // 计算一个中间角度，让动作看起来像高灵敏度甩动
         float recoilYaw = (float) interpolateAngle(currentYaw, absoluteTargetYaw, recoilPercent.get());
-        mc.getNetworkHandler().sendPacket(new PlayerMoveC2SPacket.LookAndOnGround(recoilYaw, currentPitch, onGround, mc.player.horizontalCollision));
+        mc.getConnection().send(new ServerboundMovePlayerPacket.Rot(recoilYaw, currentPitch, onGround, mc.player.horizontalCollision));
 
         isInternalAttack = false;
     }
