@@ -176,6 +176,7 @@ public class AddonTemplate extends MeteorAddon {
          modules.add(new MobHud());
          modules.add(new LavaESP());
          modules.add(new CustomFishingBot());
+         modules.add(new FurnaceUnclogger());
 
          // BreakESP module - 挖掘显示 (必须放在AlienBreakManager初始化之前)
          modules.add(new BreakESP());
