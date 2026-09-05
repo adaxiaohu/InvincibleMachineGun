@@ -1,19 +1,23 @@
 package com.codigohasta.addon.mixin;
 
-import net.minecraft.client.gui.screen.ingame.HandledScreen;
-import net.minecraft.screen.slot.Slot;
-import net.minecraft.screen.slot.SlotActionType;
+import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
+import net.minecraft.world.inventory.ContainerInput;
+import net.minecraft.world.inventory.Slot;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.gen.Invoker;
 
 /**
- * 允许模块调用 HandledScreen 的原生槽位点击入口。
+ * 允许模块调用容器界面的原生槽位点击入口。
  *
- * TweakerMore 的自动清空容器最终通过 Item Scroller 调用容器 GUI 的 slotClicked/onMouseClick，
+ * TweakerMore 的自动清空容器最终通过 Item Scroller 调用容器 GUI 的 slotClicked，
  * 而不是自己先拿到鼠标光标再做二次操作。这个 Invoker 用于复现同一路径。
+ *
+ * 26.1.2 中该入口位于 AbstractContainerScreen#slotClicked，
+ * 动作类型由 SlotActionType 改名为 ContainerInput；类名与 Invoker 方法名
+ * 沿用上游命名，以便与上游后续改动对比。
  */
-@Mixin(HandledScreen.class)
+@Mixin(AbstractContainerScreen.class)
 public interface HandledScreenInvoker {
-    @Invoker("onMouseClick")
-    void codigohasta$invokeOnMouseClick(Slot slot, int slotId, int button, SlotActionType actionType);
+    @Invoker("slotClicked")
+    void codigohasta$invokeOnMouseClick(Slot slot, int slotId, int button, ContainerInput actionType);
 }
