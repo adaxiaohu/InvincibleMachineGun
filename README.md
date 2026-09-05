@@ -1,7 +1,8 @@
 # InvincibleMachineGun
 
 A personal addon for the Meteor client that adds various entertainment modules. Most modules are my original ideas, implemented with AI assistance; some third‑party modules have been modified and are included. 
-[English support!!!] ## The InvincibleMachineGun plugin now supports English translation. When non-Chinese language users are playing the game, the menu will automatically switch to English.
+
+# [English support!!!] The InvincibleMachineGun plugin now supports English translation. When non-Chinese language users are playing the game, the menu will automatically switch to English.
 
 用于 Meteor 客户端的个人插件，添加了各种娱乐模块。方便我自己使用，大多数模块是原创想法，运用大量 AI 代码实现（gemini，deepseek），基本没写任何代码哈哈；有很几个模块是别人的，已被修改并包括在内。
 
