@@ -29,6 +29,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.FloatBuffer;
 import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
+import java.util.Map;
 
 abstract class FullscreenShaderModule extends Module {
     private final SettingGroup area = settings.createGroup("作用范围");
@@ -51,6 +53,11 @@ abstract class FullscreenShaderModule extends Module {
     private int sceneTextureHeight = -1;
     private long startedAtNanos;
     private boolean initializationPending;
+    private final Map<String, Integer> uniformLocations = new HashMap<>();
+    private final Matrix4f projectionMatrix = new Matrix4f();
+    private final Matrix4f inverseProjectionMatrix = new Matrix4f();
+    private final Matrix4f inverseViewMatrix = new Matrix4f();
+    private final int[] viewportScratch = new int[4];
 
     protected FullscreenShaderModule(String name, String description, String shaderName) {
         super(AddonTemplate.CATEGORY, name, description);
@@ -112,7 +119,7 @@ abstract class FullscreenShaderModule extends Module {
         int previousTexture1 = textureBinding(GL13.GL_TEXTURE1);
         int previousReadFramebuffer = GL11.glGetInteger(GL30.GL_READ_FRAMEBUFFER_BINDING);
         int previousDrawFramebuffer = GL11.glGetInteger(GL30.GL_DRAW_FRAMEBUFFER_BINDING);
-        int[] previousViewport = new int[4];
+        int[] previousViewport = viewportScratch;
         GL11.glGetIntegerv(GL11.GL_VIEWPORT, previousViewport);
 
         try {
@@ -140,8 +147,9 @@ abstract class FullscreenShaderModule extends Module {
             var camera = client.gameRenderer.getCamera();
             var cameraPos = camera.getCameraPos();
             uniform3f("U_CameraPosition", (float) cameraPos.x, (float) cameraPos.y, (float) cameraPos.z);
-            uniformMatrix4f("U_InverseProjectionMatrix", new Matrix4f(RenderUtils.projection).invert());
-            uniformMatrix4f("U_InverseViewMatrix", new Matrix4f().rotation(camera.getRotation()));
+            uniformMatrix4f("U_ProjectionMatrix", projectionMatrix.set(RenderUtils.projection));
+            uniformMatrix4f("U_InverseProjectionMatrix", inverseProjectionMatrix.set(RenderUtils.projection).invert());
+            uniformMatrix4f("U_InverseViewMatrix", inverseViewMatrix.identity().rotation(camera.getRotation()));
             configureUniforms(event, elapsedSeconds);
 
             GL30.glBindVertexArray(vao);
@@ -167,13 +175,18 @@ abstract class FullscreenShaderModule extends Module {
     protected abstract void configureUniforms(Render3DEvent event, float elapsedSeconds);
 
     protected final void uniform1f(String name, float value) {
-        int location = GL20.glGetUniformLocation(program, name);
+        int location = uniformLocation(name);
         if (location >= 0) GL20.glUniform1f(location, value);
     }
 
     protected final void uniform3f(String name, float x, float y, float z) {
-        int location = GL20.glGetUniformLocation(program, name);
+        int location = uniformLocation(name);
         if (location >= 0) GL20.glUniform3f(location, x, y, z);
+    }
+
+    protected final void uniform4fv(String name, float[] values) {
+        int location = uniformLocation(name);
+        if (location >= 0) GL20.glUniform4fv(location, values);
     }
 
     protected final void uniformColor(String name, SettingColor color) {
@@ -211,17 +224,22 @@ abstract class FullscreenShaderModule extends Module {
     private void bindTexture(String uniform, int unit, int texture) {
         GL13.glActiveTexture(unit);
         GL11.glBindTexture(GL11.GL_TEXTURE_2D, texture);
-        int location = GL20.glGetUniformLocation(program, uniform);
+        int location = uniformLocation(uniform);
         if (location >= 0) GL20.glUniform1i(location, unit - GL13.GL_TEXTURE0);
     }
 
     protected final void uniform2f(String name, float x, float y) {
-        int location = GL20.glGetUniformLocation(program, name);
+        int location = uniformLocation(name);
         if (location >= 0) GL20.glUniform2f(location, x, y);
     }
 
+    private int uniformLocation(String name) {
+        if (program == -1) return -1;
+        return uniformLocations.computeIfAbsent(name, key -> GL20.glGetUniformLocation(program, key));
+    }
+
     private void uniformMatrix4f(String name, Matrix4f matrix) {
-        int location = GL20.glGetUniformLocation(program, name);
+        int location = uniformLocation(name);
         if (location < 0) return;
         try (MemoryStack stack = MemoryStack.stackPush()) {
             FloatBuffer buffer = stack.mallocFloat(16);
@@ -295,6 +313,7 @@ abstract class FullscreenShaderModule extends Module {
         if (program != -1) GL20.glDeleteProgram(program);
         if (sceneTexture != null) sceneTexture.close();
         vbo = vao = program = -1;
+        uniformLocations.clear();
         sceneTexture = null;
         sceneTextureWidth = sceneTextureHeight = -1;
     }

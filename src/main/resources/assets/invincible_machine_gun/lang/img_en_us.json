@@ -6414,6 +6414,216 @@
         }
       }
     },
+    "BlueHourShader": {
+      "title": "Blue Hour Shader",
+      "description": "Creates a cool post-rain blue-hour world with stylized volumetric clouds, optional rain, wet surfaces, and highlight dispersion.",
+      "groups": {
+        "general": "General",
+        "clouds": "Clouds",
+        "rain": "Rain",
+        "dispersion": "Dispersion",
+        "lighting": "Lighting",
+        "shadows": "Entity Shadows"
+      },
+      "settings": {
+        "moodIntensity": {
+          "title": "Blue-Hour Intensity",
+          "description": "Sets how strongly the post-rain blue-hour grade covers the original scene."
+        },
+        "customBlueTone": {
+          "title": "Custom Blue-Hour Hue",
+          "description": "Enables an independent atmospheric hue control without changing the native color temperature of torches, lanterns, and other local area lights."
+        },
+        "blueTone": {
+          "title": "Blue-Hour Hue",
+          "description": "0 produces a cyan/green-biased blue hour, 0.5 preserves the current default look, and 1 produces a cleaner, deeper blue-biased blue hour."
+        },
+        "contrast": {
+          "title": "Contrast",
+          "description": "Sets the contrast of the cool blue scene."
+        },
+        "wetness": {
+          "title": "Ground Wetness",
+          "description": "Strengthens stable cool highlights from existing bright ground detail without adding directional shadowing."
+        },
+        "introSpeed": {
+          "title": "Reveal Speed",
+          "description": "Sets how quickly the blue-hour effect expands outward from the player."
+        },
+        "loopIntro": {
+          "title": "Loop Reveal",
+          "description": "Periodically replays the opening reveal animation."
+        },
+        "introDuration": {
+          "title": "Loop Period",
+          "description": "Sets the number of seconds between reveal-animation cycles."
+        },
+        "cloudStyle": {
+          "title": "Cloud Style",
+          "description": "Selects soft, low-poly, or hybrid volumetric clouds."
+        },
+        "cloudQuality": {
+          "title": "Cloud Quality",
+          "description": "Controls volumetric-cloud sampling; higher quality costs more performance."
+        },
+        "cloudCoverage": {
+          "title": "Cloud Coverage",
+          "description": "Sets how much of the sky is covered by heavy clouds."
+        },
+        "cloudThickness": {
+          "title": "Cloud Thickness",
+          "description": "Sets the vertical thickness and volume of the cloud layer."
+        },
+        "cloudSpeed": {
+          "title": "Cloud Speed",
+          "description": "Sets how quickly clouds drift horizontally with the wind."
+        },
+        "polygonStrength": {
+          "title": "Facet Strength",
+          "description": "Sets the amount of low-poly light-and-shadow faceting."
+        },
+        "rainMode": {
+          "title": "Rain Mode",
+          "description": "Selects true world-space rain, camera-glass droplets, both, or neither."
+        },
+        "rainDensity": {
+          "title": "Rain Density",
+          "description": "Sets the probability and local density of world rain and camera droplets; lower values leave larger natural gaps."
+        },
+        "rainSpeed": {
+          "title": "Rain Speed",
+          "description": "Sets world-rain fall speed and the much slower surface-tension lifecycle of camera droplets."
+        },
+        "rainOpacity": {
+          "title": "Rain Opacity",
+          "description": "Sets the visibility of rain streaks and droplets."
+        },
+        "dropletRefraction": {
+          "title": "Droplet Refraction",
+          "description": "Sets how strongly lens droplets distort the scene."
+        },
+        "glassFog": {
+          "title": "Glass Condensation",
+          "description": "Adds uneven condensation and defocus blur to the camera glass."
+        },
+        "glassFogStrength": {
+          "title": "Condensation Strength",
+          "description": "Sets how strongly condensation covers the camera glass."
+        },
+        "glassFogBlur": {
+          "title": "Condensation Blur",
+          "description": "Sets the radius of the optimized isotropic Gaussian-style defocus blur inside condensed glass areas."
+        },
+        "wiper": {
+          "title": "Wiper",
+          "description": "Periodically sweeps the camera glass and temporarily clears droplets and condensation."
+        },
+        "wiperInterval": {
+          "title": "Wiper Interval",
+          "description": "Sets the number of seconds between wiper sweeps."
+        },
+        "wiperDuration": {
+          "title": "Wiper Duration",
+          "description": "Sets how long one wiper sweep takes."
+        },
+        "wiperWidth": {
+          "title": "Wiper Width",
+          "description": "Sets the width of the wiper blade and its cleared trail."
+        },
+        "wiperRecovery": {
+          "title": "Condensation Recovery",
+          "description": "Sets how long droplets and condensation take to cover a wiped area again."
+        },
+        "chromaticDispersion": {
+          "title": "RGB Dispersion",
+          "description": "Applies RGB channel separation to block, entity, geometry, and material edges; targets do not need to be lit or emissive."
+        },
+        "dispersionStrength": {
+          "title": "Dispersion Strength",
+          "description": "Sets RGB separation strength on all detected scene edges."
+        },
+        "dispersionRadius": {
+          "title": "Dispersion Radius",
+          "description": "Sets the red/blue channel separation distance in screen pixels."
+        },
+        "edgeBias": {
+          "title": "Lens-Edge Boost",
+          "description": "Adds extra chromatic aberration near screen edges while center-screen block and entity edges still disperse normally."
+        },
+        "lightBloom": {
+          "title": "Light Bloom",
+          "description": "Adds soft diffraction bloom around bright light sources in the scene."
+        },
+        "bloomStrength": {
+          "title": "Bloom Strength",
+          "description": "Sets the brightness of the glow around light sources."
+        },
+        "bloomRadius": {
+          "title": "Bloom Radius",
+          "description": "Sets the screen-space radius of light-source bloom."
+        },
+        "independentLightColor": {
+          "title": "Independent Light Color",
+          "description": "Separates only local illumination that rises relative to the surrounding surface. Absolute warm, green, or bright world colors no longer bypass the blue-hour grade."
+        },
+        "lightColorIsolationStrength": {
+          "title": "Light Color Separation",
+          "description": "Controls local artificial-light chromaticity recovery. Only color/white balance is recovered; blue-hour luminance and exposure are preserved."
+        },
+        "customLightTemperature": {
+          "title": "Custom Light Color Temperature",
+          "description": "White-balances only the already-rendered local-light contribution without adding brightness. Disable it to preserve Minecraft's original light color; the blue-hour grade still applies to the environment."
+        },
+        "lightTemperature": {
+          "title": "Light Color Temperature",
+          "description": "Changes the apparent illuminant color while preserving the original scene luminance. Lower Kelvin values are warmer; higher values are cooler."
+        },
+        "ambientOcclusion": {
+          "title": "Ambient Occlusion",
+          "description": "Uses scene depth to strengthen contact shadows and concave corners."
+        },
+        "aoStrength": {
+          "title": "AO Strength",
+          "description": "Sets the strength of screen-space ambient occlusion."
+        },
+        "lowPolyLighting": {
+          "title": "Low-Poly Lighting",
+          "description": "Quantizes bloom and ambient occlusion into restrained polygonal lighting bands."
+        },
+        "entityShadows": {
+          "title": "Polygonal Entity Shadows",
+          "description": "Draws soft contact plus directional polygonal cast shadows for visible living entities."
+        },
+        "entityShadowOpacity": {
+          "title": "Entity Shadow Strength",
+          "description": "Sets the opacity of polygonal entity shadows."
+        },
+        "entityShadowRange": {
+          "title": "Entity Shadow Range",
+          "description": "Calculates entity shadows only within this distance."
+        },
+        "maxShadowEntities": {
+          "title": "Maximum Entity Shadows",
+          "description": "Limits the number of entity shadows rendered per frame for performance."
+        },
+        "tyndallEffect": {
+          "title": "Tyndall Light Shafts",
+          "description": "Enables lightweight scene-aware Tyndall/god rays using the depth buffer instead of expensive full volumetric ray tracing."
+        },
+        "tyndallStrength": {
+          "title": "Tyndall Strength",
+          "description": "Sets the visibility of light shafts suspended in humid air."
+        },
+        "dispersionEdgeThreshold": {
+          "title": "Edge Sensitivity",
+          "description": "Controls how subtle an edge can trigger dispersion. Lower values are more sensitive and this is independent of brightness."
+        },
+        "bloomThreshold": {
+          "title": "Bloom Threshold",
+          "description": "Sets how bright a pixel must be to contribute to Bloom. This no longer affects RGB dispersion."
+        }
+      }
+    },
     "CyberFujiShader": {
       "title": "Synthwave Shader",
       "description": "Toggles a cyber synthwave full-screen world shader with animated grid and sun controls.",
@@ -7329,6 +7539,492 @@
           "description": "Automatically enables this translation module when the Minecraft language is anything other than Simplified Chinese (zh_cn) or Traditional Chinese (zh_tw)."
         }
       }
+    },
+    "VerticalModuleList": {
+      "title": "Vertical Module List",
+      "description": "Displays enabled modules as vertical columns. Latin words are rotated clockwise by 90 degrees as complete words, with top/bottom reverse anchoring, randomized retyping, RoboCop-style moving crosshair acquisition, and a lightweight 26-effect burst library.",
+      "groups": {
+        "sgLayout": "Position & Layout",
+        "sgStyle": "Text & Style",
+        "sgBackground": "Background",
+        "sgAnimation": "Enter & Typing",
+        "sgMotion": "Continuous Motion",
+        "sgGlitch": "Glitch & Decode",
+        "sgRobocop": "RoboCop Target Lock",
+        "sgAdvanced": "Advanced Continuous Effects",
+        "sgRandom": "Random Bursts",
+        "sgBurst": "Extended Burst Library"
+      },
+      "settings": {
+        "side": {
+          "title": "Alignment Side",
+          "description": "Chooses whether module columns are arranged inward from the left or right side of the screen."
+        },
+        "marginX": {
+          "title": "X Margin",
+          "description": "Sets the horizontal distance between the module list and the selected screen edge."
+        },
+        "marginY": {
+          "title": "Y Margin",
+          "description": "Sets the vertical margin from the selected top or bottom anchor."
+        },
+        "scale": {
+          "title": "Font Size",
+          "description": "Sets the text rendering scale used by Meteor and Custom Font."
+        },
+        "charSpacing": {
+          "title": "Block Spacing",
+          "description": "Sets vertical spacing between CJK characters, rotated Latin word blocks, and the header symbol."
+        },
+        "columnSpacing": {
+          "title": "Column Spacing",
+          "description": "Sets the horizontal gap between adjacent module columns."
+        },
+        "fixedColumnWidth": {
+          "title": "Fixed Column Width",
+          "description": "Uses automatic width at 0; values above 0 force every module column to the configured width."
+        },
+        "maxColumns": {
+          "title": "Maximum Columns",
+          "description": "Limits how many enabled modules can be displayed at the same time."
+        },
+        "sortMode": {
+          "title": "Sort Mode",
+          "description": "Selects how enabled module columns are ordered."
+        },
+        "onlyBound": {
+          "title": "Bound Modules Only",
+          "description": "Shows only enabled modules that have a keybind assigned."
+        },
+        "additionalInfo": {
+          "title": "Show Additional Info",
+          "description": "Includes module mode or other additional information in the vertical text."
+        },
+        "shadow": {
+          "title": "Text Shadow",
+          "description": "Draws Meteor's text shadow behind the main module text."
+        },
+        "gradient": {
+          "title": "Animated Gradient",
+          "description": "Animates the text vertically between two customizable colors."
+        },
+        "textColorA": {
+          "title": "Text Color A",
+          "description": "Sets the primary module text color."
+        },
+        "textColorB": {
+          "title": "Text Color B",
+          "description": "Sets the secondary color used by the animated gradient."
+        },
+        "gradientSpeed": {
+          "title": "Gradient Speed",
+          "description": "Controls how quickly the text gradient flows."
+        },
+        "showSymbol": {
+          "title": "Header Symbol",
+          "description": "Displays a customizable symbol at the top of every module column."
+        },
+        "symbolMode": {
+          "title": "Symbol Mode",
+          "description": "Chooses between one fixed symbol and cycling through a symbol pool."
+        },
+        "fixedSymbol": {
+          "title": "Fixed Symbol",
+          "description": "Sets the character used when Fixed Symbol mode is selected."
+        },
+        "symbolPool": {
+          "title": "Symbol Pool",
+          "description": "Use | as the recommended separator. Multi-character symbols are supported; Auto symbol font prefers Minecraft native text for broader Unicode coverage."
+        },
+        "symbolColor": {
+          "title": "Symbol Color",
+          "description": "Sets the color of the header symbol above each module column."
+        },
+        "backgroundMode": {
+          "title": "Background Mode",
+          "description": "Chooses no background, an individual background for each column, or one panel behind the whole list."
+        },
+        "backgroundColor": {
+          "title": "Background Color",
+          "description": "Sets the background color and opacity."
+        },
+        "accentColor": {
+          "title": "Accent Line Color",
+          "description": "Sets the color of the minimalist accent line."
+        },
+        "paddingX": {
+          "title": "Horizontal Padding",
+          "description": "Sets horizontal spacing between the column content and its background."
+        },
+        "paddingY": {
+          "title": "Vertical Padding",
+          "description": "Sets vertical spacing between the column content and its background."
+        },
+        "accentLine": {
+          "title": "Anchor Accent Line",
+          "description": "Draws the accent on the upper edge in Top layout and automatically flips it to the lower edge in Bottom layout."
+        },
+        "backgroundPulse": {
+          "title": "Background Pulse",
+          "description": "Applies a subtle breathing animation to background opacity."
+        },
+        "pulseAmount": {
+          "title": "Pulse Strength",
+          "description": "Controls the intensity of the background breathing effect."
+        },
+        "animations": {
+          "title": "Animations",
+          "description": "Master switch for module enter and exit animations."
+        },
+        "typing": {
+          "title": "Typing Effect",
+          "description": "Reveals module names one character at a time and removes them in reverse when disabled."
+        },
+        "typingCursor": {
+          "title": "Typing Cursor",
+          "description": "Shows a blinking cursor at the current typing position."
+        },
+        "cursorSymbol": {
+          "title": "Cursor Symbol",
+          "description": "Sets the character used for the typing cursor."
+        },
+        "glitch": {
+          "title": "Glitch Effect",
+          "description": "Jitters, corrupts and chromatically splits a targeted module column during toggle or random burst events."
+        },
+        "glitchDuration": {
+          "title": "Glitch Duration",
+          "description": "Sets how long the glitch phase lasts after a module state change."
+        },
+        "glitchIntensity": {
+          "title": "Glitch Intensity",
+          "description": "Controls the proportion of characters that can be randomly replaced or displaced."
+        },
+        "glitchJitter": {
+          "title": "Character Jitter",
+          "description": "Controls the maximum positional jitter applied to glitched characters."
+        },
+        "glitchChars": {
+          "title": "Glitch Characters",
+          "description": "Sets the random character pool used by glitch and decode effects."
+        },
+        "decrypt": {
+          "title": "Decode Scramble",
+          "description": "Shows rapidly changing random characters before the real text stabilizes."
+        },
+        "rgbSplit": {
+          "title": "RGB Split",
+          "description": "Draws offset red and cyan ghost images during the glitch animation."
+        },
+        "rgbDistance": {
+          "title": "RGB Offset",
+          "description": "Sets the separation distance of the RGB glitch ghost images."
+        },
+        "parallax": {
+          "title": "View Parallax",
+          "description": "Makes the HUD lag slightly behind camera movement and smoothly return with damping."
+        },
+        "parallaxX": {
+          "title": "View X Strength",
+          "description": "Controls signed horizontal HUD displacement caused by camera rotation. Negative values reverse the direction."
+        },
+        "parallaxY": {
+          "title": "View Y Strength",
+          "description": "Controls signed vertical HUD displacement caused by camera rotation. Negative values reverse the direction."
+        },
+        "parallaxDamping": {
+          "title": "Parallax Damping",
+          "description": "Controls how quickly the delayed HUD motion settles back into place."
+        },
+        "maxParallax": {
+          "title": "Maximum View Offset",
+          "description": "Limits the maximum screen-space displacement caused by view parallax."
+        },
+        "wave": {
+          "title": "Column Wave",
+          "description": "Moves adjacent module columns up and down with a phase offset to form a continuous wave."
+        },
+        "waveAmplitude": {
+          "title": "Wave Amplitude",
+          "description": "Sets the vertical distance traveled by the column wave."
+        },
+        "waveSpeed": {
+          "title": "Wave Speed",
+          "description": "Controls how quickly the column wave moves."
+        },
+        "wavePhase": {
+          "title": "Column Phase Offset",
+          "description": "Sets the phase difference between neighboring module columns."
+        },
+        "converge": {
+          "title": "Convergence",
+          "description": "Launches module columns from different screen directions and rapidly converges them into their final positions; disabling a module reverses the motion."
+        },
+        "convergeDistance": {
+          "title": "Convergence Distance",
+          "description": "Sets how far from their target positions module columns begin the convergence animation."
+        },
+        "echoTrail": {
+          "title": "Echo Trail",
+          "description": "Draws lightweight afterimages behind moving or converging text."
+        },
+        "echoCopies": {
+          "title": "Trail Copies",
+          "description": "Sets the number of afterimage layers rendered by the Echo Trail effect."
+        },
+        "echoDistance": {
+          "title": "Trail Distance",
+          "description": "Sets the spacing between Echo Trail afterimages."
+        },
+        "scanLine": {
+          "title": "Scan Beam",
+          "description": "Draws a configurable scan beam independently from the background and can brighten text as it passes."
+        },
+        "scanSpeed": {
+          "title": "Scan Speed",
+          "description": "Controls how quickly the scan beam travels through the list."
+        },
+        "neonFlicker": {
+          "title": "Cold-Start Flicker",
+          "description": "Adds short neon-style brightness flicker on module entry or when selected by the random burst scheduler."
+        },
+        "flickerStrength": {
+          "title": "Flicker Strength",
+          "description": "Controls the brightness variation of the cold-start flicker effect."
+        },
+        "offsetX": {
+          "title": "X Offset",
+          "description": "Adds a signed horizontal offset on top of the selected screen-edge margin. Supports positive and negative values."
+        },
+        "offsetY": {
+          "title": "Y Offset",
+          "description": "Adds a signed vertical offset on top of the base Y position. Supports positive and negative values."
+        },
+        "latinLayout": {
+          "title": "Latin Direction",
+          "description": "Normal mode keeps Latin letters in a complete word and rotates the entire word clockwise by 90 degrees, so glyph tops point right and bottoms point left."
+        },
+        "columnStaggerMs": {
+          "title": "Column Stagger (ms)",
+          "description": "Delays simultaneous column entrances by this many milliseconds per column. Set to 0 for synchronized motion."
+        },
+        "symbolRendererMode": {
+          "title": "Symbol Font",
+          "description": "Auto prefers Minecraft native text for symbols to improve Unicode coverage when the selected Custom Font lacks glyphs."
+        },
+        "enterDuration": {
+          "title": "Enter Duration",
+          "description": "Base duration in seconds for module enter animations such as fade and convergence."
+        },
+        "exitDuration": {
+          "title": "Exit Duration",
+          "description": "Base duration in seconds for module exit animations such as fade and scatter."
+        },
+        "typingEnterInterval": {
+          "title": "Enter Typing Interval",
+          "description": "Milliseconds between characters while a module name types in. Lower values are faster."
+        },
+        "typingExitInterval": {
+          "title": "Exit Erase Interval",
+          "description": "Milliseconds between characters while a module name erases in reverse. Lower values are faster."
+        },
+        "glitchOnTransition": {
+          "title": "Glitch on Toggle",
+          "description": "Triggers one glitch burst on the column when its module is enabled or disabled."
+        },
+        "glitchRefreshMs": {
+          "title": "Glitch Refresh Rate",
+          "description": "Milliseconds between random glitch-character and jitter refreshes. Lower values create more aggressive noise."
+        },
+        "scanMode": {
+          "title": "Scan Mode",
+          "description": "Selects a thin line, soft luminous band, or dual-band scan."
+        },
+        "scanDirection": {
+          "title": "Scan Direction",
+          "description": "Controls whether the scan moves down, up, or continuously ping-pongs."
+        },
+        "scanBandWidth": {
+          "title": "Beam Width",
+          "description": "Controls the vertical width of the soft scan beam."
+        },
+        "scanIntensity": {
+          "title": "Beam Intensity",
+          "description": "Controls scan-beam opacity and brightness."
+        },
+        "scanColor": {
+          "title": "Beam Color",
+          "description": "Sets the scan-beam color."
+        },
+        "scanColumnPhase": {
+          "title": "Stagger Scan by Column",
+          "description": "Offsets scan phase between columns so all beams do not move in a perfectly flat line."
+        },
+        "scanPhaseStep": {
+          "title": "Scan Phase Step",
+          "description": "Sets the scan phase difference between neighboring columns."
+        },
+        "scanTextHighlight": {
+          "title": "Scan Text Highlight",
+          "description": "Brightens characters toward the beam color as the scan passes over them."
+        },
+        "scanTextStrength": {
+          "title": "Text Highlight Strength",
+          "description": "Controls how strongly scanned characters blend toward the beam color."
+        },
+        "robocopLock": {
+          "title": "RoboCop Target Lock",
+          "description": "First moves a crosshair from a screen-edge acquisition point to the selected module column; only after arrival do brackets converge, scan, and enter LOCK state."
+        },
+        "robocopDuration": {
+          "title": "Target Lock Duration",
+          "description": "Controls the full crosshair-tracking plus target-lock animation duration."
+        },
+        "robocopAcquireDistance": {
+          "title": "Bracket Acquire Distance",
+          "description": "Controls how far the lock brackets begin from the module after the moving crosshair reaches it."
+        },
+        "robocopColor": {
+          "title": "Target Lock Color",
+          "description": "Sets the color of the target-acquisition HUD."
+        },
+        "robocopLabel": {
+          "title": "Target Lock Label",
+          "description": "Shows SCAN and the final lock-status text beside the targeted column."
+        },
+        "robocopLockText": {
+          "title": "Lock Complete Text",
+          "description": "Sets the text displayed after target acquisition completes."
+        },
+        "robocopOnEnter": {
+          "title": "Lock on Enter",
+          "description": "Triggers the target-lock animation immediately when a new module column enters."
+        },
+        "hologram": {
+          "title": "Hologram Slices",
+          "description": "Applies short horizontal slice offsets and ghost images to selected text rows for a holographic signal-interference effect."
+        },
+        "hologramDuration": {
+          "title": "Hologram Duration",
+          "description": "Controls how long each hologram burst lasts."
+        },
+        "hologramOffset": {
+          "title": "Hologram Slice Offset",
+          "description": "Controls the horizontal displacement of hologram slices."
+        },
+        "hologramSliceChance": {
+          "title": "Slice Density",
+          "description": "Controls how many text rows are affected during a hologram burst."
+        },
+        "hologramColor": {
+          "title": "Hologram Color",
+          "description": "Sets the hologram ghost-image color."
+        },
+        "pulseFrame": {
+          "title": "Pulse Frame",
+          "description": "Draws multiple rectangular frames that rapidly contract onto a selected module column."
+        },
+        "pulseFrameDuration": {
+          "title": "Pulse Frame Duration",
+          "description": "Controls how long each pulse-frame burst lasts."
+        },
+        "pulseFrameColor": {
+          "title": "Pulse Frame Color",
+          "description": "Sets the pulse-frame color."
+        },
+        "randomBursts": {
+          "title": "Random Burst Effects",
+          "description": "Randomly selects active module columns and plays one enabled built-in, retype, or extended burst effect."
+        },
+        "randomMinDelay": {
+          "title": "Minimum Random Delay",
+          "description": "Minimum number of seconds between random burst events."
+        },
+        "randomMaxDelay": {
+          "title": "Maximum Random Delay",
+          "description": "Maximum number of seconds between random burst events."
+        },
+        "randomColumns": {
+          "title": "Random Columns per Burst",
+          "description": "Maximum number of different module columns affected by one random event."
+        },
+        "randomGlitch": {
+          "title": "Random Glitch",
+          "description": "Allows Glitch to be selected by the random burst scheduler."
+        },
+        "randomRobocop": {
+          "title": "Random Target Lock",
+          "description": "Allows RoboCop Target Lock to be selected by the random burst scheduler."
+        },
+        "randomHologram": {
+          "title": "Random Hologram",
+          "description": "Allows Hologram Slices to be selected by the random burst scheduler."
+        },
+        "randomPulseFrame": {
+          "title": "Random Pulse Frame",
+          "description": "Allows Pulse Frame to be selected by the random burst scheduler."
+        },
+        "randomFlicker": {
+          "title": "Random Cold-Start Flicker",
+          "description": "Allows Cold-Start Flicker to be selected by the random burst scheduler."
+        },
+        "backgroundPulseSpeed": {
+          "title": "Background Pulse Speed",
+          "description": "Controls how quickly the background opacity breathing cycle runs."
+        },
+        "flickerDuration": {
+          "title": "Flicker Duration",
+          "description": "Controls how long each cold-start flicker burst lasts."
+        },
+        "verticalAnchor": {
+          "title": "Vertical Anchor",
+          "description": "Top lays columns downward from the upper edge. Bottom reverses the layout upward from the lower edge and moves the header symbol to the bottom."
+        },
+        "robocopTrackPhase": {
+          "title": "Crosshair Tracking Phase",
+          "description": "Controls what fraction of the target-lock animation is spent moving the crosshair to the module before bracket lock-on begins."
+        },
+        "robocopCrossSize": {
+          "title": "Crosshair Arm Length",
+          "description": "Sets the arm length of the moving acquisition crosshair."
+        },
+        "robocopTrackTrail": {
+          "title": "Tracking Trail",
+          "description": "Draws a thin trajectory from the acquisition origin through the moving crosshair toward the target module."
+        },
+        "randomTyping": {
+          "title": "Random Retype",
+          "description": "Adds the typing effect to the random burst pool. A selected active module clears and types itself back in without being toggled."
+        },
+        "extraBursts": {
+          "title": "Extended Burst Effects",
+          "description": "Enables the lightweight 2D extended animation library without loading an additional post-processing shader."
+        },
+        "burstPreset": {
+          "title": "Burst Preset",
+          "description": "Selects a curated effect pool so the settings screen stays compact. All enables the complete 26-effect pool."
+        },
+        "extraBurstDuration": {
+          "title": "Extended Effect Duration",
+          "description": "Sets the shared base duration for extended random burst effects."
+        },
+        "extraBurstIntensity": {
+          "title": "Extended Effect Intensity",
+          "description": "Sets the shared motion, distortion, fragmentation and glow strength for extended effects."
+        },
+        "extraBurstColorA": {
+          "title": "Extended Color A",
+          "description": "Sets the primary accent color used by extended HUD effects."
+        },
+        "extraBurstColorB": {
+          "title": "Extended Color B",
+          "description": "Sets the secondary accent color used by extended HUD effects."
+        },
+        "customBurstPool": {
+          "title": "Custom Burst Pool",
+          "description": "Shown only for the Custom preset. Enter effect IDs separated by commas, for example Glow,Vhs,Electric,RadarSweep. Unknown names are ignored."
+        }
+      }
     }
   },
   "enumValues": {
@@ -7380,6 +8076,22 @@
     "com.codigohasta.addon.modules.TargetStrafe$ExecuteMode": {
       "游戏刻": "Tick",
       "移动时": "On Movement"
+    },
+    "com.codigohasta.addon.modules.BlueHourShader$CloudStyle": {
+      "Soft": "Soft",
+      "LowPoly": "Low Poly",
+      "Hybrid": "Hybrid"
+    },
+    "com.codigohasta.addon.modules.BlueHourShader$CloudQuality": {
+      "Low": "Low",
+      "Medium": "Medium",
+      "High": "High"
+    },
+    "com.codigohasta.addon.modules.BlueHourShader$RainMode": {
+      "Off": "Off",
+      "World": "World Rain",
+      "Screen": "Glass Rivulets",
+      "Both": "Both"
     },
     "com.codigohasta.addon.modules.adaAutoHotbar$Preset": {
       "预设_1": "Preset 1",
@@ -7449,6 +8161,56 @@
     "com.codigohasta.addon.modules.TpAura$AttackMode": {
       "Smart": "Fully Charged Smash",
       "Fast": "Zero-Charge Rapid Attack"
+    },
+    "com.codigohasta.addon.modules.VerticalModuleList$Side": {
+      "Left": "Left",
+      "Right": "Right"
+    },
+    "com.codigohasta.addon.modules.VerticalModuleList$SortMode": {
+      "Recent": "Recently Enabled",
+      "Alphabetical": "Alphabetical",
+      "Longest": "Longest Name First"
+    },
+    "com.codigohasta.addon.modules.VerticalModuleList$SymbolMode": {
+      "Fixed": "Fixed Symbol",
+      "Cycle": "Cycle Symbol Pool"
+    },
+    "com.codigohasta.addon.modules.VerticalModuleList$BackgroundMode": {
+      "None": "None",
+      "Column": "Per Column",
+      "Panel": "Full Panel"
+    },
+    "com.codigohasta.addon.modules.VerticalModuleList$LatinLayout": {
+      "Normal": "Rotate Whole Word 90° Clockwise",
+      "Stacked": "Stack Letters Vertically"
+    },
+    "com.codigohasta.addon.modules.VerticalModuleList$SymbolRendererMode": {
+      "Auto": "Auto Compatibility",
+      "FollowFont": "Follow Text Font",
+      "Minecraft": "Minecraft Native Font"
+    },
+    "com.codigohasta.addon.modules.VerticalModuleList$ScanMode": {
+      "Line": "Thin Line",
+      "SoftBand": "Soft Beam",
+      "DualBand": "Dual Beam"
+    },
+    "com.codigohasta.addon.modules.VerticalModuleList$ScanDirection": {
+      "TopToBottom": "Top to Bottom",
+      "BottomToTop": "Bottom to Top",
+      "PingPong": "Ping-Pong"
+    },
+    "com.codigohasta.addon.modules.VerticalModuleList$VerticalAnchor": {
+      "Top": "Top / Downward",
+      "Bottom": "Bottom / Reverse Upward"
+    },
+    "com.codigohasta.addon.modules.VerticalModuleList$BurstPreset": {
+      "Minimal": "Minimal",
+      "Balanced": "Balanced",
+      "Motion": "Motion",
+      "Cyber": "Cyber Glitch",
+      "Signal": "Signal HUD",
+      "All": "All 26 Effects",
+      "Custom": "Custom"
     }
   },
   "dynamic": {

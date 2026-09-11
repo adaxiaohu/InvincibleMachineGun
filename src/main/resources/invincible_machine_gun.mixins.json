@@ -54,7 +54,8 @@
     "WMeteorDropdownValueEnglishTranslationMixin",
     "MixinPlayerEntity",
     "AbstractClientPlayerEntityAccessor",
-    "HandledScreenInvoker"
+    "HandledScreenInvoker",
+    "MixinMeshBuilder2DTransform"
   ],
   "injectors": {
     "defaultRequire": 1

@@ -88,6 +88,7 @@ public class AddonTemplate extends MeteorAddon {
         modules.add(new MassTpa());
         modules.add(new MineESP());
         modules.add(new ModuleList());
+        modules.add(new VerticalModuleList());
         modules.add(new MusicPlayer());
         modules.add(new OreVeinESP());
         modules.add(new PearlPhase());
@@ -168,6 +169,7 @@ public class AddonTemplate extends MeteorAddon {
          modules.add(new Stuck());
          modules.add(new Ambience());
          modules.add(new CyberFujiShader());
+         modules.add(new BlueHourShader());
          modules.add(new DuskShader());
          modules.add(new MatrixShader());
          modules.add(new SakuraShader());
