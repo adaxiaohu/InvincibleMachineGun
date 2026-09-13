@@ -23,6 +23,7 @@ import net.minecraft.client.network.PlayerListEntry;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityType;
 import net.minecraft.entity.LivingEntity;
+import net.minecraft.entity.passive.TameableEntity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.BlockItem;
 import net.minecraft.item.Items;
@@ -160,6 +161,12 @@ public class TpAnchor extends Module {
         .defaultValue(EntityType.PLAYER)
         .build()
     );
+    
+    // 条件开关设置
+    private final Setting<Boolean> ignoreFriends = sgTargets.add(new BoolSetting.Builder().name("忽略好友").defaultValue(false).description("开启后不将好友设为攻击目标").build());
+    private final Setting<Boolean> ignoreNamed = sgTargets.add(new BoolSetting.Builder().name("忽略命名").defaultValue(false).description("开启后不将命名实体设为攻击目标").build());
+    private final Setting<Boolean> ignoreTamed = sgTargets.add(new BoolSetting.Builder().name("忽略驯服").defaultValue(false).description("开启后不将驯服的生物设为攻击目标").build());
+    
     private final Setting<Boolean> attackSurvival = sgTargets.add(new BoolSetting.Builder().name("攻击生存").defaultValue(true).build());
     private final Setting<Boolean> attackCreative = sgTargets.add(new BoolSetting.Builder().name("攻击创造").defaultValue(false).build());
     private final Setting<Boolean> attackAdventure = sgTargets.add(new BoolSetting.Builder().name("攻击冒险").defaultValue(false).build());
@@ -516,6 +523,21 @@ public class TpAnchor extends Module {
             if (e == mc.player || !e.isAlive() || !(e instanceof LivingEntity)) continue;
             if (!entities.get().contains(e.getType())) continue;
             if (e.distanceTo(mc.player) > range.get()) continue;
+            
+            // 条件开关过滤
+            if (ignoreFriends.get() && e instanceof PlayerEntity p && Friends.get().isFriend(p)) {
+                continue; // 忽略好友
+            }
+            if (ignoreNamed.get() && e.hasCustomName()) {
+                continue; // 忽略命名实体
+            }
+            if (ignoreTamed.get()) {
+                // 检查实体是否被驯服（适用于狼、猫等可驯服生物）
+                if (e instanceof TameableEntity tameable && tameable.isTamed()) {
+                    continue; // 忽略驯服的生物
+                }
+            }
+            
             if (e instanceof PlayerEntity p) {
                 GameMode gm = getGameMode(p);
                 if (gm == GameMode.SURVIVAL && !attackSurvival.get()) continue;

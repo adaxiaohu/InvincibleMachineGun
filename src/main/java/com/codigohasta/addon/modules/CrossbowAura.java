@@ -99,6 +99,7 @@ public class CrossbowAura extends Module {
 
     // --- 目标设置 ---
     private final Setting<Set<EntityType<?>>> entities = sgTargets.add(new EntityTypeListSetting.Builder().name("目标实体").defaultValue(EntityType.PLAYER, EntityType.ZOMBIE, EntityType.SKELETON, EntityType.CREEPER).build());
+    private final Setting<Boolean> ignoreFriends = sgTargets.add(new BoolSetting.Builder().name("忽略好友").defaultValue(true).build());
     private final Setting<Boolean> ignorePets = sgTargets.add(new BoolSetting.Builder().name("忽略宠物").defaultValue(true).build());
     private final Setting<Boolean> ignoreNamed = sgTargets.add(new BoolSetting.Builder().name("忽略命名生物").defaultValue(true).build());
     
@@ -322,7 +323,7 @@ public class CrossbowAura extends Module {
             if (gm == GameMode.ADVENTURE && !targetAdventure.get()) return false;
             if (gm == GameMode.SPECTATOR) return false;
 
-            if (!Friends.get().shouldAttack(player)) return false;
+            if (ignoreFriends.get() && !Friends.get().shouldAttack(player)) return false;
 
             if (listMode.get() != ListMode.Off) {
                 String name = player.getName().getString();

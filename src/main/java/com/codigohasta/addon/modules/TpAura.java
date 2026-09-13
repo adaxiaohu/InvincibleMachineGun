@@ -2,6 +2,10 @@ package com.codigohasta.addon.modules;
 
 import com.codigohasta.addon.AddonTemplate;
 import com.codigohasta.addon.mixin.InventoryAccessor;
+import com.codigohasta.addon.modules.TpAura.AttackMode;
+import com.codigohasta.addon.modules.TpAura.Mode;
+import com.codigohasta.addon.utils.leaveshack.InventoryUtil;
+
 import meteordevelopment.meteorclient.mixininterface.IPlayerMoveC2SPacket;
 import meteordevelopment.meteorclient.renderer.ShapeMode;
 import meteordevelopment.meteorclient.settings.*;
@@ -22,9 +26,12 @@ import net.minecraft.block.Blocks;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityType;
 import net.minecraft.entity.LivingEntity;
+import net.minecraft.entity.ai.TargetPredicate;
+import net.minecraft.entity.passive.TameableEntity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.*;
 import net.minecraft.network.packet.c2s.play.*;
+import net.minecraft.screen.slot.SlotActionType;
 import net.minecraft.util.Hand;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Box;
@@ -55,6 +62,13 @@ public class TpAura extends Module {
     private final Setting<Boolean> autoSwitch = sgGeneral.add(new BoolSetting.Builder().name("自动切武器").defaultValue(true).build());
     private final Setting<Boolean> requireMace = sgGeneral.add(new BoolSetting.Builder().name("仅手持重锤").defaultValue(false).build());
     private final Setting<Boolean> swingHand = sgGeneral.add(new BoolSetting.Builder().name("挥手").defaultValue(true).build());
+    private final Setting<Boolean> silentSwap = sgGeneral.add(new BoolSetting.Builder()
+        .name("静默切换")
+        .description("使用数据包切换武器（无动画、无声音），其他玩家更难察觉。切换时会在客户端显示武器图标。")
+        .defaultValue(true)
+        .visible(() -> autoSwitch.get())
+        .build()
+    );
 
     // --- 3. TP Settings ---
     public enum Mode { Vanilla, Paper }
@@ -64,9 +78,21 @@ public class TpAura extends Module {
     private final Setting<Integer> paperPackets = sgTP.add(new IntSetting.Builder().name("垫包数量").defaultValue(8).min(1).sliderMax(20).build());
     private final Setting<Boolean> returnPos = sgTP.add(new BoolSetting.Builder().name("攻击后回传").defaultValue(true).build());
 
+    private final Setting<Boolean> offsetFix = sgTP.add(new BoolSetting.Builder()
+    .name("偏移同步")
+    .description("发送微小偏移包防止拉回，但可能导致卡住")
+    .defaultValue(true)
+    .build()
+);
+
     // --- 4. 其他设置补全 ---
     private final Setting<Set<EntityType<?>>> entities = sgTargeting.add(new EntityTypeListSetting.Builder().name("目标实体").defaultValue(Collections.singleton(EntityType.PLAYER)).build());
-    private final Setting<Boolean> ignoreNamed = sgTargeting.add(new BoolSetting.Builder().name("忽略命名实体").defaultValue(true).build());
+    
+    // 条件开关设置
+    private final Setting<Boolean> ignoreFriends = sgTargeting.add(new BoolSetting.Builder().name("忽略好友").defaultValue(false).description("开启后不将好友设为攻击目标").build());
+    private final Setting<Boolean> ignoreNamed = sgTargeting.add(new BoolSetting.Builder().name("忽略命名").defaultValue(true).description("开启后不将命名实体设为攻击目标").build());
+    private final Setting<Boolean> ignoreTamed = sgTargeting.add(new BoolSetting.Builder().name("忽略驯服").defaultValue(false).description("开启后不将驯服的生物设为攻击目标").build());
+    
     public enum ListMode { Whitelist, Blacklist, Off }
     private final Setting<ListMode> listMode = sgWhitelist.add(new EnumSetting.Builder<ListMode>().name("名单模式").defaultValue(ListMode.Off).build());
     private final Setting<String> playerList = sgWhitelist.add(new StringSetting.Builder().name("玩家列表").defaultValue("").build());
@@ -74,65 +100,118 @@ public class TpAura extends Module {
     private final Setting<SettingColor> pathColor = sgRender.add(new ColorSetting.Builder().name("轨迹颜色").defaultValue(new SettingColor(255, 0, 0, 100)).build());
     private final Setting<SettingColor> targetColor = sgRender.add(new ColorSetting.Builder().name("目标颜色").defaultValue(new SettingColor(255, 0, 0, 200)).build());
 
+    private final SettingGroup sgTotem = settings.createGroup("图腾绕过");
+    private final Setting<Boolean> totemBypass = sgTotem.add(new BoolSetting.Builder().name("图腾绕过").description("连续多次攻击以突破图腾无敌帧，仅Paper模式有效").defaultValue(false).build());
+    private final Setting<Integer> totemAttacks = sgTotem.add(new IntSetting.Builder().name("攻击次数").description("连续攻击次数(1-3)").defaultValue(2).min(1).max(3).sliderRange(1, 3).visible(() -> totemBypass.get()).build());
+    private final Setting<Integer> totemHeightIncrease = sgTotem.add(new IntSetting.Builder().name("递增高度").description("每次额外攻击增加的下落高度").defaultValue(9).min(1).sliderRange(1, 100).visible(() -> totemBypass.get()).build());
+
     private final List<Entity> targets = new ArrayList<>();
     private final List<Vec3d> renderPathNodes = new ArrayList<>();
     private Entity currentTarget;
     private int originalSlot = -1;
+    private int silentSwapSlot = -1;
+    private int silentSwapPrevSlot = -1;
     private int delayTimer = 0;
 
     public TpAura() {
-        super(AddonTemplate.CATEGORY, "如来神掌", "从天而降的掌法哈哈。抄袭了裤子条纹的tp。娱乐功能");
+        super(AddonTemplate.CATEGORY, "如来神掌", "从天而降的掌法。抄袭了裤子条纹的tp。娱乐功能");
     }
 
     @Override
     public void onActivate() {
         originalSlot = -1;
+        silentSwapSlot = -1;
+        silentSwapPrevSlot = -1;
         delayTimer = 0;
         renderPathNodes.clear();
     }
 
     @Override
     public void onDeactivate() {
-        if (originalSlot != -1 && autoSwitch.get() && mc.player != null) {
+        if (silentSwapSlot != -1 && mc.player != null) {
+            swapBackWeapon();
+        }
+        if (originalSlot != -1 && autoSwitch.get() && !silentSwap.get() && mc.player != null) {
             ((InventoryAccessor) mc.player.getInventory()).setSelectedSlot(originalSlot);
             originalSlot = -1;
         }
+    }
+
+    private int findWeaponInventorySlot() {
+        for (int i = 0; i < 45; i++) {
+            String name = mc.player.getInventory().getStack(i).getItem().toString().toLowerCase();
+            if (name.contains("sword") || name.contains("mace") || name.contains("axe")) {
+                return i < 9 ? i + 36 : i;
+            }
+        }
+        return -1;
+    }
+
+    private boolean checkAndSwapWeapon() {
+        String itemMain = mc.player.getMainHandStack().getItem().toString().toLowerCase();
+        boolean isWeapon = itemMain.contains("sword") || itemMain.contains("mace") || itemMain.contains("axe");
+        if (isWeapon && !(requireMace.get() && !itemMain.contains("mace"))) return true;
+
+        if (silentSwap.get()) {
+            int slot = findWeaponInventorySlot();
+            if (slot != -1) {
+                silentSwapSlot = slot;
+                silentSwapPrevSlot = ((InventoryAccessor) mc.player.getInventory()).getSelectedSlot();
+                if (slot >= 36) {
+                    InventoryUtil.switchToSlot(slot - 36);
+                } else {
+                    mc.interactionManager.clickSlot(mc.player.currentScreenHandler.syncId, slot, 0, SlotActionType.SWAP, mc.player);
+                    InventoryUtil.switchToSlot(0);
+                }
+                return true;
+            }
+        } else {
+            FindItemResult weapon = InvUtils.find(s -> {
+                String name = s.getItem().toString().toLowerCase();
+                return name.contains("sword") || name.contains("mace") || name.contains("axe");
+            }, 0, 8);
+            if (weapon.found()) {
+                if (originalSlot == -1) originalSlot = ((InventoryAccessor) mc.player.getInventory()).getSelectedSlot();
+                InvUtils.swap(weapon.slot(), false);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void swapBackWeapon() {
+        if (silentSwapSlot == -1) return;
+        if (silentSwapSlot >= 36) {
+            InventoryUtil.switchToSlot(silentSwapPrevSlot);
+        } else {
+            mc.interactionManager.clickSlot(mc.player.currentScreenHandler.syncId, silentSwapSlot, 0, SlotActionType.SWAP, mc.player);
+            InventoryUtil.switchToSlot(silentSwapPrevSlot);
+            mc.player.networkHandler.sendPacket(new CloseHandledScreenC2SPacket(mc.player.currentScreenHandler.syncId));
+        }
+        silentSwapSlot = -1;
+        silentSwapPrevSlot = -1;
     }
 
     @EventHandler
     private void onTick(TickEvent.Pre event) {
         if (mc.player == null || mc.world == null) return;
 
-        // 1. 武器判断与自动切换（使用字符串比对，彻底避开符号找不到的问题）
+        // 1. 武器切换
         if (autoSwitch.get()) {
-            String itemMain = mc.player.getMainHandStack().getItem().toString().toLowerCase();
-            boolean isWeapon = itemMain.contains("sword") || itemMain.contains("mace") || itemMain.contains("axe");
-
-            if (!isWeapon || (requireMace.get() && !itemMain.contains("mace"))) {
-                FindItemResult weapon = InvUtils.find(s -> {
-                    String name = s.getItem().toString().toLowerCase();
-                    return name.contains("sword") || name.contains("mace") || name.contains("axe");
-                }, 0, 8);
-                
-                if (weapon.found()) {
-                    if (originalSlot == -1) originalSlot = ((InventoryAccessor) mc.player.getInventory()).getSelectedSlot();
-                    InvUtils.swap(weapon.slot(), false);
-                    return; // 重要：切完刀立刻停止这一刻，防止0蓄力打击
-                }
-            }
+            if (!checkAndSwapWeapon()) return;
         }
 
-        // 2. 蓄力检查（解决1.7伤害的核心）
+        // 2. 蓄力检查
         if (attackMode.get() == AttackMode.Smart) {
-            // 1.21中，0.0f 或 0.5f 都可以获取进度，如果总是不打，试着微调这个值
             if (mc.player.getAttackCooldownProgress(0.5f) < cooldownThreshold.get()) {
-                return; // 蓄力没满，继续等待
+                return;
             }
         }
 
         // 3. 额外延迟处理
         if (delayTimer > 0) {
             delayTimer--;
+            swapBackWeapon();
             return;
         }
 
@@ -141,13 +220,15 @@ public class TpAura extends Module {
         TargetUtils.getList(targets, this::entityCheck, SortPriority.LowestDistance, 1);
         if (targets.isEmpty()) {
             currentTarget = null;
+            swapBackWeapon();
             return;
         }
         currentTarget = targets.get(0);
 
         // 5. 执行瞬移轰炸
         executeTrouserAttack(currentTarget);
-        
+        swapBackWeapon();
+
         // 6. 重置延迟计时器
         delayTimer = attackDelay.get();
     }
@@ -177,33 +258,69 @@ public class TpAura extends Module {
             mc.player.networkHandler.sendPacket(new PlayerMoveC2SPacket.OnGroundOnly(false, mc.player.horizontalCollision));
         }
 
-        // B. 瞬间移动序列
-        if (mode.get() == Mode.Paper && goUp.get()) {
-            sendMove(highStart);
-            sendMove(highTarget);
-        }
-        sendMove(finalPos);
+        boolean totemMode = totemBypass.get() && mode.get() == Mode.Paper;
 
-        // C. 攻击
-        if (swingHand.get()) mc.player.swingHand(Hand.MAIN_HAND);
-        mc.player.networkHandler.sendPacket(PlayerInteractEntityC2SPacket.attack(target, mc.player.isSneaking()));
+        // B. 攻击阶段
+        if (totemMode) {
+            // 图腾绕过：多次递增高度攻击以突破无敌帧
+            int attackCount = totemAttacks.get();
+            int currentHeight = (int) reach;
 
-        // D. 瞬间回传
-        if (returnPos.get()) {
+            for (int i = 0; i < attackCount; i++) {
+                int blocks = (i == 0) ? (int) reach : currentHeight;
+
+                if (mc.world != null) {
+                    int worldTop = mc.world.getTopYInclusive() - 1;
+                    if (finalPos.y + blocks > worldTop) {
+                        blocks = (int) (worldTop - finalPos.y);
+                        if (blocks < 1) break;
+                    }
+                }
+
+                Vec3d progressiveAbove = finalPos.add(0, blocks, 0);
+                if (goUp.get()) sendMove(progressiveAbove);
+                sendMove(finalPos);
+
+                if (swingHand.get()) mc.player.swingHand(Hand.MAIN_HAND);
+                mc.player.networkHandler.sendPacket(PlayerInteractEntityC2SPacket.attack(target, mc.player.isSneaking()));
+
+                currentHeight += totemHeightIncrease.get();
+            }
+        } else {
+            // 原版单次攻击
             if (mode.get() == Mode.Paper && goUp.get()) {
+                sendMove(highStart);
+                sendMove(highTarget);
+            }
+            sendMove(finalPos);
+
+            if (swingHand.get()) mc.player.swingHand(Hand.MAIN_HAND);
+            mc.player.networkHandler.sendPacket(PlayerInteractEntityC2SPacket.attack(target, mc.player.isSneaking()));
+        }
+
+        // C. 瞬间回传
+        if (returnPos.get()) {
+            if (mode.get() == Mode.Paper && goUp.get() && !totemMode) {
                 sendMove(highTarget);
                 sendMove(highStart);
             }
             sendMove(startPos);
-            
-            // 极微小偏移强刷同步，防止拉回
-            Vec3d offset = getOffset(startPos);
-            sendMove(offset);
-            mc.player.setPosition(offset.x, offset.y, offset.z);
+
+            if (offsetFix.get()) {
+                Vec3d offset = getOffset(startPos);
+                sendMove(offset);
+                mc.player.setPosition(offset.x, offset.y, offset.z);
+            } else {
+                mc.player.setPosition(startPos.x, startPos.y, startPos.z);
+            }
         } else {
-            Vec3d offset = getOffset(finalPos);
-            sendMove(offset);
-            mc.player.setPosition(offset.x, offset.y, offset.z);
+            if (offsetFix.get()) {
+                Vec3d offset = getOffset(finalPos);
+                sendMove(offset);
+                mc.player.setPosition(offset.x, offset.y, offset.z);
+            } else {
+                mc.player.setPosition(finalPos.x, finalPos.y, finalPos.z);
+            }
         }
     }
 
@@ -264,6 +381,22 @@ public class TpAura extends Module {
         if (!(entity instanceof LivingEntity) || !entity.isAlive() || entity == mc.player) return false;
         if (!entities.get().contains(entity.getType())) return false;
         if (mc.player.distanceTo(entity) > maxRange.get()) return false;
+        
+        // 条件开关过滤
+        if (ignoreFriends.get() && entity instanceof PlayerEntity p && Friends.get().isFriend(p)) {
+            return false; // 忽略好友
+        }
+        if (ignoreNamed.get() && entity.hasCustomName()) {
+            return false; // 忽略命名实体
+        }
+        if (ignoreTamed.get()) {
+            // 检查实体是否被驯服（适用于狼、猫等可驯服生物）
+            if (entity instanceof TameableEntity tameable && tameable.isTamed()) {
+                return false; // 忽略驯服的生物
+            }
+        }
+        
+        // 玩家特殊处理
         if (entity instanceof PlayerEntity p) {
             if (p.isCreative() || p.isSpectator()) return false;
             if (!Friends.get().shouldAttack(p)) return false;
@@ -272,7 +405,8 @@ public class TpAura extends Module {
             if (listMode.get() == ListMode.Whitelist && !list.contains(name)) return false;
             if (listMode.get() == ListMode.Blacklist && list.contains(name)) return false;
         }
-        return !ignoreNamed.get() || !entity.hasCustomName();
+        
+        return true;
     }
 
     @Override

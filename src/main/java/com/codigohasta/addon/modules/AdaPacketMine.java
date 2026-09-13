@@ -473,7 +473,7 @@ public class AdaPacketMine extends Module {
 
         // --- Bypass Ground 关键逻辑 ---
         // 核心思路：发送一个 PlayerMoveC2SPacket.Full 包，告诉服务器我们在地面上 (onGround=true)
-        boolean isFallFlying = mc.player.getPose().toString().equals("FALL_FLYING");
+        boolean isFallFlying = mc.player.getPose().toString().equals("GLIDING");
         
         // 只有当 Bypass 开启，且我们可能受到惩罚时(水下或空中)，才强制发送
         if (bypassGround.get() && !isFallFlying && !data.getState().isAir()) {

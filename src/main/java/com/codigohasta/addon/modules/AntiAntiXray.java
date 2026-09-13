@@ -114,6 +114,41 @@ public class AntiAntiXray extends Module {
         .build()
     );
 
+    private final Setting<Boolean> scanWaitMode = sgBaritone.add(new BoolSetting.Builder()
+        .name("等待扫描完成")
+        .description("开启后，挖隧道时会定期暂停等待扫描完成再继续，扫描间隔由下方设置控制。关闭则保持原有移动即扫描的即时行为。")
+        .defaultValue(false)
+        .visible(() -> autoMine.get() && tunnelMode.get())
+        .build()
+    );
+
+    private final Setting<Integer> tunnelScanInterval = sgBaritone.add(new IntSetting.Builder()
+        .name("隧道扫描间隔(秒)")
+        .description("挖隧道时，每隔多少秒暂停并扫描周围矿物。扫描期间Baritone会暂停等待。")
+        .defaultValue(5)
+        .min(1)
+        .max(60)
+        .sliderMax(30)
+        .visible(() -> autoMine.get() && tunnelMode.get() && scanWaitMode.get())
+        .build()
+    );
+
+    private final Setting<Boolean> scanWhileMining = sgBaritone.add(new BoolSetting.Builder()
+        .name("挖矿时也间隔扫描")
+        .description("开启后，前往挖掘矿物的过程中也会按设定间隔暂停并扫描周围。关闭则挖矿时不触发间隔扫描。")
+        .defaultValue(false)
+        .visible(() -> autoMine.get() && scanWaitMode.get())
+        .build()
+    );
+
+    private final Setting<Boolean> scanOnMineComplete = sgBaritone.add(new BoolSetting.Builder()
+        .name("挖矿完成时扫描")
+        .description("开启后，当挖掘矿物任务完成时立刻扫描一次并等待扫描结束。")
+        .defaultValue(false)
+        .visible(() -> autoMine.get() && scanWaitMode.get())
+        .build()
+    );
+
     // --- 性能设置 ---
     private final Setting<Integer> threadCount = sgPerformance.add(new IntSetting.Builder()
         .name("线程数量")
@@ -215,6 +250,9 @@ public class AntiAntiXray extends Module {
     private boolean isScanning = false;
     private boolean lastKeyPressedState = false;
     private BlockPos lastRefillPos = null;
+    private int tunnelScanCooldown = 0;   // 隧道扫描冷却（BaritoneLogic调用次数）
+    private boolean waitingForScan = false; // 等待扫描完成标志
+    private boolean wasMining = false;     // 上一轮是否在挖矿（用于检测挖矿完成）
 
     public AntiAntiXray() {
         super(AddonTemplate.CATEGORY, "反反矿透", "可以通过点击附近方块来获得真实的矿物信息，实现矿透。好像有些假矿反作弊插件修复了这种方法。有些服务器可以有用");
@@ -227,9 +265,14 @@ public class AntiAntiXray extends Module {
         lastKeyPressedState = false;
         lastRefillPos = null;
         baritoneTimer = 0;
-        
+        tunnelScanCooldown = tunnelScanInterval.get() * 4;
+        waitingForScan = false;
+
         if (triggerMode.get() == TriggerMode.Automatic) {
-            refillQueue();
+            // 等待扫描模式下，初始不填充队列，由Baritone定时触发首次扫描
+            if (!(scanWaitMode.get() && autoMine.get())) {
+                refillQueue();
+            }
         }
     }
 
@@ -256,6 +299,9 @@ public class AntiAntiXray extends Module {
         timer = 0;
         baritoneTimer = 0;
         lastRefillPos = null;
+        tunnelScanCooldown = 0;
+        waitingForScan = false;
+        wasMining = false;
     }
 
     @EventHandler
@@ -276,18 +322,30 @@ public class AntiAntiXray extends Module {
 
         // 2. 扫描队列逻辑
         if (triggerMode.get() == TriggerMode.Automatic) {
-            boolean movedSignificantly = lastRefillPos == null || lastRefillPos.getSquaredDistance(playerPos) > 2.25; 
-            
-            if (movedSignificantly) {
-                if (dynamicReset.get()) {
-                    queueA.clear(); queueB.clear();
+            // 等待扫描模式+自动挖掘：禁止移动触发扫描，由Baritone定时触发
+            boolean suppressAutoScan = waitingForScan || (scanWaitMode.get() && autoMine.get());
+
+            if (!suppressAutoScan) {
+                boolean movedSignificantly = lastRefillPos == null || lastRefillPos.getSquaredDistance(playerPos) > 2.25;
+
+                if (movedSignificantly) {
+                    if (dynamicReset.get()) {
+                        queueA.clear(); queueB.clear();
+                    }
+                    lastRefillPos = playerPos;
+                    refillQueue();
                 }
+                else if (isQueuesEmpty() && mc.player.age % 10 == 0) {
+                    if (isScanning) finishScan();
+                    refillQueue();
+                }
+            } else {
+                // 等待期间，持续更新位置标记防止移动触发重新填充
                 lastRefillPos = playerPos;
-                refillQueue();
-            } 
-            else if (isQueuesEmpty() && mc.player.age % 10 == 0) {
-                if (isScanning) finishScan();
-                refillQueue();
+                // 队列已空但扫描状态残留时强制清除，避免卡100%进度
+                if (isQueuesEmpty() && isScanning) {
+                    finishScan();
+                }
             }
         } else {
             boolean isPressed = forceScanKey.get().isPressed();
@@ -318,8 +376,12 @@ public class AntiAntiXray extends Module {
                 if (baritoneTimer > 0) {
                     baritoneTimer--;
                 } else {
-                    baritoneTimer = 5; 
-                    handleBaritoneLogic(playerPos);
+                    baritoneTimer = 5;
+                    if (waitingForScan) {
+                        handleScanWait(playerPos);
+                    } else {
+                        handleBaritoneLogic(playerPos);
+                    }
                 }
             }
         }
@@ -368,10 +430,37 @@ public class AntiAntiXray extends Module {
         return true;
     }
 
+    // --- 触发扫描（取消当前活动，清空并重新填充扫描队列）---
+    private void triggerScan(BlockPos playerPos, String message) {
+        tunnelScanCooldown = -1;
+        BaritoneAPI.getProvider().getPrimaryBaritone().getPathingBehavior().cancelEverything();
+
+        int clearRadius = radius.get();
+        synchronized (scannedPositions) {
+            scannedPositions.removeIf(p -> p.isWithinDistance(playerPos, clearRadius));
+        }
+
+        queueA.clear();
+        queueB.clear();
+        refillQueue();
+
+        waitingForScan = true;
+        mc.inGameHud.setOverlayMessage(Text.of(message), false);
+    }
+
     // --- Baritone 智能调度 ---
     private void handleBaritoneLogic(BlockPos playerPos) {
         int threshold = mineThreshold.get();
         int oreCount = foundOres.size();
+
+        // 挖矿完成时扫描：检测到从"有矿"变为"无矿"的瞬间
+        if (wasMining && oreCount < threshold && scanOnMineComplete.get() && !waitingForScan) {
+            wasMining = false;
+            triggerScan(playerPos, "§e[挖矿完成] 矿物已挖掘，扫描周围...");
+            return;
+        }
+        // 更新挖矿状态供下次调用
+        wasMining = (oreCount >= threshold);
 
         // 场景一：发现的矿石数量 >= 阈值
         if (oreCount >= threshold) {
@@ -380,18 +469,86 @@ public class AntiAntiXray extends Module {
                 .min(Comparator.comparingDouble(pos -> pos.getSquaredDistance(playerPos)))
                 .orElse(null);
 
-            if (closest != null) {
-                if (!isMiningTarget(closest)) {
-                    BaritoneAPI.getProvider().getPrimaryBaritone().getCustomGoalProcess().setGoalAndPath(new GoalBlock(closest));
+            // 挖矿时也按间隔扫描
+            if (scanWaitMode.get() && scanWhileMining.get()) {
+                if (tunnelScanCooldown > 0) {
+                    tunnelScanCooldown--;
+                    if (closest != null && !isMiningTarget(closest)) {
+                        BaritoneAPI.getProvider().getPrimaryBaritone().getCustomGoalProcess().setGoalAndPath(new GoalBlock(closest));
+                    }
+                }
+
+                if (tunnelScanCooldown <= 0 && !waitingForScan) {
+                    // 冷却结束，暂停挖矿，开始扫描周围
+                    triggerScan(playerPos, "§e[挖矿扫描] 前往矿物途中，暂停并扫描周围...");
+                }
+            } else {
+                // 原始行为：直接前往挖矿
+                if (closest != null) {
+                    if (!isMiningTarget(closest)) {
+                        BaritoneAPI.getProvider().getPrimaryBaritone().getCustomGoalProcess().setGoalAndPath(new GoalBlock(closest));
+                    }
                 }
             }
-        } 
+        }
         // 场景二：矿石不足阈值，且开启了盾构模式
         else if (tunnelMode.get()) {
-            if (!isPathing()) {
-                BaritoneAPI.getProvider().getPrimaryBaritone().getCommandManager().execute("tunnel");
+            // 等待扫描完成模式：按间隔定时扫描，不移动触发
+            if (scanWaitMode.get()) {
+                if (tunnelScanCooldown > 0) {
+                    // 冷却中，正常挖隧道
+                    tunnelScanCooldown--;
+                    if (!isPathing()) {
+                        BaritoneAPI.getProvider().getPrimaryBaritone().getCommandManager().execute("tunnel");
+                    }
+                }
+
+                if (tunnelScanCooldown <= 0 && !waitingForScan) {
+                    // 冷却结束，暂停所有Baritone活动，开始扫描周围
+                    triggerScan(playerPos, "§e[隧道扫描] 暂停挖掘，扫描周围矿物中...");
+                }
+            } else {
+                // 原始模式：不等待扫描，隧道一直挖
+                if (!isPathing()) {
+                    BaritoneAPI.getProvider().getPrimaryBaritone().getCommandManager().execute("tunnel");
+                }
             }
         }
+    }
+
+    // --- 等待扫描完成后的处理 ---
+    private void handleScanWait(BlockPos playerPos) {
+        // 扫描尚未完成，继续等待（只检查队列，isScanning由finishScan管理）
+        if (!isQueuesEmpty()) {
+            return;
+        }
+
+        // 扫描已完成，清理扫描状态
+        if (isScanning) finishScan();
+
+        int oreCount = foundOres.size();
+        int threshold = mineThreshold.get();
+
+        if (oreCount >= threshold) {
+            // 发现足够矿物，前往挖掘
+            BlockPos closest = foundOres.keySet().stream()
+                .min(Comparator.comparingDouble(pos -> pos.getSquaredDistance(playerPos)))
+                .orElse(null);
+            if (closest != null) {
+                BaritoneAPI.getProvider().getPrimaryBaritone().getCustomGoalProcess().setGoalAndPath(new GoalBlock(closest));
+                mc.inGameHud.setOverlayMessage(Text.of("§a[隧道扫描] 发现 " + oreCount + " 个矿物，前往挖掘！"), false);
+            }
+        } else {
+            // 未发现足够矿物，继续挖隧道
+            if (tunnelMode.get()) {
+                BaritoneAPI.getProvider().getPrimaryBaritone().getCommandManager().execute("tunnel");
+                mc.inGameHud.setOverlayMessage(Text.of("§7[隧道扫描] 未发现足够矿物，继续挖掘隧道..."), false);
+            }
+        }
+
+        // 重置扫描状态
+        waitingForScan = false;
+        tunnelScanCooldown = tunnelScanInterval.get() * 4;
     }
 
     private boolean isMiningTarget(BlockPos target) {

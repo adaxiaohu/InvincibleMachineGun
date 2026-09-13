@@ -73,7 +73,7 @@ public class MacroAnchor extends Module {
     private int originalSlot = -1;
 
     public MacroAnchor() {
-        super(AddonTemplate.CATEGORY, "macro-anchor", "自动挡锚、充能与引爆宏.不能绕过grimac.谁知道怎么绕过么");
+        super(AddonTemplate.CATEGORY, "Legit自动挡锚", "自动挡锚、充能与引爆宏.暂不能绕过grimac.希望大神优化");
     }
 
     @Override

@@ -1,5 +1,7 @@
 package com.codigohasta.addon.mixin;
 
+import com.codigohasta.addon.modules.CameraClip;
+import com.codigohasta.addon.modules.MotionCamera;
 import com.codigohasta.addon.utils.CamUtils;
 import meteordevelopment.meteorclient.MeteorClient;
 import meteordevelopment.meteorclient.systems.modules.Modules;
@@ -15,6 +17,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.ModifyArgs;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import org.spongepowered.asm.mixin.injection.invoke.arg.Args;
 
 @Mixin(Camera.class)
@@ -40,6 +43,34 @@ public abstract class MixinCamera {
                 args.set(0, y);
                 args.set(1, p);
             }
+        }
+    }
+
+    @ModifyArgs(method = "update", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/render/Camera;setPos(DDD)V"))
+    private void onUpdateSetPosArgs(Args args) {
+        if (!Modules.get().isActive(Freecam.class) && MotionCamera.INSTANCE != null && MotionCamera.INSTANCE.on()) {
+            args.set(0, MotionCamera.INSTANCE.getFakeX(tickDelta));
+            args.set(1, MotionCamera.INSTANCE.getFakeY(tickDelta));
+            args.set(2, MotionCamera.INSTANCE.getFakeZ(tickDelta));
+        }
+    }
+
+    // ---- CameraClip ----
+
+    @Unique
+    private static CameraClip cameraClip;
+
+    @Unique
+    private static CameraClip getCameraClip() {
+        if (cameraClip == null) cameraClip = Modules.get().get(CameraClip.class);
+        return cameraClip;
+    }
+
+    @Inject(method = "clipToSpace", at = @At("HEAD"), cancellable = true)
+    private void onClipToSpace(float f, CallbackInfoReturnable<Float> cir) {
+        CameraClip clip = getCameraClip();
+        if (clip != null && clip.isActive()) {
+            cir.setReturnValue((float) clip.getDistance());
         }
     }
 }

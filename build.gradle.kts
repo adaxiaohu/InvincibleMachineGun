@@ -48,9 +48,18 @@ dependencies {
     modCompileOnly("meteordevelopment:baritone:1.21.11-SNAPSHOT")
 
     modCompileOnly(fileTree("libs") { include("*.jar") })
-     
+}
 
-    
+loom {
+    accessWidenerPath = file("src/main/resources/invincible-machine-gun.accesswidener")
+    mixin {
+        useLegacyMixinAp = true
+    }
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
 }
 
 tasks {
@@ -75,12 +84,6 @@ tasks {
         from("LICENSE") {
             rename { "${it}_${inputs.properties["archivesName"]}" }
         }
-    }
-
-    // 保持你要求的 Java 21 环境
-    java {
-        sourceCompatibility = JavaVersion.VERSION_21
-        targetCompatibility = JavaVersion.VERSION_21
     }
 
     withType<JavaCompile> {

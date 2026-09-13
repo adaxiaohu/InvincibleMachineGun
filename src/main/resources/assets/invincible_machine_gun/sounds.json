@@ -1,0 +1,26 @@
+{
+  "block_scanning_confirmation": {
+    "sounds": ["invincible_machine_gun:block_scanning_confirmation"]
+  },
+  "dying": {
+    "sounds": ["invincible_machine_gun:dying"]
+  },
+  "found_it": {
+    "sounds": ["invincible_machine_gun:found_it"]
+  },
+  "hurt": {
+    "sounds": ["invincible_machine_gun:hurt"]
+  },
+  "scan_and_confirm_1": {
+    "sounds": ["invincible_machine_gun:scan_and_confirm_1"]
+  },
+  "scan_and_confirm_2": {
+    "sounds": ["invincible_machine_gun:scan_and_confirm_2"]
+  },
+  "scan_and_confirm_3": {
+    "sounds": ["invincible_machine_gun:scan_and_confirm_3"]
+  },
+  "terminator": {
+    "sounds": ["invincible_machine_gun:terminator"]
+  }
+}

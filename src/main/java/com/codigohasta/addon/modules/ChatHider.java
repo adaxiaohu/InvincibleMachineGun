@@ -42,12 +42,16 @@ public class ChatHider extends Module {
     @Override
     public void onDeactivate() {
         // 模块关闭时，恢复原来的透明度
-        mc.options.getChatOpacity().setValue(originalOpacity);
+        // 修复：如果 originalOpacity 为 0.0，说明是上一次运行时模块将 options 文件写成了 0.0，
+        // 此时应使用 openOpacity 的值（默认 1.0）来恢复，否则聊天框仍然不可见。
+        mc.options.getChatOpacity().setValue(originalOpacity > 0.0 ? originalOpacity : openOpacity.get());
     }
 
     @EventHandler
     private void onTick(TickEvent.Post event) {
         if (mc.player == null) return;
+        // 防止在关闭模块后，该 handler 仍在本 tick 或下个 tick 再次执行，覆盖 onDeactivate 恢复的原始透明度
+        if (!isActive()) return;
 
         // 核心逻辑：
         // 检查当前屏幕是不是聊天屏幕 (ChatScreen)

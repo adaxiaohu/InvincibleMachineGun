@@ -1,7 +1,5 @@
 package com.codigohasta.addon.modules;
 
-import net.minecraft.util.math.Vec3d;
-
 import com.codigohasta.addon.AddonTemplate;
 import meteordevelopment.meteorclient.events.game.SendMessageEvent;
 import meteordevelopment.meteorclient.settings.*;
@@ -16,8 +14,9 @@ public class HexChat extends Module {
     public enum Mode {
         Static("单色"),
         Gradient("双色渐变"),
-        Quad("四色渐变"),   // 新增：满足你截图里那种多种颜色的需求
-        Rainbow("彩虹模式"); // 新增：自动全彩
+        Quad("四色渐变"),
+        Rainbow("彩虹模式"),
+        Vanilla("原版颜色");
 
         private final String title;
 
@@ -28,6 +27,42 @@ public class HexChat extends Module {
         @Override
         public String toString() {
             return title;
+        }
+    }
+
+    public enum VanillaColor {
+        BLACK("黑色", "0"),
+        DARK_BLUE("深蓝色", "1"),
+        DARK_GREEN("深绿色", "2"),
+        DARK_AQUA("天蓝色", "3"),
+        DARK_RED("红色", "4"),
+        DARK_PURPLE("深紫色", "5"),
+        GOLD("金黄色", "6"),
+        GRAY("浅灰色", "7"),
+        DARK_GRAY("深灰色", "8"),
+        BLUE("淡紫色", "9"),
+        GREEN("浅绿色", "a"),
+        AQUA("淡蓝色", "b"),
+        RED("淡红色", "c"),
+        LIGHT_PURPLE("粉红色", "d"),
+        YELLOW("淡黄色", "e"),
+        WHITE("白色", "f");
+
+        private final String title;
+        private final String code;
+
+        VanillaColor(String title, String code) {
+            this.title = title;
+            this.code = code;
+        }
+
+        @Override
+        public String toString() {
+            return title;
+        }
+
+        public String getCode() {
+            return code;
         }
     }
 
@@ -99,6 +134,15 @@ public class HexChat extends Module {
         .build()
     );
 
+    // --- 原版颜色设置 ---
+    private final Setting<VanillaColor> vanillaColor = sgGeneral.add(new EnumSetting.Builder<VanillaColor>()
+        .name("原版颜色")
+        .description("选择原版 Minecraft 支持的颜色代码 (&0-9 &a-f)。")
+        .defaultValue(VanillaColor.WHITE)
+        .visible(() -> mode.get() == Mode.Vanilla)
+        .build()
+    );
+
     // --- 样式设置 ---
     private final Setting<Boolean> bold = sgStyle.add(new BoolSetting.Builder()
         .name("粗体")
@@ -117,6 +161,20 @@ public class HexChat extends Module {
     private final Setting<Boolean> underline = sgStyle.add(new BoolSetting.Builder()
         .name("下划线")
         .description("下划线 (&n)。")
+        .defaultValue(false)
+        .build()
+    );
+
+    private final Setting<Boolean> strikethrough = sgStyle.add(new BoolSetting.Builder()
+        .name("删除线")
+        .description("删除线 (&m)。")
+        .defaultValue(false)
+        .build()
+    );
+
+    private final Setting<Boolean> obfuscated = sgStyle.add(new BoolSetting.Builder()
+        .name("随机字符")
+        .description("随机字符 (&k)。")
         .defaultValue(false)
         .build()
     );
@@ -147,6 +205,8 @@ public class HexChat extends Module {
         if (bold.get()) styleBuilder.append("&l");
         if (italic.get()) styleBuilder.append("&o");
         if (underline.get()) styleBuilder.append("&n");
+        if (strikethrough.get()) styleBuilder.append("&m");
+        if (obfuscated.get()) styleBuilder.append("&k");
         String styleSuffix = styleBuilder.toString();
 
         String finalMessage;
@@ -163,6 +223,9 @@ public class HexChat extends Module {
                 break;
             case Rainbow:
                 finalMessage = applyRainbow(message, styleSuffix);
+                break;
+            case Vanilla:
+                finalMessage = applyVanilla(message, styleSuffix);
                 break;
             default:
                 finalMessage = message;
@@ -249,6 +312,12 @@ public class HexChat extends Module {
             builder.append(c);
         }
         return builder.toString();
+    }
+
+    // 处理原版颜色模式
+    private String applyVanilla(String text, String style) {
+        String colorCode = "&" + vanillaColor.get().getCode();
+        return colorCode + style + text;
     }
 
     // 线性插值辅助方法

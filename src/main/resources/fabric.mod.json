@@ -8,10 +8,11 @@
     "codigohasta"
   ],
   "contact": {
-    "sources": "https://github.com/MeteorDevelopment/meteor-addon-template"
+    "sources": "https://github.com/adaxiaohu/InvincibleMachineGun"
   },
   "icon": "assets/template/icon.png",
   "environment": "client",
+  "accessWidener": "invincible-machine-gun.accesswidener",
   "entrypoints": {
     "meteor": [
       "com.codigohasta.addon.AddonTemplate"
