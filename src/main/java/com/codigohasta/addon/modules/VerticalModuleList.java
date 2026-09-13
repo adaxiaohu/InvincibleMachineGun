@@ -409,6 +409,9 @@ public class VerticalModuleList extends Module {
         .name("Glitch故障")
         .description("模块切换时短暂抖动、字符污染并恢复。")
         .defaultValue(true)
+        .onChanged(enabled -> {
+            if (enabled) previewGlitch();
+        })
         .build()
     );
 
@@ -417,6 +420,9 @@ public class VerticalModuleList extends Module {
         .description("模块开启或关闭时对该列触发一次故障。")
         .defaultValue(true)
         .visible(glitch::get)
+        .onChanged(enabled -> {
+            if (enabled && glitch.get()) previewGlitch();
+        })
         .build()
     );
 
@@ -1758,6 +1764,15 @@ public class VerticalModuleList extends Module {
         return glitch.get() && now >= state.glitchStartNanos && now < state.glitchUntilNanos;
     }
 
+    private void previewGlitch() {
+        if (!isActive() || entries.isEmpty()) return;
+
+        long now = System.nanoTime();
+        for (EntryState state : entries.values()) {
+            if (state.active && state.progress > 0.002) triggerGlitch(state, now);
+        }
+    }
+
     private boolean isDecrypting(EntryState state, int charIndex, long now) {
         if (!decrypt.get() || !state.active || now < state.transitionNanos) return false;
         double ageMs = (now - state.transitionNanos) / 1_000_000.0;
@@ -1784,7 +1799,11 @@ public class VerticalModuleList extends Module {
             }
 
             long seed = state.module.hashCode() * 1103L + global * 97L + bucket;
-            if (hashUnit(seed) < probability) {
+            // A short visible name could otherwise randomly replace zero characters for an
+            // entire refresh step and make an active glitch look broken. Keep the configured
+            // probability for every other character, but guarantee one visible corruption.
+            boolean guaranteedVisibleCorruption = glitching && probability > 0.0 && global == 0;
+            if (guaranteedVisibleCorruption || hashUnit(seed) < probability) {
                 int index = (int) Math.floor(hashUnit(seed * 37L + 17L) * pool.size());
                 index = Math.max(0, Math.min(pool.size() - 1, index));
                 out.append(pool.get(index));

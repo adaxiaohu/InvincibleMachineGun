@@ -196,7 +196,8 @@ public final class BlueHourShader extends FullscreenShaderModule {
         .defaultValue(24).min(1).sliderMax(64).visible(entityShadows::get).build());
 
     public BlueHourShader() {
-        super("蓝调时刻着色器", "雨后傍晚的冷蓝世界，带体积云、真实雨景、局部光色分离与全边缘 RGB 色散。", "blue_hour");
+        super("蓝调时刻着色器", "雨后黄昏的冷蓝色调世界，是那难忘的时刻。。" + //
+                        "", "blue_hour");
     }
 
     @Override
