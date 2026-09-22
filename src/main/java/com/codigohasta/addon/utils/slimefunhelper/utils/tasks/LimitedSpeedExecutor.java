@@ -1,0 +1,53 @@
+package com.codigohasta.addon.utils.slimefunhelper.utils.tasks;
+
+import java.util.ArrayDeque;
+import java.util.Deque;
+import java.util.concurrent.Executor;
+import java.util.concurrent.atomic.AtomicInteger;
+import com.codigohasta.addon.utils.slimefunhelper.managers.config.IntRef;
+import org.jetbrains.annotations.NotNull;
+
+public class LimitedSpeedExecutor implements Executor {
+    private Deque<Runnable> queue;
+    private AtomicInteger size;
+    private IntRef count;
+
+    public LimitedSpeedExecutor(IntRef count) {
+        this.count = count;
+
+        this.size = new AtomicInteger(0);
+        this.queue = new ArrayDeque<>();
+    }
+    // execute when next "execute" or "reset" method is called
+    public void addDelayedExecuteTask(Runnable runnable) {
+        queue.add(runnable);
+    }
+
+    @Override
+    public void execute(@NotNull Runnable runnable) {
+        if (size.get() > count.get()) {
+            queue.add(runnable);
+            return;
+        }
+        while (!queue.isEmpty() && size.getAndIncrement() <= count.get()) {
+            Runnable r = queue.poll();
+            executeInternal(r);
+        }
+        size.incrementAndGet();
+        executeInternal(runnable);
+    }
+
+    private void executeInternal(Runnable runnable) {
+        runnable.run();
+    }
+
+    public void clear() { queue.clear(); size.set(0); }
+
+    public void reset() {
+        size.set(0);
+        while (!queue.isEmpty() && size.getAndIncrement() < count.get()) {
+            Runnable r = queue.poll();
+            executeInternal(r);
+        }
+    }
+}

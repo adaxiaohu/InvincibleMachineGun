@@ -1,5 +1,7 @@
 package com.codigohasta.addon.utils.leaveshack;
 
+import com.codigohasta.addon.utils.BlockStateCompat;
+
 import com.codigohasta.addon.modules.AutoCity;
 import com.codigohasta.addon.modules.GlobalSetting;
 import com.codigohasta.addon.utils.BlockPosX;
@@ -72,10 +74,10 @@ public class BlockUtil {
         return true;
     }
     public static boolean canClick(BlockPos pos) {
-        return mc.world.getBlockState(pos).isSolid() && (!(shiftBlocks.contains(getBlock(pos)) || getBlock(pos) instanceof BedBlock) || mc.player.isSneaking());
+        return BlockStateCompat.isSolid(mc.world.getBlockState(pos)) && (!(shiftBlocks.contains(getBlock(pos)) || getBlock(pos) instanceof BedBlock) || mc.player.isSneaking());
     }
     public static boolean canClick(BlockPos pos, boolean ignoreSneak) {
-        return mc.world.getBlockState(pos).isSolid() && (!(shiftBlocks.contains(getBlock(pos)) || getBlock(pos) instanceof BedBlock) || (mc.player.isSneaking() || ignoreSneak));
+        return BlockStateCompat.isSolid(mc.world.getBlockState(pos)) && (!(shiftBlocks.contains(getBlock(pos)) || getBlock(pos) instanceof BedBlock) || (mc.player.isSneaking() || ignoreSneak));
     }
 
     public static boolean canPlace(BlockPos pos) {

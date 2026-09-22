@@ -1,5 +1,7 @@
 package com.codigohasta.addon.modules;
 
+import com.codigohasta.addon.utils.BlockStateCompat;
+
 import com.codigohasta.addon.AddonTemplate;
 import com.codigohasta.addon.utils.Timer;
 import com.codigohasta.addon.utils.leaveshack.BlockUtil;
@@ -158,7 +160,7 @@ public class PrinterLeaves extends Module {
             BlockState required = schematic.getBlockState(pos);
             if (listMode.get() == ListMode.Blacklist && blacklist.get().contains(required.getBlock())) continue;
             if (listMode.get() == ListMode.Whitelist && !whitelist.get().contains(required.getBlock())) continue;
-            if (!required.isAir() && !required.isLiquid() && (mc.world.isAir(pos) || BlockUtil.canReplace(pos)) && !BlockUtil.hasEntity(pos, false)) {
+            if (!required.isAir() && !BlockStateCompat.isLiquid(required) && (mc.world.isAir(pos) || BlockUtil.canReplace(pos)) && !BlockUtil.hasEntity(pos, false)) {
                 if (placed >= 1) {
                     if (debug.get()) mc.player.sendMessage(Text.of("已超过最大数量，当前placed:" + placed), false);
                     return;

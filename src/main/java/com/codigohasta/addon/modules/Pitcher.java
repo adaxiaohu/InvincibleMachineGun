@@ -412,31 +412,22 @@ public class Pitcher extends Module {
         if (mc.player == null || mc.getNetworkHandler() == null) return;
 
         isShooting = true;
-        
-        // 判定力量：如果状态机是 1，说明这一下是补刀，用高伤
         double currentStr = (totemStep == 1) ? bypassStrength.get() : strength.get();
-        // 1. 发送冲刺包（Wurst 高伤触发器）
         mc.getNetworkHandler().sendPacket(new ClientCommandC2SPacket(mc.player, ClientCommandC2SPacket.Mode.START_SPRINTING));
 
-        // 2. 获取基础坐标与方向 (1.21.11 安全坐标)
         double x = mc.player.getX(), y = mc.player.getY(), z = mc.player.getZ();
         Vec3d startPos = new Vec3d(x, y, z);
         Vec3d lookVec = mc.player.getRotationVector();
-
-        // 3. 计算当前箭矢力量 (如果是第二箭则用破图腾力量)
         currentStr = (isSecondShot && totemBypass.get()) ? bypassStrength.get() : strength.get();
-        // 如果开启了 Paper 模式，力量距离上限自动解锁至 149
         double maxDist = mode.get() == Mode.Vanilla ? 21.9 : paperDistance.get();
         double adjustedStrength = (currentStr / 10.0) * Math.sqrt(500.0);
-        
-        // 限制力量不超出当前模式的最大 TP 距离
+
         adjustedStrength = Math.min(adjustedStrength, maxDist);
 
-        // 4. 计算位移方向 (根据 TP 模式决定向后还是向前)
         Vec3d dir = (tpmode.get() == TPMode.Reverse) ? lookVec.multiply(-1) : lookVec;
         Vec3d spoofOffset = new Vec3d(dir.x * adjustedStrength, (vertical.get() ? dir.y * adjustedStrength : 0), dir.z * adjustedStrength);
 
-        // 5. 自动空间检测 (Smart Strength)
+
         if (smartStrength.get()) {
             double safeDist = getSafeSpoofDistance(startPos, spoofOffset);
             double adjustedDist = Math.max(0.01, safeDist - 0.5);
@@ -445,47 +436,43 @@ public class Pitcher extends Module {
             }
         }
 
-        // 目标 TP 点
+
         Vec3d targetPos = startPos.add(spoofOffset);
 
-        // 6. [核心绕过] 堆叠包预热 (Paper 模式发送 15+ 个包填充缓冲区)
+
         int spam = mode.get() == Mode.Vanilla ? 4 : paperPackets.get();
         for (int i = 0; i < spam; i++) {
-            // 规则：1.21.11 必须包含 horizontalCollision
+
             mc.player.networkHandler.sendPacket(new PlayerMoveC2SPacket.OnGroundOnly(true, mc.player.horizontalCollision));
         }
 
-        // 7. [核心绕过] 瞬间位移序列
-        // A. 飞到目标点
         sendMovePacket(targetPos);
 
-        // B. 如果是向前 TP，则在远处发包（珍珠瞬移逻辑）；如果是向后 TP，则先回传
+
         if (tpmode.get() == TPMode.Forward) {
             mc.getNetworkHandler().sendPacket(originalPacket);
         }
 
-        // C. 飞回起点
         sendMovePacket(startPos);
 
-        // D. 如果是向后 TP（经典 32k 弓逻辑），则在回传后立刻发包，利用瞬间动量差
+  
         if (tpmode.get() == TPMode.Reverse) {
             mc.getNetworkHandler().sendPacket(originalPacket);
         }
 
-        // 8. [核心同步] 发送极小偏移包刷位置同步，防止被 Paper 判定为 Invalid Teleport 拉回
-        // 在 y 轴增加 0.001 并随机水平偏移 0.05
+
         Vec3d syncPos = startPos.add((Math.random() - 0.5) * 0.05, 0.001, (Math.random() - 0.5) * 0.05);
         sendMovePacket(syncPos);
         mc.player.setPosition(syncPos.x, syncPos.y, syncPos.z);
 
-        // 9. [防摔/防拉回] 垂直偏移补丁
+
         if (vertical.get() && useOffset.get() && spoofOffset.y > 0) {
             sendMovePacket(startPos.add(0, 0.01, 0));
         }
 
         isShooting = false;
 
-        // 10. 破图腾状态切换逻辑
+
         if (totemBypass.get()) {
             // 如果刚刚完成的是正常射击（第一箭）
             if (totemStep == 0) {

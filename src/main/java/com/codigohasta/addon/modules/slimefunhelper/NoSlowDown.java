@@ -1,0 +1,906 @@
+package com.codigohasta.addon.modules.slimefunhelper;
+
+import java.util.*;
+import com.codigohasta.addon.utils.slimefunhelper.accessors.access.ClientPlayerAccess;
+import com.codigohasta.addon.utils.slimefunhelper.accessors.access.PlayerInteractEntityC2SPacketAccess;
+import com.codigohasta.addon.utils.slimefunhelper.events.Event;
+import com.codigohasta.addon.utils.slimefunhelper.events.Listener;
+import com.codigohasta.addon.utils.slimefunhelper.events.impl.EventContainer;
+import com.codigohasta.addon.utils.slimefunhelper.hacks.ACTasks;
+import com.codigohasta.addon.utils.slimefunhelper.hacks.MovTasks;
+import com.codigohasta.addon.utils.slimefunhelper.hacks.api.BaseModule;
+import com.codigohasta.addon.utils.slimefunhelper.hacks.api.ModulePath;
+import com.codigohasta.addon.utils.slimefunhelper.hacks.api.ModulePreset;
+import com.codigohasta.addon.modules.slimefunhelper.FakeBlockManager;
+import com.codigohasta.addon.utils.slimefunhelper.hacks.utils.HotKeyUtils;
+import com.codigohasta.addon.utils.slimefunhelper.hacks.utils.entity.LegalMovementManager;
+import com.codigohasta.addon.utils.slimefunhelper.hooks.ViaFabricPlusHooks;
+import com.codigohasta.addon.utils.slimefunhelper.managers.Configs;
+import com.codigohasta.addon.utils.slimefunhelper.managers.Tasks;
+import com.codigohasta.addon.utils.slimefunhelper.managers.config.*;
+import com.codigohasta.addon.utils.slimefunhelper.managers.input.MultiKeyBind;
+import com.codigohasta.addon.utils.slimefunhelper.utils.*;
+import com.codigohasta.addon.utils.slimefunhelper.utils.entity.PlayerInputUtils;
+import com.codigohasta.addon.utils.slimefunhelper.versioned.api.VDataFlag;
+import net.minecraft.block.BlockState;
+import net.minecraft.client.network.ClientPlayerEntity;
+import net.minecraft.component.DataComponentTypes;
+import net.minecraft.component.type.UseEffectsComponent;
+import net.minecraft.entity.Entity;
+import net.minecraft.entity.EntityStatuses;
+import net.minecraft.entity.EntityType;
+import net.minecraft.entity.attribute.EntityAttributes;
+import net.minecraft.entity.data.DataTracker;
+import net.minecraft.entity.player.PlayerInventory;
+import net.minecraft.item.ItemStack;
+import net.minecraft.network.packet.Packet;
+import net.minecraft.network.packet.c2s.play.*;
+import net.minecraft.network.packet.s2c.play.EntityStatusS2CPacket;
+import net.minecraft.screen.slot.SlotActionType;
+import net.minecraft.util.Hand;
+import net.minecraft.util.hit.EntityHitResult;
+import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.Direction;
+import net.minecraft.util.math.Vec3d;
+
+public class NoSlowDown extends BaseModule implements LegalMovementManager.MovementModifier {
+    public static NoSlowDown INSTANCE;
+    public final ModulePath moveSpeed = makePath(Configs.MOV_CONFIG, "move-speed");
+    public final ModulePath noSlowdown = moveSpeed.add("no-slowdown");
+    public final ModulePath fakeSneakStatusPath = moveSpeed.add("fake-sneak-status");
+
+    public static LegalMovementManager.DelegateMovementModifier instance;
+
+    public NoSlowDown() {
+        super("NoSlowDown"); INSTANCE=this;
+        // 哎我操GrimAC别修了，真没辙了，再修我还怎么打啊。。。
+        if (instance == null) {
+            instance = new LegalMovementManager.DelegateMovementModifier(this::cast);
+            // register at here for the first time
+            MovTasks.PLAYER_PIPELINE_0.addMovementModifierFactory(this::newMovementInstance);
+        }
+        instance.setDelegate(this::cast);
+    }
+
+    private LegalMovementManager.DelegateMovementModifier newMovementInstance() {
+        resetPlayer();
+        return instance;
+    }
+
+    @Override
+    public void registerAll() {
+        super.registerAll();
+        registerListener(Listener.getCustomListener().getChannel(ModulePreset.class), this::onModulePreset);
+        registerListener(Listener.getEntityTrackDataUpdate().getChannel(EntityType.PLAYER), this::onServerSyncSneak);
+        registerListener(
+                Listener.getPacketPoint().getChannel(PlayerInteractEntityC2SPacket.class), this::onInteractSend);
+        registerListener(Listener.getPlayerWebSlowPoint(), this::onWeb);
+        registerListener(Listener.getEntityTrackDataUpdate().getChannel(EntityType.PLAYER), this::onEntityDataUpdate);
+        registerListener(Listener.getPacketPostHandlePoint().getChannel(EntityStatusS2CPacket.class), this::onConsume);
+        registerListener(Listener.getPacketPoint().getChannel(PlayerInteractItemC2SPacket.class), this::onSendStartUse);
+    }
+
+    public final FlagRef sneak = flagBuilder(noSlowdown.add("when-sneak")).build();
+
+    public final FlagRef useItem = flagBuilder(noSlowdown.add("when-use-item")).build();
+
+    public final FlagRef blockSlow =
+            flagBuilder(noSlowdown.add("when-with-block")).build();
+
+    public final FlagRef blockFrac =
+            flagBuilder(noSlowdown.add("when-on-block")).build();
+
+    public final FlagRef blockIn = flagBuilder(noSlowdown.add("when-in-block")).build();
+
+    public final FlagRef blockSpecial =
+            flagBuilder(noSlowdown.add("when-special-block")).build();
+
+    public final FlagRef enableFakeSneak =
+            flagBuilder(noSlowdown.add("fake-sneak")).build();
+
+    public final KeyBindRef keyBindRef = moduleEntry(
+                    noSlowdown.add("fake-sneak-hotkey"), new MultiKeyBind(), noSlowdown.add("fake-sneak"))
+            .build();
+
+    public final EnumRef<UseBypassMode> useItemBypass = builder(noSlowdown.add("use-item-bypass"), UseBypassMode.class)
+            .defaultValue(UseBypassMode.NO_BYPASS)
+            .build();
+
+    public final IntRef swapDelay = builder(noSlowdown.add("use-item-swap-item-delay"), Integer.class)
+            .show(() -> useItemBypass.get().isIn(UseBypassMode.BYPASS_GRIM_LAZY, UseBypassMode.BYPASS_GRIM_LAZY_V3))
+            .defaultValue(1)
+            .build();
+
+    public final FlagRef noSprint = flagBuilder(noSlowdown.add("use-item-swap-no-sprint"))
+            .show(() -> useItemBypass.get().isIn(UseBypassMode.BYPASS_GRIM_LAZY_V3))
+            .build();
+
+    public final EnumRef<NoWebMode> blockInBypass = builder(noSlowdown.add("block-in-bypass"), NoWebMode.class)
+            .defaultValue(NoWebMode.NO_BYPASS)
+            .build();
+
+    public final FlagRef blockInKeepYVelocity = flagBuilder(noSlowdown.add("block-in-keep-y"))
+            .show(() -> blockInBypass.get().isIn(NoWebMode.GRIM_SPEED))
+            .build();
+
+    public final FlagRef blockInMineWhenJump = flagBuilder(noSlowdown.add("block-in-mine-when-jump"))
+            .show(() -> blockInBypass.get().isIn(NoWebMode.GRIM_SPEED))
+            .build();
+
+    public final EnumRef<Configs.BypassMode> fakeSneakBypass = builder(
+                    noSlowdown.add("fake-sneak-mode"), Configs.BypassMode.class)
+            .defaultValue(Configs.BypassMode.NO_BYPASS)
+            .build();
+
+    public final KeyBindRef fakeStatus = hotkey(fakeSneakStatusPath)
+            .defaultValue(new MultiKeyBind())
+            .registerHotkey(HotKeyUtils.wrapAsHandler(this::onSneakStatus))
+            .build();
+
+    public final EnumRef<PacketSneakMode> fakeStatusBypass = builder(
+                    noSlowdown.add("fake-sneak-status-mode"), PacketSneakMode.class)
+            .defaultValue(PacketSneakMode.BAD_PACKET)
+            .build();
+
+    public void onModulePreset(Event<EventContainer<ModulePreset>> event) {
+        ModulePreset preset = event.context().getValue();
+        switch (preset) {
+            case HACKING -> {
+                sneak.set(true);
+                blockSlow.set(true);
+                blockFrac.set(true);
+                blockSpecial.set(true);
+            }
+            default -> {
+                sneak.set(false);
+                blockSlow.set(false);
+                blockFrac.set(false);
+                blockIn.set(false);
+                blockSpecial.set(false);
+            }
+        }
+        switch (preset) {
+            case HACKING -> {
+                useItem.set(true);
+                useItemBypass.set(UseBypassMode.NO_BYPASS);
+            }
+            case AC_GRIM, AC_GRIM_LEGACY -> {
+                useItem.set(true);
+                useItemBypass.set(UseBypassMode.BYPASS_GRIM_LAZY_V3);
+            }
+            default -> {
+                useItem.set(false);
+            }
+        }
+        switch (preset) {
+            case HACKING, VANILLA -> {
+                blockIn.set(true);
+                blockInBypass.set(NoWebMode.NO_BYPASS);
+            }
+            case AC_GRIM, AC_GRIM_LEGACY, AC_VULCAN, AC_MATRIX, AC_COMMON -> {
+                blockIn.set(true);
+                blockInBypass.set(NoWebMode.GRIM_SPEED);
+            }
+            default -> {
+                blockIn.set(false);
+            }
+        }
+    }
+
+    public void onWeb(Event<Vec3d> slowMovement) {
+        if (blockIn.get()) {
+            Vec3d currentMovementSpeed = mc.player.getVelocity();
+            Vec3d stuckSimulation = currentMovementSpeed.multiply(slowMovement.context);
+            double delta = stuckSimulation.subtract(currentMovementSpeed).horizontalLengthSquared();
+            if (delta > 0.0625) {
+                return;
+            }
+            BlockPos pos = slowMovement.getArgs(0);
+            switch (blockInBypass.get()) {
+                case GRIM_SPEED -> {
+                    if (blockInKeepYVelocity.get()) {
+                        slowMovement.context(slowMovement.context().withAxis(Direction.Axis.Y, 1.0F));
+                    }
+                    // todo: why
+                    var input = PlayerInputUtils.of(mc.player);
+                    if (blockInMineWhenJump.get()
+                            && !mc.player.isGliding()
+                            && (mc.player.getVelocity().y >= 0 || mc.player.isOnGround())
+                            && input.jump()) {
+                        // todo: can we fix it, it may destroy the fucking packetMine
+                        // todo: add check if blocks above is solid
+                        //                        mc.interactionManager.sendSequencedPacket(
+                        //                                mc.world,
+                        //                                (seq) -> new PlayerActionC2SPacket(
+                        //                                        PlayerActionC2SPacket.Action.START_DESTROY_BLOCK, pos,
+                        // Direction.UP, seq));
+                        FakeBlockManager.INSTANCE.addFakeCompensateState(pos);
+                        slowMovement.cancel();
+                        return;
+                    }
+                    if (mc.player.isGliding()) {
+                        return;
+                    }
+                    if (input.hasMovement()
+                    // PlayerInputUtils.of(mc.player).hasMovement()
+                    ) {
+                        //                        Vec3d magicVec = mc.player.getVelocity();
+                        mc.player.setVelocity(EntityUtils.withStrafe(mc.player.getVelocity(), 0.64));
+                        //                        Vec3d magicVec2 = mc.player.getVelocity();
+                        // Debug.chat("Magic", magicVec.length(), magicVec2.length());
+                    }
+                    return;
+                }
+                case GRIM_FAKE_MINE -> {
+                    var input = PlayerInputUtils.of(mc.player);
+                    if (mc.player.isGliding() || input.hasWASDMovement() || input.jump()) {
+                        FakeBlockManager.INSTANCE.addFakeCompensateState(pos.toImmutable());
+                        slowMovement.cancel();
+                        return;
+                    }
+                }
+                case NO_BYPASS -> {
+                    slowMovement.cancel();
+                    return;
+                }
+            }
+        }
+        return;
+    }
+
+    public void resetPlayer() {
+        sneakStatus = false;
+    }
+
+    boolean sneakStatus = false;
+
+    public void onSneakStatus() {
+        if (mc.player == null) return;
+        if (sneakStatus) {
+            sneakStatus = false;
+            ClientPlayerAccess.of(mc.player).resyncSneak();
+            var lastInput = PlayerInputUtils.of(mc.player);
+            var clone = lastInput.clone();
+            clone.sneak(true).sendPlayerSneakUpdatePacket();
+            clone.sneak(false).sendPlayerSneakUpdatePacket();
+            clone.applyInput(mc.player);
+            // clone.sneak(lastInput.sneak()).sendPlayerSneakUpdatePacket();
+            Debug.chat("[NoSlow] 取消当前伪造潜行状态");
+        } else {
+            PacketSneakMode mode = fakeStatusBypass.get();
+            if (mc.player.isSneaking()) {
+                var re = PlayerInputUtils.of(mc.player).sneak(false);
+                re.sendPlayerSneakUpdatePacket();
+                re.applyInput(mc.player);
+            }
+            mc.options.sneakKey.setPressed(false);
+            switch (mode) {
+                case GRIM_FALLFLYING -> {
+                    PlayerInputUtils.Input input = PlayerInputUtils.of(mc.player);
+                    // to trigger plugin events
+                    input.sneak(true).sendPlayerSneakUpdatePacket();
+                    input.sneak(false).sendPlayerSneakUpdatePacket();
+                    if (!mc.player.isOnGround() && ViaFabricPlusHooks.isSupportEndTick()) {
+                        input.jump(true).sendPlayerInputPacket();
+                        input.applyInput(mc.player);
+                    }
+                    mc.getNetworkHandler()
+                            .sendPacket(new ClientCommandC2SPacket(
+                                    mc.player, ClientCommandC2SPacket.Mode.START_FALL_FLYING));
+                    sneakStatus = true;
+                    Debug.chat("[NoSlow] 成功伪造状态");
+                }
+                case BAD_PACKET, INTERACT -> {
+                    Entity entity;
+                    boolean canBypass;
+                    if (mc.crosshairTarget instanceof EntityHitResult entityHitResult) {
+                        entity = entityHitResult.getEntity();
+                        canBypass = true;
+                    } else {
+
+                        List<Entity> entities = new ArrayList<>();
+                        for (var et : mc.world.getEntities()) {
+                            if (et != mc.player) {
+                                entities.add(et);
+                            }
+                        }
+                        entities.sort(Comparator.comparingDouble(s -> s.squaredDistanceTo(mc.player)));
+                        if (!entities.isEmpty()) {
+                            entity = entities.get(0);
+                            canBypass = false;
+                        } else {
+                            entity = null;
+                            canBypass = false;
+                        }
+                    }
+                    if (canBypass || mode == PacketSneakMode.BAD_PACKET) {
+                        int id = entity == null ? mc.player.getId() - 1 : entity.getId();
+                        PlayerInputUtils.Input input = PlayerInputUtils.of(mc.player);
+                        // to trigger plugin events
+                        input.sneak(true).sendPlayerSneakUpdatePacket();
+                        input.sneak(false).sendPlayerSneakUpdatePacket();
+                        mc.interactionManager.sendSequencedPacket(mc.world, (seq) -> {
+                            return new PlayerInteractEntityC2SPacket(
+                                    id,
+                                    true,
+                                    new PlayerInteractEntityC2SPacket.InteractAtHandler(
+                                            Hand.MAIN_HAND, mc.player.getEntityPos()));
+                        });
+                        sneakStatus = true;
+                        Debug.chat("[NoSlow] 成功伪造状态");
+                    } else {
+                        // out of interact range
+                        if (entity == null
+                                || entity.getBoundingBox().squaredMagnitude(mc.player.getEyePos())
+                                        > MathUtils.s2(mc.player.getEntityInteractionRange() + 0.5)) {
+                            Debug.chat("[NoSlow] 当前模式下需要一个实体以交互");
+                            return;
+                        }
+                        Entity target = Objects.requireNonNull(entity);
+                        ClientPlayerAccess.of(mc.player)
+                                .getLegalMovementManager()
+                                .addMovementModifier(new LegalMovementManager.MovementModifier() {
+                                    Vec3d velocity;
+
+                                    @Override
+                                    public int priority() {
+                                        return PRIORITY_LOW;
+                                    }
+
+                                    @Override
+                                    public void applyPreTickModify(Event<LegalMovementManager> movementManagerEvent) {
+                                        ClientPlayerEntity args = movementManagerEvent.context.playerStatus.entity;
+                                        // step back our position
+                                        velocity = args.getVelocity();
+
+                                        Vec3d eyePos = target.getEyePos();
+                                        Vec3d targetPos = target.getEntityPos();
+                                        Vec3d attackOffsetted = targetPos.add(
+                                                eyePos.subtract(targetPos).multiply(0.8));
+                                        Vec3d cacheDirection = attackOffsetted
+                                                .subtract(args.getEyePos())
+                                                .normalize();
+                                        movementManagerEvent.context.pushImportantRotation(true, true);
+                                        PlayerStateManager.setPlayerRotationSafe(args, cacheDirection);
+                                        // restore velocity after collide
+                                        args.setVelocity(velocity);
+                                        movementManagerEvent.context.markForResetRot();
+                                    }
+
+                                    @Override
+                                    public boolean postModify(
+                                            Event<LegalMovementManager> movementManagerEvent, boolean enabledThisTick) {
+                                        if (!enabledThisTick) {
+                                            // rare,,, maybe
+                                            return false;
+                                        }
+                                        PlayerInputUtils.Input input = PlayerInputUtils.of(mc.player);
+
+                                        ACTasks.addPostTransactionAction(han -> {
+                                            // to trigger plugin events
+                                            input.sneak(true).sendPlayerSneakUpdatePacket();
+                                            input.sneak(false).sendPlayerSneakUpdatePacket();
+                                            mc.getNetworkHandler().sendPacket(new HandSwingC2SPacket(Hand.MAIN_HAND));
+                                            mc.interactionManager.sendSequencedPacket(mc.world, (seq) -> {
+                                                return new PlayerInteractEntityC2SPacket(
+                                                        target.getId(),
+                                                        true,
+                                                        new PlayerInteractEntityC2SPacket.InteractAtHandler(
+                                                                Hand.MAIN_HAND, mc.player.getEntityPos()));
+                                            });
+                                            mc.getNetworkHandler().sendPacket(new HandSwingC2SPacket(Hand.MAIN_HAND));
+                                            Debug.chat("[NoSlow] 成功伪造状态");
+                                            sneakStatus = true;
+                                        });
+                                        // return do not kept
+                                        return false;
+                                    }
+                                });
+                    }
+                }
+            }
+        }
+    }
+
+    public boolean shouldNoSlowSneak() {
+        return sneak.get()
+                && (!lastPredictWasSneakEdge || !fakeSneakBypass.get().hasAc());
+    }
+
+    public boolean shouldFakeSneakStatus() {
+        return (sneakStatus || (enableFakeSneak.get() && checkSneakSpeed())) && mc.player.isOnGround();
+    }
+
+    private boolean checkSneakSpeed() {
+        return mc.player.getAttributeValue(EntityAttributes.SNEAKING_SPEED) < 0.9F;
+    }
+
+    private float getActiveItemSpeedMultiplier() {
+        ItemStack stack = mc.player.getActiveItem();
+        //        if(VItem.getInstance().isSpear(stack))return 1.0F;
+        return ((UseEffectsComponent) stack.getOrDefault(DataComponentTypes.USE_EFFECTS, UseEffectsComponent.DEFAULT))
+                .speedMultiplier();
+    }
+
+    public void onInteractSend(Event<PlayerInteractEntityC2SPacket> interactPacket) {
+        if (sneakStatus) {
+            PlayerInteractEntityC2SPacket packet = interactPacket.context();
+            if (!packet.isPlayerSneaking()) {
+                PlayerInteractEntityC2SPacketAccess.of(packet).setPlayerSneaking(true);
+            }
+            //            else{
+            //                if(packet.isPlayerSneaking()){
+            //                    interactPacket.context(new PlayerInteractEntityC2SPacket(packet.entityId, false,
+            // packet.type));
+            //                }
+            //            }
+        }
+    }
+
+    public void onServerSyncSneak(Event<DataTracker.SerializedEntry<?>> event) {
+        if (event.isCancelled()) {
+            return;
+        }
+        if (sneakStatus && event.getArgs(0) instanceof ClientPlayerEntity player && player == mc.player) {
+            var val = event.context();
+            if (val.id() == VDataFlag.ID_FLAGS) {
+                byte data = (byte) val.value();
+                boolean sneakFlag = (data & (1 << VDataFlag.SNEAKING_FLAG_INDEX)) != 0;
+                if (!sneakFlag) {
+                    sneakStatus = false;
+                    Debug.chat("[NoSlow] 伪造的潜行状态被重置了");
+                }
+            }
+        }
+    }
+
+    //
+    //    int postSlot2 = -1;
+    //    int postHotbar2 = -1;
+    Runnable postCallBack = null;
+
+    public void preSwap(boolean v3) {
+        // ClientPlayerAccess.of(mc.player).resyncMovementPacket();
+        var re = InventoryUtils.findPlayerHotBarItem(ItemStack::isEmpty, true, true);
+        int selectedIdx;
+        // todo: optimize these shit
+        if (mc.player.getActiveHand() == Hand.MAIN_HAND) {
+            selectedIdx = InventoryUtils.getSelectedSlot();
+        } else {
+            selectedIdx = 40;
+        }
+        int selectedEmpty;
+        if (re != null) {
+            selectedEmpty = re.index();
+        } else {
+            if (mc.player.getActiveHand() == Hand.MAIN_HAND) {
+                selectedEmpty = 40;
+            } else {
+                selectedEmpty = InventoryUtils.getSelectedSlot();
+            }
+        }
+        ItemStack stackEmpty = mc.player.getInventory().getStack(selectedEmpty);
+        var handler = ClientPlayerAccess.of(mc.player).getServerScreenHandler();
+        // may use MultiActionsC to resync inventory, wierd
+        // MovTasks.getMovExtra().sendInputPacketsForInventoryAction();
+        // save current server sprinting status
+        // use MultiActionsC to create ghost inventory and bypass useItem NoSlow
+        // pre, send sprint
+        if (v3) {
+            PlayerStateManager.INSTANCE.sendSprintStatus(true);
+        } else {
+            PlayerStateManager.INSTANCE.sendSprintStatus(mc.player.isSprinting());
+        }
+
+        postCallBack = null;
+        // try find a empty slot to switch
+        if (!stackEmpty.isEmpty()) {
+            int postHotbar2 = selectedIdx;
+            ItemStack stackHand = mc.player.getInventory().getStack(selectedIdx);
+            var slot = InventoryUtils.findBestScreenSlot(
+                    handler.slots,
+                    (sl) -> {
+                        if (sl.getStack().isEmpty() && sl.canInsert(stackHand)) {
+                            // prior inv slot
+                            return sl.inventory instanceof PlayerInventory ? 1.0D : null;
+                        } else return null;
+                    },
+                    true); //  mc.player.currentScreenHandler.getSlotIndex(mc.player.getInventory(), selected);
+            if (slot != null) {
+                // cancel sprint at this moment
+                mc.interactionManager.clickSlot(
+                        handler.syncId, slot.index(), selectedIdx, SlotActionType.SWAP, mc.player);
+                // any flying packet
+                int postSlot2 = slot.index();
+                postCallBack = () -> {
+                    // may use MultiActionsC to resync inventory, wierd
+                    // MovTasks.getMovExtra().sendInputPacketsForInventoryAction();
+                    mc.interactionManager.clickSlot(
+                            handler.syncId, postSlot2, postHotbar2, SlotActionType.SWAP, mc.player);
+                };
+            } else {
+                if (mc.player.currentScreenHandler.getCursorStack().isEmpty()) {
+                    //                    var idx =
+                    // mc.player.currentScreenHandler.getSlotIndex(mc.player.getInventory(), selectedIdx);
+                    int hotbarShot = selectedIdx == 8 ? 7 : 8;
+
+                    var hbSlot2 = mc.player.currentScreenHandler.getSlotIndex(mc.player.getInventory(), hotbarShot);
+                    // 何意味...
+                    if (hbSlot2.isPresent()) {
+                        // NO FUCKING USE
+                        //                        mc.interactionManager.clickSlot(handler.syncId, idx.getAsInt(), 0,
+                        // SlotActionType.PICKUP, mc.player);
+                        //                        postCallBack =
+                        //                            ()->{
+                        //                            mc.interactionManager.clickSlot(handler.syncId, idx.getAsInt(), 0,
+                        // SlotActionType.PICKUP, mc.player);
+                        //                        };
+                        mc.interactionManager.clickSlot(
+                                handler.syncId, hbSlot2.getAsInt(), 0, SlotActionType.PICKUP, mc.player);
+                        mc.interactionManager.clickSlot(
+                                handler.syncId, hbSlot2.getAsInt(), selectedIdx, SlotActionType.SWAP, mc.player);
+                        postCallBack = () -> {
+                            mc.interactionManager.clickSlot(
+                                    handler.syncId, hbSlot2.getAsInt(), selectedIdx, SlotActionType.SWAP, mc.player);
+                            mc.interactionManager.clickSlot(
+                                    handler.syncId, hbSlot2.getAsInt(), 0, SlotActionType.PICKUP, mc.player);
+                        };
+                    }
+                } else {
+                    // todo: swap other item to
+                    int hotbarShot = selectedIdx == 8 ? 7 : 8;
+                    var slotEmpty = InventoryUtils.findScreenSlot(
+                            handler.slots,
+                            (sl) -> {
+                                if (sl.getStack().isEmpty()
+                                        && sl.canInsert(stackHand)
+                                        && !(sl.inventory instanceof PlayerInventory)) {
+                                    // prior inv slot
+                                    return true;
+                                } else return false;
+                            },
+                            true);
+                    var idx = mc.player.currentScreenHandler.getSlotIndex(mc.player.getInventory(), hotbarShot);
+                    if (slotEmpty != null && idx.isPresent()) {
+                        mc.interactionManager.clickSlot(
+                                handler.syncId, slotEmpty.index(), hotbarShot, SlotActionType.SWAP, mc.player);
+                        mc.interactionManager.clickSlot(
+                                handler.syncId, idx.getAsInt(), selectedIdx, SlotActionType.SWAP, mc.player);
+                        postCallBack = () -> {
+                            mc.interactionManager.clickSlot(
+                                    handler.syncId, idx.getAsInt(), selectedIdx, SlotActionType.SWAP, mc.player);
+                            mc.interactionManager.clickSlot(
+                                    handler.syncId, slotEmpty.index(), hotbarShot, SlotActionType.SWAP, mc.player);
+                        };
+                    }
+                }
+            }
+        } else {
+            int postHotbar2 = selectedEmpty;
+            var result = handler.getSlotIndex(mc.player.getInventory(), selectedIdx);
+            if (result.isPresent()) {
+                mc.interactionManager.clickSlot(
+                        mc.player.currentScreenHandler.syncId,
+                        result.getAsInt(),
+                        postHotbar2,
+                        SlotActionType.SWAP,
+                        mc.player);
+                // any flying packet
+                ClientPlayerAccess.of(mc.player).resyncPos();
+                postCallBack = () -> {
+                    mc.interactionManager.clickSlot(
+                            mc.player.currentScreenHandler.syncId,
+                            result.getAsInt(),
+                            postHotbar2,
+                            SlotActionType.SWAP,
+                            mc.player);
+                };
+            }
+        }
+        if (v3) {
+            // mc.player.setSprinting();
+            PlayerStateManager.INSTANCE.sendSprintStatus(mc.player.isSprinting());
+        }
+    }
+
+    public void postSwap(boolean v3) {
+        // restore sprint
+        // may use MultiActionsC to resync inventory, wierd
+        if (postCallBack != null) {
+            if (v3) {
+                PlayerStateManager.INSTANCE.sendSprintStatus(true);
+                ClientPlayerAccess.of(mc.player).setLastSprintFlag(true);
+            }
+            postCallBack.run();
+            postCallBack = null;
+        }
+    }
+
+    public void setPreAttackUseTick() {
+        preAttackUseTick = true;
+    }
+
+    boolean preAttackUseTick;
+    int lastNoSlowUseTick = 0;
+
+    public boolean noSlowUseItemGrim() {
+        if (mc.player.isUsingItem() && useItem.get()) {
+
+            return switch (useItemBypass.get()) {
+                case NO_BYPASS, BYPASS_GRIM_50 -> false;
+                case BYPASS_GRIM_LAZY -> {
+                    if (preAttackUseTick) {
+                        yield true;
+                    }
+                    boolean isNotFallFlying;
+                    if (mc.player.isGliding()) {
+                        if (mc.player.isTouchingWater()) {
+                            isNotFallFlying = true;
+                        } else {
+                            isNotFallFlying = false;
+                        }
+                    } else {
+                        isNotFallFlying = true;
+                    }
+                    if (isNotFallFlying
+                            && !mc.player.hasVehicle()
+                            && PlayerInputUtils.of(mc.player).hasWASDMovement()
+                            && getActiveItemSpeedMultiplier() < 0.99F) {
+                        if (lastNoSlowUseTick >= Tasks.getTick() - swapDelay.get()) {
+                            yield false;
+                        } else {
+                            lastNoSlowUseTick = Tasks.getTick();
+                            yield true;
+                        }
+                    } else {
+                        yield false;
+                    }
+                }
+                case BYPASS_GRIM_LAZY_V3 -> {
+                    if (!mc.player.hasVehicle()
+                            && PlayerInputUtils.of(mc.player).hasWASDMovement()
+                            && getActiveItemSpeedMultiplier() < 0.99F) {
+                        if (grimSlowedByItemFlag) {
+                            grimSlowedByItemFlag = false;
+                            yield true;
+                        }
+                        yield false;
+                    } else {
+                        yield false;
+                    }
+                }
+            };
+        }
+        lastNoSlowUseTick = 0;
+        return false;
+    }
+
+    boolean grimSlowedByItemFlag = false;
+
+    public void onEntityDataUpdate(Event<DataTracker.SerializedEntry<?>> eventEntityDataUpdate) {
+        if (useItem.get() && eventEntityDataUpdate.getArgs(0) == mc.player) {
+            if (eventEntityDataUpdate.context.id() == VDataFlag.ID_LIVING_FLAGS
+                    && eventEntityDataUpdate.context.value() instanceof Number number) {
+                byte flagByte = number.byteValue();
+                boolean bl = (flagByte & (1 << VDataFlag.USING_ITEM_FLAG_INDEX)) > 0;
+                if (bl) {
+                    // only spread true flag
+                    // may receive false flag that transaction < currentUseItemTransaction
+                    Tasks.scheduleRepeatedPre(
+                            () -> {
+                                grimSlowedByItemFlag = true;
+                                return false;
+                            },
+                            1,
+                            1,
+                            2);
+                }
+
+                if (!bl) {
+                    lastNoSlowUseTick = 0;
+                }
+            }
+        }
+    }
+
+    public void onConsume(Event<EntityStatusS2CPacket> eventStatus) {
+        if (checkNull()) return;
+        if (useItem.get()
+                && eventStatus.context.getStatus() == EntityStatuses.CONSUME_ITEM
+                && eventStatus.context.getEntity(mc.world) == mc.player) {
+            grimSlowedByItemFlag = false;
+            lastNoSlowUseTick = 0;
+        }
+    }
+
+    public void onSendStartUse(Event<PlayerInteractItemC2SPacket> eventPost) {
+        if (useItem.get() && mc.player.isUsingItem()) {
+            grimSlowedByItemFlag = true;
+            lastNoSlowUseTick = 0;
+        }
+    }
+
+    public void onSendMovePreNoSlowUse(Event<Packet<?>> event) {
+        if (noSlowUseItemGrim()) {
+            preSwap(false);
+        }
+    }
+
+    public void onSendMovePostNoSlowUse(Event<Packet<?>> event) {
+        postSwap(false);
+    }
+
+    public boolean workNoSlowItemThisTick;
+    boolean grimFlagNoSlowOnce = false;
+
+    @Override
+    public void applyPreTickModify(Event<LegalMovementManager> movementManagerEvent) {
+        ClientPlayerEntity args = movementManagerEvent.context.playerStatus.entity;
+        if (shouldNoSlowSneak()) {
+            PlayerInputUtils.of(args).sneak(mc.options.sneakKey.isPressed()).applyInput(args);
+        }
+        workNoSlowItemThisTick = false;
+        if (useItem.get() && mc.player.isUsingItem()) {
+            if (useItemBypass.get() == UseBypassMode.BYPASS_GRIM_50) {
+                PlayerInputUtils.Input input = PlayerInputUtils.of(args);
+                if (input.hasWASDMovement()) {
+                    if (grimFlagNoSlowOnce) {
+                        grimFlagNoSlowOnce = false;
+                        workNoSlowItemThisTick = false;
+                    } else {
+                        grimFlagNoSlowOnce = true;
+                        workNoSlowItemThisTick = true;
+                    }
+                } else {
+                    if (grimFlagNoSlowOnce) {
+                        ClientPlayerAccess.of(mc.player).resyncPos();
+                        grimFlagNoSlowOnce = false;
+                    }
+                }
+            } else {
+                workNoSlowItemThisTick = true;
+            }
+        } else {
+            grimFlagNoSlowOnce = false;
+        }
+    }
+
+    BlockPos cachedPos;
+
+    @Override
+    public void applyAfterInputTick(Event<LegalMovementManager> movementManagerEvent) {
+        ClientPlayerEntity args = movementManagerEvent.context.playerStatus.entity;
+        if (shouldFakeSneakStatus()) {
+            // totally shit, the sneak flag is override with playerInput,
+            // fuck ojng
+            // we move it to InputTick
+            if (args.isSneaking()) {
+                // we tend to make this work
+                // add flag to remove calculation noSlow
+                // use supporting plate here
+                if (cachedPos != null) {
+                    BlockPos supportingPos = cachedPos;
+                    Vec3d velocity = args.getVelocity();
+                    Vec3d vec3d = args.getEntityPos();
+                    Vec3d vec3dSupportingBlock = vec3d.subtract(0, 0.500001F, 0);
+                    BlockPos underBlock = BlockPos.ofFloored(vec3dSupportingBlock);
+                    BlockState state = mc.world.getBlockState(underBlock);
+                    if (state.isAir() || !state.isFullCube(mc.world, underBlock)) {
+                        double delta = 0.1F;
+                        double xmin = supportingPos.getX() - delta;
+                        double zmin = supportingPos.getZ() - delta;
+                        double xmax = supportingPos.getX() + 1 + delta;
+                        double zmax = supportingPos.getZ() + 1 + delta;
+                        boolean xrange = (vec3d.x > xmin && vec3d.x < xmax);
+                        boolean zrange = vec3d.z > zmin && vec3d.z < zmax;
+                        if (!xrange || !zrange) {
+                            Vec3d supportingPosCenter = supportingPos.toCenterPos();
+                            boolean directionX = vec3d.x < supportingPosCenter.x;
+                            boolean directionZ = vec3d.z < supportingPosCenter.z;
+
+                            if (((!xrange) && directionX == (velocity.x < 0))
+                                    || (!zrange) && directionZ == (velocity.z < 0)
+                                    || (!xrange && !zrange)) {
+                                this.lastPredictWasSneakEdge = true;
+                            }
+                        }
+                    }
+                }
+                cachedPos = args.getVelocityAffectingPos();
+            }
+        }
+        if (useItem.get()
+                && useItemBypass.get().isIn(UseBypassMode.BYPASS_GRIM_LAZY_V3)
+                && noSprint.get()
+                && grimSlowedByItemFlag) {
+            if (!mc.player.hasVehicle()
+                    && PlayerInputUtils.of(args).hasWASDMovement()
+                    && getActiveItemSpeedMultiplier() < 0.99F) {
+                PlayerInputUtils.of(args).sprint(false).applyInput(args);
+            }
+        }
+    }
+
+    boolean lastPredictWasSneakEdge = false;
+
+    @Override
+    public void applyBeforeMovementPacketModify(Event<LegalMovementManager> movementManagerEvent) {
+        ClientPlayerEntity args = movementManagerEvent.context.playerStatus.entity;
+        if (shouldFakeSneakStatus()) {
+            // do not sync sneak status
+            //            if(lastPredictWasSneakEdge){
+            //
+            //            }
+            if (!lastPredictWasSneakEdge && args.isSneaking()) {
+                // in lower version,
+                // ClientPlayerAccess.of(args).setLastSneakFlag(args.isSneaking());
+                PlayerInputUtils.of(args).sneak(false).applyInput(args);
+            }
+            if (lastPredictWasSneakEdge) {
+                ClientPlayerAccess.of(mc.player).resyncSneak();
+            }
+
+            // args.setOnGround(true);
+            // only consider on ground to avoid jump
+            //
+            //            if(args.isOnGround()){
+            //                if(lastPredictWasSneakEdge){
+            //
+            //                    // met edge
+            //                    movementManagerEvent.context.playerStatus.restorePos();
+            //                    PlayerInput input = args.input.playerInput;
+            //                    //stop input packets
+            //                    args.input.playerInput =
+            // PlayerInputUtils.of(input).forward(true).backward(true).left(true).right(true).toPlayerInput();
+            //                }
+            //
+            //            }
+
+        }
+        onSendMovePreNoSlowUse(null);
+        lastPredictWasSneakEdge = false;
+    }
+
+    @Override
+    public boolean postModify(Event<LegalMovementManager> movementManagerEvent, boolean enabledThisTick) {
+        onSendMovePostNoSlowUse(null);
+        preAttackUseTick = false;
+        return true;
+    }
+
+    public static enum PacketSneakMode implements ConfigEnum {
+        BAD_PACKET,
+        INTERACT,
+        GRIM_FALLFLYING;
+
+        @Override
+        public String getConfigEnumType() {
+            return "packet_sneak_bypass_mode";
+        }
+    }
+
+    public static enum UseBypassMode implements ConfigEnum {
+        NO_BYPASS,
+        // fixed in 2026.0701 grim commit
+        BYPASS_GRIM_LAZY,
+        // fixed in 2026.0701 grim commit
+        BYPASS_GRIM_LAZY_V3,
+        BYPASS_GRIM_50;
+
+        @Override
+        public String getConfigEnumType() {
+            return "use_item_noslow_bypass";
+        }
+    }
+
+    public static enum NoWebMode implements ConfigEnum {
+        NO_BYPASS,
+        GRIM_SPEED,
+        GRIM_FAKE_MINE;
+
+        @Override
+        public String getConfigEnumType() {
+            return "no_web_slow_bypass";
+        }
+    }
+}

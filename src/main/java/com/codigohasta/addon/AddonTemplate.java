@@ -38,17 +38,20 @@ public class AddonTemplate extends MeteorAddon {
     private boolean englishTranslationStartupChecked;
 
     public static final Category CATEGORY = new Category("IMG");
+    public static final Category SF_CATEGORY = new Category("sfIMG");
     public static final HudGroup HUD_GROUP = new HudGroup("IMG");
 
     @Override
     public void onInitialize() {
         LOG.info("Initializing IMG Addon");
 
+        com.codigohasta.addon.utils.slimefunhelper.SlimefunRuntime.initialize();
+        //注意了，sfimg部分 的模块并非在此注册。决定sfimg模块是否添加要在\addon\Utils\slimefunhelper\SlimefunRuntime.java中确定！
         // Modules 
         Modules modules = Modules.get();
 
         modules.add(new AdvancedCriticals());
-        modules.add(new AdvancedFakePlayer());
+        // modules.add(new AdvancedFakePlayer());
         modules.add(new AntiAntiXray());
         modules.add(new AttackRangeIndicator());
         modules.add(new AttractAura());
@@ -75,14 +78,14 @@ public class AddonTemplate extends MeteorAddon {
         modules.add(new FastCrossbow());
         modules.add(new FeedbackBlocker());
         modules.add(new FlightAntiKick());
-        modules.add(new GrimCriticals());
+        // modules.add(new GrimCriticals());
         modules.add(new HexChat());
         modules.add(new HitboxESP());
         modules.add(new InfiniteChat());
         modules.add(new ItemDespawnTimer());
         
         modules.add(new KnockbackDirection());
-        modules.add(new MaceAura());
+        // modules.add(new MaceAura());
         modules.add(new MaceBreakerPro());
         modules.add(new MaceDMGPlus());
         modules.add(new MassTpa());
@@ -101,7 +104,7 @@ public class AddonTemplate extends MeteorAddon {
         modules.add(new TntBomber());
         modules.add(new TpAnchor());
         modules.add(new TpAura());
-        modules.add(new VelocityAlien());
+        // modules.add(new VelocityAlien());
         modules.add(new xhEntityList());
         modules.add(new FillESP());
         modules.add(new ScaffoldPlus());
@@ -119,7 +122,7 @@ public class AddonTemplate extends MeteorAddon {
         modules.add(new SchematicPro());
         
          modules.add(new MacroAnchor()); 
-         modules.add(new ElytraFly());
+        // modules.add(new ElytraFly());
          modules.add(new Follower());
          modules.add(new ArrowDmg());
          modules.add(new Pitcher());
@@ -128,22 +131,22 @@ public class AddonTemplate extends MeteorAddon {
          modules.add(new XTpaura());
          modules.add(new XCarry());
          modules.add(new EntityTags());
-         modules.add(new TpBowAura());
-         modules.add(new TpMachineGun());
+         // modules.add(new TpBowAura());
+         // modules.add(new TpMachineGun());
          modules.add(new AutoLibrarian());
          modules.add(new SpearKill()); 
-         modules.add(new AntiLag());
-         modules.add(new SprintStatusModule());
-         modules.add(new Backtrack());
+        // modules.add(new AntiLag());
+         // modules.add(new SprintStatusModule());
+         // modules.add(new Backtrack());
          modules.add(new PortalGodMode());
         
          
          modules.add(new AutoDoubleHand());
          modules.add(new CrystalMacro());
          modules.add(new AutoInvTotem());
-         modules.add(new SonarBypass());
+        // modules.add(new SonarBypass());
          modules.add(new KillFX());
-         modules.add(new AlienSprint());
+        // modules.add(new AlienSprint());
          modules.add(new CameraClip());
          modules.add(new MotionCamera());
          modules.add(new Panic());
@@ -154,18 +157,18 @@ public class AddonTemplate extends MeteorAddon {
          modules.add(new IMGTotemParticle());
          modules.add(new IMGFakePlayer());
          modules.add(new GlobalSetting());
-         modules.add(new PlaceRender());
+        // modules.add(new PlaceRender());
          modules.add(new AutoTorch());
          modules.add(new AutoRefreshTrade());
-         modules.add(new AutoCrystal());
-         modules.add(new AutoAnchor());
-         modules.add(new PistonCrystal());
-         modules.add(new ScaffoldPlusLeaves());
-         modules.add(new LegitNoFallLeaves());
-         modules.add(new PrinterLeaves());
-         modules.add(new PacketMinePlus());
-         modules.add(new AutoCity());
-         modules.add(new FireworkElytraFly());
+        // modules.add(new AutoCrystal());
+        // modules.add(new AutoAnchor());
+        // modules.add(new PistonCrystal());
+        // modules.add(new ScaffoldPlusLeaves());
+        //  modules.add(new LegitNoFallLeaves());
+        // modules.add(new PrinterLeaves());
+        // modules.add(new PacketMinePlus());
+        // modules.add(new AutoCity());
+        // modules.add(new FireworkElytraFly());
          modules.add(new Stuck());
          modules.add(new Ambience());
          modules.add(new CyberFujiShader());
@@ -176,12 +179,12 @@ public class AddonTemplate extends MeteorAddon {
          modules.add(new SilentHillShader());
          modules.add(new TerminatorHudShader());
          modules.add(new Freeze());
-         modules.add(new BMWSprint());
+        // modules.add(new BMWSprint());
          modules.add(new AutoVault());
          modules.add(new ScreenActions());
          modules.add(new MobHud());
          modules.add(new LavaESP());
-         modules.add(new CustomFishingBot());
+       //  modules.add(new CustomFishingBot());
          modules.add(new FurnaceUnclogger());
          modules.add(new EnglishUITranslation());
 
@@ -209,6 +212,7 @@ public class AddonTemplate extends MeteorAddon {
     @Override
     public void onRegisterCategories() {
         Modules.registerCategory(CATEGORY);
+        Modules.registerCategory(SF_CATEGORY);
     }
 
     @Override

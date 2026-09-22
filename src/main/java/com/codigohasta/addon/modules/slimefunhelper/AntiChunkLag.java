@@ -1,0 +1,151 @@
+package com.codigohasta.addon.modules.slimefunhelper;
+
+import com.codigohasta.addon.utils.slimefunhelper.events.Event;
+import com.codigohasta.addon.utils.slimefunhelper.hacks.MovTasks;
+import com.codigohasta.addon.utils.slimefunhelper.hacks.api.BaseModule;
+import com.codigohasta.addon.utils.slimefunhelper.hacks.api.ModulePath;
+import com.codigohasta.addon.utils.slimefunhelper.hacks.utils.entity.LegalMovementManager;
+import com.codigohasta.addon.utils.slimefunhelper.managers.Configs;
+import com.codigohasta.addon.utils.slimefunhelper.managers.config.FlagRef;
+import com.codigohasta.addon.utils.slimefunhelper.managers.config.IntRef;
+import com.codigohasta.addon.utils.slimefunhelper.managers.config.KeyBindRef;
+import com.codigohasta.addon.utils.slimefunhelper.managers.input.MultiKeyBind;
+import com.codigohasta.addon.utils.slimefunhelper.utils.MathUtils;
+import com.codigohasta.addon.utils.slimefunhelper.utils.WorldUtils;
+import net.minecraft.util.math.*;
+
+public class AntiChunkLag extends BaseModule implements LegalMovementManager.MovementModifier {
+    public static AntiChunkLag INSTANCE;
+    public static LegalMovementManager.DelegateMovementModifier instance;
+
+    public AntiChunkLag() {
+        super("AntiChunkLag");
+        INSTANCE = this;
+        if (instance == null) {
+            instance = new LegalMovementManager.DelegateMovementModifier(this::cast);
+            MovTasks.PLAYER_PIPELINE_0.addMovementModifierFactory(() -> instance);
+        }
+        instance.setDelegate(this::cast);
+        bindFlag(enable);
+    }
+
+    public final ModulePath root = makePath(Configs.MOV_CONFIG, "move-safety.anti-chunk-lag");
+
+    public final FlagRef enable = flagBuilder(root.addEnable()).build();
+
+    public final KeyBindRef hotkey =
+            moduleEntry(root.addHotkey(), new MultiKeyBind(), root.addEnable()).build();
+
+    public final IntRef velocity = intBuilder(root.add("predict-velocity"))
+            .defaultValue(48)
+            .validator(Configs.INT_POSITIVE)
+            .build();
+
+    public final FlagRef freeze = flagBuilder(root.add("freeze-when-lag")).build();
+
+    public final FlagRef log = flagBuilder(root.add("log-to-player")).build();
+
+    public boolean currentMayFaceLagChunk;
+
+    @Override
+    public void applyPreTickModify(Event<LegalMovementManager> movementManagerEvent) {}
+
+    @Override
+    public void applyBeforeInputPacketModify(Event<LegalMovementManager> movementManagerEvent) {
+        this.applyBeforeMovementPacketModify(movementManagerEvent);
+    }
+
+    @Override
+    public void applyBeforeMovementPacketModify(Event<LegalMovementManager> movementManagerEvent) {
+        if (enable.get()) {
+            int chunkSize = 1 + (velocity.get() / 16);
+            boolean hasUnloadedChunk = false;
+            ChunkPos playerChunkPos = mc.player.getChunkPos();
+            Vec3d playerHorizontalPos = mc.player.getEntityPos().withAxis(Direction.Axis.Y, 0);
+            double distanceS2 = MathUtils.s2(velocity.get());
+            search:
+            for (var x = -chunkSize; x <= chunkSize; x++) {
+                for (var z = -chunkSize; z <= chunkSize; z++) {
+                    ChunkPos chunkPos = new ChunkPos(x + playerChunkPos.x, z + playerChunkPos.z);
+                    if (WorldUtils.isChunkLoaded(chunkPos.x, chunkPos.z)) {
+                        continue;
+                    }
+                    Vec3d startPos = new Vec3d(chunkPos.getStartX(), 0, chunkPos.getStartZ());
+                    Box chunkBox = new Box(startPos, startPos.add(16, 0, 16));
+                    double distance = Math.max(
+                            MathUtils.getBoxDistance(playerHorizontalPos.x, chunkBox.minX, chunkBox.maxX),
+                            MathUtils.getBoxDistance(playerHorizontalPos.z, chunkBox.minZ, chunkBox.maxZ));
+                    if (distance < distanceS2) {
+                        hasUnloadedChunk = true;
+                        break search;
+                    }
+                }
+            }
+            boolean val = hasUnloadedChunk;
+            if (val && !currentMayFaceLagChunk) {
+                currentMayFaceLagChunk = true;
+                if (log.get()) {
+                    logI18N("message.module.anti-chunk-lag.facing-lag");
+                }
+            } else if (!val && currentMayFaceLagChunk) {
+                currentMayFaceLagChunk = false;
+            }
+
+            if (currentMayFaceLagChunk && freeze.get()) {
+                Vec3d currentPos = mc.player.getEntityPos();
+                Vec3d oldPos = movementManagerEvent.context.playerStatus.pos;
+                Vec3d movement = currentPos.subtract(oldPos);
+                int movementSgnX = (int) MathUtils.sgn(movement.x);
+                int movementSgnZ = (int) MathUtils.sgn(movement.z);
+                if (movementSgnZ != 0 || movementSgnX != 0) {
+                    boolean hasUnloaded = false;
+                    search:
+                    for (var x = 0; x <= chunkSize; x++) {
+                        for (var z = 0; z <= chunkSize; z++) {
+                            ChunkPos chunkPos = new ChunkPos(
+                                    x * movementSgnX + playerChunkPos.x, z * movementSgnZ + playerChunkPos.z);
+                            if (WorldUtils.isChunkLoaded(chunkPos.x, chunkPos.z)) {
+                                continue;
+                            }
+                            Vec3d startPos = new Vec3d(chunkPos.getStartX(), 0, chunkPos.getStartZ());
+                            Box chunkBox = new Box(startPos, startPos.add(16, 0, 16));
+                            double distance = Math.max(
+                                    MathUtils.getBoxDistance(playerHorizontalPos.x, chunkBox.minX, chunkBox.maxX),
+                                    MathUtils.getBoxDistance(playerHorizontalPos.z, chunkBox.minZ, chunkBox.maxZ));
+                            if (distance < distanceS2) {
+                                hasUnloaded = true;
+                                break search;
+                            }
+                        }
+                    }
+                    if (hasUnloaded) {
+                        movementManagerEvent.context.playerStatus.restorePos();
+                        FloatingUtils.INSTANCE.setGrimFloatingTick(true);
+                        // fix armorGlide
+                        if (mc.player.isGliding()) {
+                            if (ElytraExtra.INSTANCE.isCurrentArmorGliding()) {
+                                if (ElytraExtra.INSTANCE.isThisTickArmoGlideMovementServerSideGlide()) {
+                                    FloatingUtils.INSTANCE.setForceSilent(false);
+                                } else {
+                                    FloatingUtils.INSTANCE.setForceSilent(true);
+                                }
+                            } else {
+                                FloatingUtils.INSTANCE.setForceSilent(false);
+                            }
+                        } else {
+                            FloatingUtils.INSTANCE.setForceSilent(true);
+                        }
+                    }
+                }
+            }
+        } else {
+            currentMayFaceLagChunk = false;
+        }
+    }
+
+    @Override
+    public boolean postModify(Event<LegalMovementManager> movementManagerEvent, boolean enabledThisTick) {
+
+        return true;
+    }
+}

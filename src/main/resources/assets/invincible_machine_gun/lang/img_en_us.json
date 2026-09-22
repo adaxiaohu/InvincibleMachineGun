@@ -3462,56 +3462,119 @@
     },
     "SchematicPro": {
       "title": "Schematic Pro",
-      "description": "Automatically opens nearby schematic containers and helps fill them; creative mode can source required items automatically.",
+      "description": "Fills schematic containers: copies items in creative mode or uses real inventory items to match schematic slots in survival mode.",
       "groups": {
         "sgGeneral": "General",
-        "sgRender": "Render"
+        "sgRender": "Render",
+        "sgMissingRender": "Missing Items"
       },
       "settings": {
         "operationMode": {
           "title": "Operation Mode",
-          "description": "Selects the operation Mode option used by Schematic Pro."
+          "description": "Automatically scans and opens nearby containers, or starts after you right-click a container."
+        },
+        "fillMode": {
+          "title": "Fill Mode",
+          "description": "Copies schematic items in creative mode; survival mode only uses items available in your inventory."
         },
         "interactRange": {
-          "title": "Interact Range",
-          "description": "Only red target containers within this range are opened automatically."
+          "title": "Interaction Range",
+          "description": "Only target containers within this range are opened automatically."
         },
         "delay": {
           "title": "Fill Delay (Ticks)",
-          "description": "Sets filling speed in ticks. A value around 4-5 is recommended for reliable inventory synchronization."
+          "description": "Ticks between inventory or slot actions. 0 is fastest; the default is 1."
         },
         "autoClose": {
           "title": "Auto Close",
-          "description": "Enables or disables auto Close behavior in Schematic Pro."
+          "description": "Closes the container when it matches the schematic. Automatic mode also closes containers when materials or inventory space run out, then continues to other containers."
         },
         "renderRange": {
           "title": "Render Range",
-          "description": "Sets how far away distant containers are shown in the blue preview."
+          "description": "Maximum distance at which schematic containers needing attention are shown."
         },
         "previewSideColor": {
-          "title": "Preview Side Color",
-          "description": "Sets the side color for containers that need filling but are too far away to interact with."
+          "title": "Distant Preview Fill Color",
+          "description": "Fill color for containers that need attention but are too far away for automatic interaction."
         },
         "previewLineColor": {
-          "title": "Preview Line Color",
-          "description": "Sets the preview Line Color used when Schematic Pro renders this element."
+          "title": "Distant Preview Outline Color",
+          "description": "Outline color for distant containers that need attention."
         },
         "targetSideColor": {
-          "title": "Target Side Color",
-          "description": "Sets the side color for nearby containers whose contents are incorrect and are about to be opened automatically."
+          "title": "Nearby Target Fill Color",
+          "description": "Fill color for containers within interaction range whose contents do not match the schematic."
         },
         "targetLineColor": {
-          "title": "Target Line Color",
-          "description": "Sets the target Line Color used when Schematic Pro renders this element."
+          "title": "Nearby Target Outline Color",
+          "description": "Outline color for nearby containers whose contents do not match the schematic."
         },
         "matchSideColor": {
-          "title": "Match Side Color",
-          "description": "Sets the match Side Color used when Schematic Pro renders this element."
+          "title": "Completed Fill Color",
+          "description": "Fill color for containers that match the schematic."
         },
         "matchLineColor": {
-          "title": "Match Line Color",
-          "description": "Sets the match Line Color used when Schematic Pro renders this element."
+          "title": "Completed Outline Color",
+          "description": "Outline color for containers that match the schematic."
+        },
+        "blockedSideColor": {
+          "title": "Inventory Full Fill Color",
+          "description": "Fill color when your inventory cannot hold incorrect or excess items removed from a container in survival mode."
+        },
+        "blockedLineColor": {
+          "title": "Inventory Full Outline Color",
+          "description": "Outline color when your inventory has insufficient space for returned items."
+        },
+        "showMissingItems": {
+          "title": "Show Missing Items",
+          "description": "Shows item icons and counts at unfinished containers. Can show total schematic requirements before scanning, then actual missing amounts afterward."
+        },
+        "missingItemRenderRange": {
+          "title": "Display Distance",
+          "description": "Maximum distance for displaying missing-item icons."
+        },
+        "missingItemScale": {
+          "title": "Icon Scale",
+          "description": "Overall scale of the item panel at the center of each container."
+        },
+        "missingItemsPerRow": {
+          "title": "Items Per Row",
+          "description": "Maximum number of item types shown in each grid row."
+        },
+        "maxMissingItemsShown": {
+          "title": "Maximum Item Types",
+          "description": "Limits the panel size for large containers. Additional item types are shown as +N."
+        },
+        "showMissingCounts": {
+          "title": "Show Counts",
+          "description": "Uses the vanilla item overlay to show exact missing quantities."
+        },
+        "showMissingNames": {
+          "title": "Show Item Names",
+          "description": "Uses a vertical list of item icons, names and counts. Disabled by default to reduce clutter."
+        },
+        "showMissingBackground": {
+          "title": "Show Background",
+          "description": "Draws a translucent background behind missing-item icons for readability."
+        },
+        "missingBackgroundColor": {
+          "title": "Background Color",
+          "description": "Background color of the missing-item panel."
+        },
+        "showDistantMissingItems": {
+          "title": "Show Distant Containers",
+          "description": "Also shows the last scanned missing items for distant blue containers."
+        },
+        "showUnscannedHint": {
+          "title": "Unscanned Hint",
+          "description": "When enabled, unscanned containers show ?. Otherwise, they show total schematic requirements until scanned, then actual missing amounts."
         }
+      },
+      "texts": {
+        "reset-progress": "Reset All Progress",
+        "inventory-full": "Not enough inventory space",
+        "missing-materials": "Not enough materials",
+        "more-types": "+%d more types"
       }
     },
     "MacroAnchor": {
@@ -8153,6 +8216,10 @@
     "com.codigohasta.addon.modules.OreVeinESP$Mode": {
       "Legit": "Safe Mode",
       "Blatant": "Aggressive Mode"
+    },
+    "com.codigohasta.addon.modules.SchematicPro$FillMode": {
+      "Creative": "Creative Copy",
+      "SurvivalInventory": "Survival Inventory"
     },
     "com.codigohasta.addon.modules.SchematicPro$OperationMode": {
       "Automatic": "Automatic Scan and Open",

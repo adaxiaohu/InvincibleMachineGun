@@ -1,6 +1,8 @@
 package com.codigohasta.addon.utils.translation;
 
 import com.codigohasta.addon.AddonTemplate;
+import com.codigohasta.addon.utils.slimefunhelper.SfTranslations;
+import com.codigohasta.addon.utils.slimefunhelper.hacks.api.BaseModule;
 import com.codigohasta.addon.mixin.ModuleTranslationAccessor;
 import com.codigohasta.addon.mixin.SettingGroupTranslationAccessor;
 import com.codigohasta.addon.mixin.SettingTranslationAccessor;
@@ -56,8 +58,11 @@ public final class JsonEnglishTranslationManager {
 
         for (Module module : Modules.get().getAll()) {
             if (!module.getClass().getName().startsWith(ADDON_PACKAGE)) continue;
+            if (module instanceof BaseModule) continue;
             translateModule(module, file);
         }
+
+        SfTranslations.setEnglish(true);
 
         Modules.get().sortModules();
         applied = true;
@@ -71,6 +76,7 @@ public final class JsonEnglishTranslationManager {
     }
 
     public static synchronized void restore() {
+        SfTranslations.setEnglish(false);
         if (!applied) return;
 
         for (Map.Entry<Module, ModuleText> entry : MODULE_TEXT.entrySet()) {
@@ -99,6 +105,14 @@ public final class JsonEnglishTranslationManager {
         return applied;
     }
 
+    /** Localizes custom widgets and world labels without changing saved settings. */
+    public static synchronized String moduleText(String module, String key, String fallback) {
+        if (!applied || translations == null) return fallback;
+        ModuleEntry entry = safeModules(translations).get(module);
+        String value = entry == null || entry.texts == null ? null : entry.texts.get(key);
+        return notBlank(value) ? value : fallback;
+    }
+
     /**
      * Returns the English display text for addon enum values used by Meteor dropdowns.
      * The enum object itself is never changed, so serialization still uses the original constant.
@@ -107,6 +121,10 @@ public final class JsonEnglishTranslationManager {
         if (value == null) return "";
 
         String original = value.toString();
+        if (value instanceof Enum<?> sfValue) {
+            String localized = SfTranslations.enumTitle(sfValue);
+            if (localized != null) return localized;
+        }
         if (!applied || !(value instanceof Enum<?> enumValue)) return original;
 
         Class<?> enumClass = enumValue.getDeclaringClass();
@@ -328,6 +346,7 @@ public final class JsonEnglishTranslationManager {
         String description;
         Map<String, String> groups;
         Map<String, SettingEntry> settings;
+        Map<String, String> texts;
     }
 
     private static final class SettingEntry {

@@ -1,0 +1,527 @@
+package com.codigohasta.addon.modules.slimefunhelper;
+
+import com.codigohasta.addon.utils.slimefunhelper.events.Event;
+import com.codigohasta.addon.utils.slimefunhelper.events.Listener;
+import com.codigohasta.addon.utils.slimefunhelper.events.impl.EventContainer;
+import com.codigohasta.addon.utils.slimefunhelper.hacks.MovTasks;
+import com.codigohasta.addon.utils.slimefunhelper.hacks.api.BaseModule;
+import com.codigohasta.addon.utils.slimefunhelper.hacks.api.ModulePath;
+import com.codigohasta.addon.utils.slimefunhelper.hacks.api.ModulePreset;
+import com.codigohasta.addon.modules.slimefunhelper.ElytraBot;
+import com.codigohasta.addon.utils.slimefunhelper.hacks.utils.HotKeyUtils;
+import com.codigohasta.addon.utils.slimefunhelper.hacks.utils.config.NBTTypes;
+import com.codigohasta.addon.utils.slimefunhelper.hacks.utils.config.OptionalPrimitive;
+import com.codigohasta.addon.utils.slimefunhelper.hacks.utils.entity.LegalMovementManager;
+import com.codigohasta.addon.utils.slimefunhelper.hacks.utils.move.ElytraOptimizeUtils;
+import com.codigohasta.addon.utils.slimefunhelper.hacks.utils.move.FlightVelocity;
+import com.codigohasta.addon.utils.slimefunhelper.managers.Configs;
+import com.codigohasta.addon.utils.slimefunhelper.managers.Tasks;
+import com.codigohasta.addon.utils.slimefunhelper.managers.config.*;
+import com.codigohasta.addon.utils.slimefunhelper.managers.input.MultiKeyBind;
+import com.codigohasta.addon.utils.slimefunhelper.utils.ChatUtils;
+import com.codigohasta.addon.utils.slimefunhelper.utils.Debug;
+import com.codigohasta.addon.utils.slimefunhelper.utils.EntityUtils;
+import com.codigohasta.addon.utils.slimefunhelper.utils.entity.PlayerInputUtils;
+import net.minecraft.client.network.ClientPlayerEntity;
+import net.minecraft.network.packet.c2s.play.ClientCommandC2SPacket;
+import net.minecraft.util.math.Direction;
+import net.minecraft.util.math.Vec2f;
+import net.minecraft.util.math.Vec3d;
+import org.jetbrains.annotations.ApiStatus;
+
+public class ElytraFlight extends BaseModule implements LegalMovementManager.MovementModifier {
+    public static ElytraFlight INSTANCE;
+    public final ModulePath elytra = makePath(Configs.MOV_CONFIG, "elytra");
+    public final ModulePath simpleFlightControl = elytra.add("simple-flight-control");
+    public final ModulePath customFireworks = elytra.add("custom-fireworks");
+
+    public FlagRef enable =
+            flagBuilder(simpleFlightControl.add("enable-control")).build();
+
+    public KeyBindRef hotkey = moduleEntry(
+                    simpleFlightControl.add("enable-control-hotkey"),
+                    new MultiKeyBind(),
+                    simpleFlightControl.add("enable-control"),
+                    moduleMeta(() -> this.controlMode))
+            .build();
+
+    public final DoubleRef packetMotion = builder(customFireworks.add("motion-amount"), DoubleRef.TYPE)
+            .defaultValue(0.05)
+            .validator(Configs.doubleRange(0.0, 10000.0))
+            .build();
+
+    public final EnumRef<ElytraExtra.MotionMode> motionMode = builder(
+                    simpleFlightControl.add("motion-mode"), ElytraExtra.MotionMode.class)
+            .defaultValue(ElytraExtra.MotionMode.VOID)
+            .build();
+
+    public final IntRef fireworksRotationLastingTicks = builder(
+                    simpleFlightControl.add("firework-rotation-last-ticks"), Integer.class)
+            .defaultValue(3)
+            .show(() -> motionMode.get().isIn(ElytraExtra.MotionMode.FIRE_WORKS))
+            .build();
+
+    public final FlagRef rotateWhenVoid = builder(simpleFlightControl.add("rotate-when-void-motion"), Boolean.class)
+            .defaultValue(true)
+            .show(() -> motionMode.get().isIn(ElytraExtra.MotionMode.VOID))
+            .build();
+
+    public final EnumRef<Mode> controlMode = builder(simpleFlightControl.add("flight-mode"), Mode.class)
+            .defaultValue(Mode.CONTROL)
+            .build();
+
+    public final KeyBindRef motionToggle = hotkey(simpleFlightControl.add("flight-toggle"))
+            .defaultValue(new MultiKeyBind())
+            .registerHotkey(HotKeyUtils.wrapAsHandler(this::toggleMode))
+            .build();
+
+    public final FlagRef useFloatingUtils =
+            flagBuilder(simpleFlightControl.add("use-floating-utils")).build();
+    public final FlagRef horizontalFlyNoGravity = builder(
+                    simpleFlightControl.add("horizontal-no-gravity"), Boolean.class)
+            .defaultValue(true)
+            .build();
+
+    public final FlagRef pauseWhenAccelerate = builder(simpleFlightControl.add("pause-when-accelerate"), Boolean.class)
+            .defaultValue(true)
+            .build();
+
+    public final FlagRef landAutoClose =
+            flagBuilder(simpleFlightControl.add("land-auto-close")).build();
+
+    public final NBTRef<OptionalPrimitive<Integer>> takeOffOptimize = builder(
+                    simpleFlightControl.add("hold-jump-takeoff-ticks"), OptionalPrimitive.INT_TYPE)
+            .defaultValue(new OptionalPrimitive<>(false, NBTTypes.INT_TYPE, 10))
+            .build();
+
+    public final DoubleRef motionArg = builder(simpleFlightControl.add("motion-lerp-argument"), DoubleRef.TYPE)
+            .defaultValue(1.0D)
+            .build();
+
+    public final FlagRef motionArgLerpStarting = builder(simpleFlightControl.add("motion-lerp-starting"), Boolean.class)
+            .defaultValue(false)
+            .build();
+
+    public final FlagRef useAutoRescale = flagBuilder(simpleFlightControl.add("use-auto-rescale"))
+            .show(() -> ElytraExtra.INSTANCE.autoRescale.get())
+            .build();
+
+    public final NBTRef<OptionalPrimitive<Double>> overridePullupAngle = builder(
+                    simpleFlightControl.add("override-pullup-angle"), OptionalPrimitive.DOUBLE_TYPE)
+            .defaultValue(new OptionalPrimitive<>(false, NBTTypes.DOUBLE_TYPE, 45.0D))
+            .validator(s -> s.getValue() > 0 && s.getValue() < 90)
+            .show(() -> this.controlMode.get().isIn(Mode.CONTROL))
+            .build();
+
+    public final NBTRef<OptionalPrimitive<Double>> overrideDownwardAngle = builder(
+                    simpleFlightControl.add("override-downward-angle"), OptionalPrimitive.DOUBLE_TYPE)
+            .defaultValue(new OptionalPrimitive<>(false, NBTTypes.DOUBLE_TYPE, 45.0D))
+            .validator(s -> s.getValue() > 0 && s.getValue() < 90)
+            .show(() -> this.controlMode.get().isIn(Mode.CONTROL))
+            .build();
+
+    public final NBTRef<OptionalPrimitive<Double>> overrideHorizontalFlyAngle = builder(
+                    simpleFlightControl.add("override-horizontal-fly-angle"), OptionalPrimitive.DOUBLE_TYPE)
+            .defaultValue(new OptionalPrimitive<>(false, NBTTypes.DOUBLE_TYPE, 0.1))
+            .validator(s -> s.getValue() > -90 && s.getValue() < 90)
+            .show(() -> this.controlMode.get().isIn(Mode.CONTROL))
+            .build();
+
+    @ApiStatus.Experimental
+    public final FlagRef autoRescaleBestClimbingSpeed = flagBuilder(
+                    simpleFlightControl.add("use-auto-rescale-best-climbing-speed"))
+            .show(() -> ElytraExtra.INSTANCE.autoRescale.get())
+            .experimental()
+            .build();
+
+    boolean currentTakeOff = false;
+    public final FlagRef autoFly =
+            flagBuilder(simpleFlightControl.add("auto-fly")).build();
+
+    public final KeyBindRef autoFlyKey = toggleHotkey(
+                    simpleFlightControl.add("auto-fly-hotkey"), new MultiKeyBind(), simpleFlightControl.add("auto-fly"))
+            .build();
+
+    public final FlagRef autoFlyAutoJumpOff =
+            flagBuilder(simpleFlightControl.add("auto-fly-auto-jump-off")).build();
+
+    public final FlagRef autoFlyLandAutoClose =
+            flagBuilder(simpleFlightControl.add("auto-fly-land-auto-close")).build();
+
+    private static LegalMovementManager.DelegateMovementModifier instance;
+
+    public ElytraFlight() {
+        super("ElytraFlight");
+        if (instance == null) {
+            instance = new LegalMovementManager.DelegateMovementModifier(this::cast);
+            MovTasks.PLAYER_PIPELINE_0.addMovementModifierFactory(() -> instance);
+        }
+        instance.setDelegate(this::cast);
+        bindFlag(enable);
+        INSTANCE = this;
+    }
+
+    @Override
+    public int priority() {
+        return PRIORITY_COMMON;
+    }
+
+    @Override
+    public void registerAll() {
+        super.registerAll();
+        registerListener(Listener.getCustomListener().getChannel(ModulePreset.class), this::onPresetLoad);
+    }
+
+    public boolean toggleMode() {
+        controlMode.next();
+        Debug.chat(
+                ChatUtils.stringToText("&c[ElytraFlight] &fMode switch to"),
+                controlMode.get().getDisplay());
+        return false;
+    }
+
+    public boolean shouldControlFlight() {
+        if (BaritoneFix.INSTANCE != null && BaritoneFix.INSTANCE.shouldYieldFlightControl()) return false;
+        return enable.get() || (ElytraBot.INSTANCE.canControlFlight());
+    }
+
+    public boolean shouldFlyRocketOnFirstOff() {
+        if (shouldControlFlight()) {
+            if (autoFly.get()) return true;
+            if (PlayerInputUtils.of(mc.options).hasMovementControl()) return true;
+            return !useFloatingUtils.get();
+        } else {
+            return false;
+        }
+    }
+
+    Vec3d lastVelocity = null;
+    int holdJumpCounter = 0;
+
+    public void applyPreTickModify(Event<LegalMovementManager> movementManagerEvent) {
+        ClientPlayerEntity player = movementManagerEvent.context.playerStatus.entity;
+        if (BaritoneFix.INSTANCE != null && BaritoneFix.INSTANCE.shouldYieldFlightControl()) {
+            // Baritone predicts vanilla glide/firework motion. Manual SF velocity and
+            // idle floating would overwrite that route, even without keyboard input.
+            lastVelocity = null;
+            holdJumpCounter = 0;
+            currentTakeOff = false;
+            return;
+        }
+        if (com.codigohasta.addon.utils.slimefunhelper.FlightImpulseGuard.preserving()) {
+            lastVelocity = player.getVelocity();
+            return;
+        }
+        if (player.isGliding()) {
+            currentTakeOff = true;
+        }
+        if (mc.options.jumpKey.isPressed()) {
+            holdJumpCounter++;
+        } else {
+            holdJumpCounter = 0;
+        }
+
+        if (shouldControlFlight()) {
+            if (!player.isGliding()
+                    && takeOffOptimize.get().isPresent()
+                    && holdJumpCounter >= takeOffOptimize.get().getValue()) {
+                if (!mc.player.isOnGround() && mc.player.checkGliding()) {
+                    MovExtra.INSTANCE.sendPacketsForPreStartFallFlying();
+                    mc.getNetworkHandler()
+                            .sendPacket(new ClientCommandC2SPacket(
+                                    mc.player, ClientCommandC2SPacket.Mode.START_FALL_FLYING));
+                    MovExtra.INSTANCE.sendPacketsForPostStartFallFlying();
+                }
+            }
+            if (player.isGliding()) {
+                if (lastVelocity == null) {
+                    lastVelocity = Vec3d.ZERO;
+                }
+                if (MovTasks.getElytraGrimAccelerate().enable.get()) {
+                    // GrimAccelerate on
+                    // close
+                    return;
+                }
+                Vec3d controlMotion = new Vec3d(0, 0, 0);
+                boolean shouldControl = false;
+                double motionAmount = this.packetMotion.get();
+                boolean shouldCheckRocket = false;
+                boolean shouldControlRotation = false;
+                PlayerInputUtils.Input input = PlayerInputUtils.of(mc.options);
+                switch (controlMode.get()) {
+                    case CONTROL -> {
+                        boolean packetMotion = true;
+
+                        Vec3d movementInput =
+                                new Vec3d(input.sidewaysSpeed(), input.upwardSpeed(), input.forwardSpeed());
+                        Vec3d velocity = EntityUtils.movementInputToVelocity(movementInput, 1.0F, player.getYaw());
+                        if (movementInput.horizontalLengthSquared() > 0.0D) {
+                            if (movementInput.y > 0) {
+                                if (overridePullupAngle.get().isPresent()) {
+                                    double angle = overridePullupAngle.get().getValue();
+                                    double yLevel =
+                                            Math.tan(Math.abs(Math.toRadians(angle))) * velocity.horizontalLength();
+                                    velocity = velocity.withAxis(Direction.Axis.Y, yLevel);
+                                }
+                            } else if (movementInput.y < 0) {
+                                if (overrideDownwardAngle.get().isPresent()) {
+                                    double angle = overrideDownwardAngle.get().getValue();
+                                    double yLevel =
+                                            Math.tan(Math.abs(Math.toRadians(angle))) * velocity.horizontalLength();
+                                    velocity = velocity.withAxis(Direction.Axis.Y, -yLevel);
+                                }
+                            } else {
+                                if (overrideHorizontalFlyAngle.get().isPresent()) {
+                                    double angle =
+                                            overrideHorizontalFlyAngle.get().getValue();
+                                    double yLevel = Math.tan(Math.toRadians(angle)) * velocity.horizontalLength();
+                                    velocity = velocity.withAxis(Direction.Axis.Y, -yLevel);
+                                }
+                            }
+                        }
+                        if (useAutoRescale.get()
+                                && autoRescaleBestClimbingSpeed.get()
+                                && movementInput.horizontalLength() > 0) {
+                            if (movementInput.y > 0 && velocity.y > 0) {
+
+                                velocity = ElytraOptimizeUtils.calculateBestPullupSpeed(velocity);
+                            } else if (movementInput.y < 0 && velocity.y < 0) {
+                                velocity = ElytraOptimizeUtils.calculateBestDownForwardSpeed(velocity, false);
+                            }
+                        }
+
+                        if (motionMode.get() == ElytraExtra.MotionMode.FIRE_WORKS) {
+                            packetMotion = false;
+                            shouldCheckRocket = true;
+                            if (MovTasks.getElytraExtra().canFireworkControlMotion()) {
+                                packetMotion = true;
+                            }
+                            if (ElytraExtra.INSTANCE.canFireworkControlMotion(fireworksRotationLastingTicks.get())) {
+                                shouldControlRotation = true;
+                            }
+                        } else if (motionMode.get() == ElytraExtra.MotionMode.VOID) {
+                            if (rotateWhenVoid.get()) {
+                                shouldControlRotation = true;
+                            }
+                        }
+                        controlMotion = velocity;
+                        if (packetMotion) {
+                            shouldControl = true;
+                        }
+                    }
+                    case ROTATION -> {
+                        // todo
+                        boolean packetMotion = true;
+                        Vec3d velocity = EntityUtils.lookCoordToPos(
+                                player.getPitch(), player.getYaw(), input.sidewaysSpeed(), 0, input.forwardSpeed());
+                        Vec3d vertical = new Vec3d(0, input.upwardSpeed(), 0);
+                        velocity = velocity.add(vertical);
+
+                        if (input.upwardSpeed() > 0
+                                && velocity.y > 0
+                                && useAutoRescale.get()
+                                && autoRescaleBestClimbingSpeed.get()) {
+                            velocity = ElytraOptimizeUtils.calculateBestPullupSpeed(velocity);
+                        }
+
+                        if (motionMode.get() == ElytraExtra.MotionMode.FIRE_WORKS) {
+                            packetMotion = false;
+                            shouldCheckRocket = true;
+                            if (MovTasks.getElytraExtra().canFireworkControlMotion()) {
+                                packetMotion = true;
+                            }
+                            if (ElytraExtra.INSTANCE.canFireworkControlMotion(fireworksRotationLastingTicks.get())) {
+                                shouldControlRotation = true;
+                            }
+                        } else if (motionMode.get() == ElytraExtra.MotionMode.VOID) {
+                            if (rotateWhenVoid.get()) {
+                                shouldControlRotation = true;
+                            }
+                        }
+                        controlMotion = velocity;
+                        if (packetMotion) {
+                            shouldControl = true;
+                        }
+                    }
+                }
+                if (controlMotion.lengthSquared() < 1E-6 && autoFly.get()) {
+                    controlMotion = mc.player.getRotationVector();
+                }
+                Vec3d wayVector = controlMotion.normalize();
+
+                Vec3d realVector = wayVector.multiply(motionAmount);
+                double a = this.motionArg.get();
+                if (a != 1.0D
+                        && (motionArgLerpStarting.get()
+                                || lastVelocity.lengthSquared() > 0.01 * motionAmount * motionAmount)) {
+                    realVector = realVector.multiply(a).add(lastVelocity.multiply(1.0D - a));
+                    // 当玩家在操纵的时候，永远保持最高速
+                    // 否则以1 - a为系数衰减
+                    if (wayVector.lengthSquared() > 1E-6) {
+                        realVector = realVector.normalize().multiply(motionAmount);
+                    }
+                }
+                // add custom elytra event for bot to control elytra
+                FlightVelocity velocity =
+                        new FlightVelocity(realVector, motionAmount, FlightVelocity.Mode.ELYTRA_FLIGHT);
+                Listener.getCustomListener().broadcast(new EventContainer<>(FlightVelocity.class, velocity));
+                realVector = velocity.toVelocity();
+                lastVelocity = realVector;
+                if (lastVelocity.length() < 0.1 * motionAmount) {
+                    lastVelocity = Vec3d.ZERO;
+                }
+                // add FloatingUtils
+                if (FloatingUtils.INSTANCE.workGrimFloatingThisTick()) {
+                    realVector = Vec3d.ZERO;
+                    shouldControl = true;
+                    shouldCheckRocket = false;
+                    shouldControlRotation = false;
+                } else if (useFloatingUtils.get() && realVector.lengthSquared() < 1e-4) {
+                    if (!MovTasks.getElytraExtra().canFireworkControlMotion()) {
+                        if (ElytraExtra.INSTANCE.shouldApplyOnGroundFly()
+                                && PlayerStateManager.INSTANCE.lastHasGroundSupport) {
+                            shouldControl = true;
+                            shouldCheckRocket = false;
+                        } else {
+                            realVector = Vec3d.ZERO;
+                            FloatingUtils.INSTANCE.setGrimFloatingTick(true);
+                            shouldControl = true;
+                            shouldCheckRocket = false;
+                            shouldControlRotation = false;
+                        }
+                    } else {
+                        shouldControl = true;
+                        shouldCheckRocket = false;
+                    }
+                }
+                // ground check
+                if (ElytraExtra.INSTANCE.shouldApplyOnGroundFly()
+                        && PlayerStateManager.INSTANCE.lastHasGroundSupport
+                        && realVector.y < 0) {
+                    realVector = realVector.withAxis(Direction.Axis.Y, 0);
+                }
+                if (shouldControlRotation && realVector.lengthSquared() > 5e-3) {
+                    // fliter zero control
+                    if (!movementManagerEvent.context.hasImportantRotation()) {
+                        if (realVector.horizontalLengthSquared() > 5E-3) {
+                            movementManagerEvent.context.pushImportantRotation(true, true);
+                            Vec2f py = EntityUtils.rotationToPitchYaw(realVector.normalize());
+                            movementManagerEvent.context.markForResetRot();
+                            EntityUtils.setEntityPitchSafe(mc.player, py.x);
+                            PlayerStateManager.setPlayerYawSafe(mc.player, py.y);
+                        } else {
+                            movementManagerEvent.context.pushImportantRotation(true, false);
+                            float pitch = EntityUtils.rotationToPitch(realVector.normalize());
+                            movementManagerEvent.context.markForResetRot();
+                            EntityUtils.setEntityPitchSafe(mc.player, pitch);
+                        }
+                    }
+                    // pitch reset to trigger grim lastPitch lastYaw update
+                    if (useAutoRescale.get()) {
+                        float yaw = mc.player.getYaw();
+                        float newYaw = (Tasks.getTick() % 2 == 0) ? yaw + 0.01F : yaw - 0.01F;
+                        PlayerStateManager.setPlayerYawSafe(mc.player, newYaw);
+                        Vec3d newVectorRot = EntityUtils.pitchYawToRotation(mc.player.getPitch(), newYaw);
+                        realVector = newVectorRot.normalize().multiply(realVector.length());
+                    }
+                }
+                if (shouldControl) {
+                    if (Math.abs(realVector.y) <= 1e-2 && horizontalFlyNoGravity.get() && !mc.player.isOnGround()) {
+                        modifyNoGravity = player.hasNoGravity();
+                        player.setNoGravity(true);
+                    }
+                    mc.player.setVelocity(
+                            (motionMode.get() == ElytraExtra.MotionMode.FIRE_WORKS && useAutoRescale.get())
+                                    ? ElytraExtra.INSTANCE.applyAxisLimit(
+                                            realVector,
+                                            mc.player.getPitch(),
+                                            mc.player.getYaw(),
+                                            !mc.player.hasNoGravity())
+                                    : realVector);
+                } else if (realVector.length() > 0) {
+                    Debug.info(
+                            "Lost Control",
+                            PlayerStateManager.INSTANCE.lastKnownClientVelocity,
+                            EntityUtils.calculateGlidingVelocity(
+                                    mc.player,
+                                    PlayerStateManager.INSTANCE.lastKnownClientVelocity,
+                                    mc.player.getRotationVector(),
+                                    true),
+                            mc.player.getVelocity());
+                }
+
+                if (shouldCheckRocket) {
+                    MovTasks.getElytraExtra().launchFirework(mc.player.getPitch(), mc.player.getYaw());
+                }
+            } else {
+                lastVelocity = null;
+                if (autoFly.get() && autoFlyAutoJumpOff.get()) {
+                    ElytraExtra.INSTANCE.autoTakeoff();
+                }
+            }
+        } else {
+            lastVelocity = null;
+        }
+        if (currentTakeOff && !mc.player.isGliding() && mc.player.isOnGround()) {
+            if (enable.get() && landAutoClose.get()) {
+                HotKeyUtils.wrapFlagAsToggle(
+                                simpleFlightControl.add("enable-control").toPath(), enable)
+                        .run();
+            }
+            if (autoFly.get() && autoFlyLandAutoClose.get()) {
+                HotKeyUtils.wrapFlagAsToggle(simpleFlightControl.add("auto-fly").toPath(), autoFly)
+                        .run();
+            }
+            currentTakeOff = false;
+        }
+    }
+
+    Boolean modifyNoGravity = null;
+
+    @Override
+    public void onDisableModule() {
+        if (modifyNoGravity != null && mc.player != null) mc.player.setNoGravity(modifyNoGravity);
+        modifyNoGravity = null;
+        lastVelocity = null;
+        currentTakeOff = false;
+    }
+
+    @Override
+    public boolean postModify(Event<LegalMovementManager> movementManagerEvent, boolean enabledThisTick) {
+        if (modifyNoGravity != null) {
+            movementManagerEvent.context().playerStatus.entity.setNoGravity(modifyNoGravity);
+            modifyNoGravity = null;
+        }
+
+        return true;
+    }
+
+    public void onPresetLoad(Event<EventContainer<ModulePreset>> presetEvent) {
+        switch (presetEvent.context.getValue()) {
+            case HACKING, VANILLA, AC_COMMON -> {
+                motionMode.set(ElytraExtra.MotionMode.VOID);
+            }
+            case AC_VULCAN -> {
+                motionMode.set(ElytraExtra.MotionMode.VOID);
+                if (packetMotion.get() > 2.5F) {
+                    packetMotion.set(2.5F);
+                }
+            }
+            case AC_GRIM_LEGACY, AC_GRIM, AC_MATRIX -> {
+                motionMode.set(ElytraExtra.MotionMode.FIRE_WORKS);
+            }
+        }
+    }
+
+    public enum Mode implements ConfigEnum {
+        CONTROL,
+        ROTATION;
+
+        @Override
+        public String getConfigEnumType() {
+            return "elytramode";
+        }
+    }
+
+    public enum GravityMode implements ConfigEnum {}
+}

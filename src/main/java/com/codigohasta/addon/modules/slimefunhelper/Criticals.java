@@ -1,0 +1,608 @@
+package com.codigohasta.addon.modules.slimefunhelper;
+
+import java.util.HashSet;
+import java.util.List;
+import java.util.Objects;
+import java.util.Set;
+import com.codigohasta.addon.utils.slimefunhelper.accessors.access.ClientPlayerAccess;
+import com.codigohasta.addon.utils.slimefunhelper.accessors.access.PlayerInteractEntityC2SPacketAccess;
+import com.codigohasta.addon.utils.slimefunhelper.accessors.access.PlayerMoveC2SPacketAccess;
+import com.codigohasta.addon.utils.slimefunhelper.events.Event;
+import com.codigohasta.addon.utils.slimefunhelper.events.Listener;
+import com.codigohasta.addon.utils.slimefunhelper.events.PacketManager;
+import com.codigohasta.addon.utils.slimefunhelper.events.impl.EventContainer;
+import com.codigohasta.addon.utils.slimefunhelper.hacks.CombatTasks;
+import com.codigohasta.addon.utils.slimefunhelper.hacks.MovTasks;
+import com.codigohasta.addon.utils.slimefunhelper.hacks.api.BaseModule;
+import com.codigohasta.addon.utils.slimefunhelper.hacks.api.ModulePath;
+import com.codigohasta.addon.utils.slimefunhelper.hacks.api.ModulePreset;
+import com.codigohasta.addon.modules.slimefunhelper.InvExtra;
+import com.codigohasta.addon.modules.slimefunhelper.FloatingUtils;
+import com.codigohasta.addon.modules.slimefunhelper.LegacySnapRotManager;
+import com.codigohasta.addon.modules.slimefunhelper.PlayerStateManager;
+import com.codigohasta.addon.utils.slimefunhelper.hacks.utils.entity.LegalMovementManager;
+import com.codigohasta.addon.utils.slimefunhelper.hacks.utils.tasks.TimerExecutor;
+import com.codigohasta.addon.utils.slimefunhelper.hooks.ViaFabricPlusHooks;
+import com.codigohasta.addon.utils.slimefunhelper.managers.Configs;
+import com.codigohasta.addon.utils.slimefunhelper.managers.Tasks;
+import com.codigohasta.addon.utils.slimefunhelper.managers.config.*;
+import com.codigohasta.addon.utils.slimefunhelper.managers.input.MultiKeyBind;
+import com.codigohasta.addon.utils.slimefunhelper.utils.*;
+import com.codigohasta.addon.utils.slimefunhelper.utils.entity.PlayerInputUtils;
+import com.codigohasta.addon.utils.slimefunhelper.versioned.api.VPacket;
+import net.minecraft.entity.Entity;
+import net.minecraft.entity.LivingEntity;
+import net.minecraft.item.ItemStack;
+import net.minecraft.network.packet.c2s.play.ClientCommandC2SPacket;
+import net.minecraft.network.packet.c2s.play.HandSwingC2SPacket;
+import net.minecraft.network.packet.c2s.play.PlayerInteractEntityC2SPacket;
+import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket;
+import net.minecraft.util.Hand;
+import net.minecraft.util.math.*;
+
+public class Criticals extends BaseModule implements LegalMovementManager.MovementModifier {
+    public final ModulePath attBot = makePath(Configs.COMBAT_CONFIG, "att-bot");
+    public final ModulePath criticals = attBot.add("criticals");
+
+    public final FlagRef enable = flagBuilder(criticals.add("enable")).build();
+
+    public final KeyBindRef hotkey = moduleEntry(
+                    criticals.add("hotkey"), new MultiKeyBind(), criticals.add("enable"), moduleMeta(() -> this.mode))
+            .build();
+
+    public final EnumRef<Mode> mode =
+            builder(criticals.add("mode"), Mode.class).defaultValue(Mode.PACKET).build();
+
+    public final FlagRef groundOnly = flagBuilder(criticals.add("ground-only"))
+            .show(() -> mode.get().isIn(Mode.FREEZE, Mode.GRIM_GROUND_SIMULATION))
+            .build();
+
+    public final FlagRef targetAround = flagBuilder(criticals.add("target-only"))
+            .show(() -> mode.get().isIn(Mode.FREEZE, Mode.GRIM_GROUND_SIMULATION))
+            .build();
+
+    public final FlagRef movementOkFreeze = flagBuilder(criticals.add("movement-ok-freeze"))
+            .show(() -> mode.get().isIn(Mode.FREEZE))
+            .build();
+
+    public final FlagRef movementOkGround = flagBuilder(criticals.add("movement-ok-ground"))
+            .show(() -> mode.get().isIn(Mode.GRIM_GROUND_SIMULATION))
+            .build();
+
+    public final FlagRef autoFakeGround = builder(criticals.add("auto-fake-ground-height"), Boolean.class)
+            .defaultValue(true)
+            .show(() -> mode.get().isIn(Mode.GRIM_GROUND_SIMULATION))
+            .build();
+
+    public final FlagRef autoWalk = builder(criticals.add("auto-walk-resync"), Boolean.class)
+            .defaultValue(true)
+            .show(() -> mode.get().isIn(Mode.GRIM_GROUND_SIMULATION))
+            .build();
+
+    public final EnumRef<Configs.SetBackTriggerType> setBackType = builder(
+                    criticals.add("set-back-mode"), Configs.SetBackTriggerType.class)
+            .defaultValue(Configs.SetBackTriggerType.SIMULATION)
+            .show(() -> mode.get().isIn(Mode.GRIM_GROUND_SIMULATION))
+            .build();
+
+    public final FlagRef delaySwap = flagBuilder(criticals.add("delay-swap"))
+            .show(() -> mode.get().isIn(Mode.GRIM_GROUND_SIMULATION))
+            .build();
+
+    public final FlagRef inWallPacket = flagBuilder(criticals.add("in-wall-packet"))
+            .show(() -> mode.get().isNotIn(Mode.FREEZE, Mode.PACKET))
+            .build();
+
+    public final FlagRef inAirFreeze = builder(criticals.add("in-air-freeze"), Boolean.class)
+            .defaultValue(true)
+            .show(() -> mode.get().isIn(Mode.FREEZE))
+            .build();
+
+    public final FlagRef inWallFreezeCritical = builder(criticals.add("in-wall-freeze"), Boolean.class)
+            .defaultValue(true)
+            .show(() -> mode.get().isIn(Mode.FREEZE))
+            .build();
+
+    public final DoubleRef customInWallJumpFreezeHeight = builder(criticals.add("custom-in-wall-height"), Double.class)
+            .defaultValue(0.05)
+            .validator(Configs.doubleRange(0, 1))
+            .show(() -> mode.get().isIn(Mode.FREEZE))
+            .build();
+
+    public final DoubleRef customInWallJumpPacketHeight = builder(
+                    criticals.add("custom-in-wall-packet-height"), Double.class)
+            .defaultValue(0.05)
+            .validator(Configs.doubleRange(0, 1))
+            .show(() -> mode.get().isNotIn(Mode.FREEZE))
+            .build();
+
+    public final IntRef cooldownCritical = builder(criticals.add("critical-cooldown"), Integer.class)
+            .defaultValue(10)
+            .build();
+
+    static LegalMovementManager.DelegateMovementModifier instance;
+
+    public Criticals() {
+        super("Criticals");
+        if (instance == null) {
+            instance = new LegalMovementManager.DelegateMovementModifier(this::cast);
+            MovTasks.PLAYER_PIPELINE_0.addMovementModifierFactory(() -> instance);
+        }
+        instance.setDelegate(this::cast);
+        bindFlag(enable);
+    }
+
+    // todo: wall critical
+
+    @Override
+    public void registerAll() {
+        super.registerAll();
+        registerListener(
+                Listener.getPacketPoint().getChannel(PlayerInteractEntityC2SPacket.class), this::onPlayerAttack);
+        registerListener(Listener.getPacketPoint().getChannel(HandSwingC2SPacket.class), this::onSwing);
+        //        registerListener(
+        //                Listener.getPacketPostHandlePoint().getChannel(PlayerPositionLookS2CPacket.class),
+        //                this::onTeleportConfirm2);
+        //        registerListener(
+        //            Listener.getPacketPostSendPoint().getChannel(TeleportConfirmC2SPacket.class),
+        // this::onTeleportConfirm);
+        registerListener(Listener.getPacketPoint().getChannel(PlayerMoveC2SPacket.class), this::onTeleportConfirmPre);
+        registerListener(Listener.getCustomListener().getChannel(ModulePreset.class), this::onModulePreset);
+        ;
+    }
+
+    private boolean canNotCrit() {
+        return mc.player.isTouchingWater() || mc.player.hasVehicle() || PlayerStateManager.INSTANCE.lastInWeb;
+    }
+
+    public void onPlayerAttack(Event<PlayerInteractEntityC2SPacket> event) {
+        // can not crit in water or boat
+        if (checkNull() || event.isCancelled() || canNotCrit()) return;
+        if (PlayerStateManager.INSTANCE.fallDistance > 1E-6) return;
+        boolean canRun = cooldownTimer.canRun(cooldownCritical.get());
+        cooldownTimer.mark();
+        if (!canRun) return;
+        if (enable.get()
+                && PlayerInteractEntityC2SPacketAccess.of(event.context).isAttack()
+                && mc.world != null
+                && mc.world.getEntityById(PlayerInteractEntityC2SPacketAccess.of(event.context)
+                                .getEntityId())
+                        instanceof LivingEntity lv) {
+            handleCritical(event);
+        }
+    }
+
+    int walkCnt = 0;
+    boolean nextAttackIsKillarua = false;
+    TimerExecutor cooldownTimer = new TimerExecutor();
+
+    public void handleCritical(Event<PlayerInteractEntityC2SPacket> event) {
+        // todo: handle wall critical, handle in wall critical
+
+        // todo: handle sprint, handle inWater, handle condition
+
+        if (inWallPacket.get()
+                && (PlayerStateManager.INSTANCE.lastInWall || PlayerStateManager.INSTANCE.lastUnderBlock)
+                && mode.get().isNotIn(Mode.FREEZE, Mode.PACKET)) {
+            handleCriticalWall(event);
+            return;
+        }
+        var x = mc.player.getX();
+        var y = mc.player.getY();
+        var z = mc.player.getZ();
+        switch (mode.get()) {
+            case PACKET -> {
+                // do not influence tp
+                if (!CombatTasks.getAttack().canUseTp()) {
+                    if (mc.player.isSprinting()) {
+                        mc.getNetworkHandler()
+                                .sendPacket(new ClientCommandC2SPacket(
+                                        mc.player, ClientCommandC2SPacket.Mode.STOP_SPRINTING));
+                        ClientPlayerAccess.of(mc.player).setLastSprintFlag(false);
+                    }
+                    mc.getNetworkHandler().sendPacket(VPacket.newPositionAndOnGround(x, y + 5.0E-4, z, false, false));
+                    mc.getNetworkHandler().sendPacket(VPacket.newPositionAndOnGround(x, y + 1.0E-4, z, false, false));
+                }
+            }
+                //            case OLD_GRIM_V2 -> {
+                //                if (mc.player.isOnGround()
+                //                        && !PlayerInputUtils.of(mc.player).hasWASDMovement()) {
+                //                    mc.getNetworkHandler().sendPacket(VPacket.newPositionAndOnGround(x, y + 0.0625, z,
+                // false, false));
+                //                    mc.getNetworkHandler().sendPacket(VPacket.newPositionAndOnGround(x, y, z, false,
+                // false));
+                //                    mc.getNetworkHandler().sendPacket(VPacket.newPositionAndOnGround(x, y + 1.0E-7, z,
+                // false, false));
+                //                    mc.getNetworkHandler().sendPacket(VPacket.newPositionAndOnGround(x, y, z, false,
+                // false));
+                //                }
+                //            }
+                //            case OLD_GRIM_V3 -> {
+                //                if (mc.player.isOnGround()
+                //                        && !PlayerInputUtils.of(mc.player).hasWASDMovement()) {
+                //                    mc.getNetworkHandler().sendPacket(VPacket.newPositionAndOnGround(x, y, z, true,
+                // false));
+                //                    mc.getNetworkHandler().sendPacket(VPacket.newPositionAndOnGround(x, y + 0.0625, z,
+                // false, false));
+                //                    mc.getNetworkHandler().sendPacket(VPacket.newPositionAndOnGround(x, y + 0.04535,
+                // z, false, false));
+                //                }
+                //            }
+            case FREEZE -> {
+                if (lastOnGroundT) {
+                    mc.getNetworkHandler()
+                            .sendPacket(VPacket.newLookAndOnGround(
+                                    mc.player.getYaw(), mc.player.getPitch(), false, mc.player.horizontalCollision));
+                }
+            }
+            case GRIM_GROUND_SIMULATION -> {
+                if (mc.player.isOnGround()) {
+                    if (mc.player.isSprinting()) {
+                        mc.getNetworkHandler()
+                                .sendPacket(new ClientCommandC2SPacket(
+                                        mc.player, ClientCommandC2SPacket.Mode.STOP_SPRINTING));
+                        ClientPlayerAccess.of(mc.player).setLastSprintFlag(false);
+                    }
+                    if (!shouldApplyGrimGroundSimulationAutoFakeGround()) {
+                        mc.getNetworkHandler()
+                                .sendPacket(VPacket.newPositionAndOnGround(x, y + MIN_HEIGHT_DELTA, z, true, false));
+                    }
+                    // trigger simulation to sync our position from y + 1.0E-5 -> y, critical
+                    switch (setBackType.get()) {
+                        case CRASH_PACKETS -> {
+                            mc.getNetworkHandler()
+                                    .sendPacket(PlayerMoveC2SPacketAccess.setCause(
+                                            VPacket.newPositionAndOnGround(
+                                                    x, Double.POSITIVE_INFINITY, z, false, false),
+                                            PlayerMoveC2SPacketAccess.Cause.TRIGGER_SIMULATION));
+                        }
+                        case SIMULATION -> {
+                            mc.getNetworkHandler()
+                                    .sendPacket(PlayerMoveC2SPacketAccess.setCause(
+                                            VPacket.newPositionAndOnGround(x, y + 1, z, false, false),
+                                            PlayerMoveC2SPacketAccess.Cause.TRIGGER_SIMULATION));
+                        }
+                    }
+                    event.cancel();
+                    cache = event.context;
+                    cachedHandStack = mc.player.getStackInHand(Hand.MAIN_HAND).copy();
+                    lastStartCacheTick = Tasks.getTick();
+                    fakeMovementThisTick = true;
+                }
+            }
+            case GRIM_WALL -> {
+                if (mc.player.isOnGround()
+                        && (PlayerStateManager.INSTANCE.lastInWall || PlayerStateManager.INSTANCE.lastUnderBlock)) {
+                    handleCriticalWall(event);
+                }
+            }
+        }
+    }
+
+    public void handleCriticalWall(Event<PlayerInteractEntityC2SPacket> event) {
+        var x = mc.player.getX();
+        var y = mc.player.getY();
+        var z = mc.player.getZ();
+        mc.getNetworkHandler()
+                .sendPacket(VPacket.newPositionAndOnGround(x, y + customInWallJumpPacketHeight.get(), z, false, false));
+        mc.getNetworkHandler()
+                .sendPacket(VPacket.newPositionAndOnGround(
+                        x, y + customInWallJumpPacketHeight.get() * 0.75, z, false, false));
+        ClientPlayerAccess.of(mc.player).resyncPos();
+    }
+
+    public void onSwing(Event<HandSwingC2SPacket> eventSwing) {
+        cooldownTimer.mark();
+        if (cache != null) {
+            eventSwing.cancel();
+        }
+    }
+
+    boolean fakeMovementThisTick;
+    PlayerInteractEntityC2SPacket cache;
+    ItemStack cachedHandStack;
+    int setbackFlag = 0;
+    int lastStartCacheTick = 0;
+    //    public void onTeleportConfirm(Event<TeleportConfirmC2SPacket> event) {
+    //        setbackFlag = 2;
+    //        if (cache != null) {
+    //            Listener.sendPacketNoEvents(cache);
+    //            cache = null;
+    //            mc.player.swingHand(Hand.MAIN_HAND);
+    //        }
+    //    }
+
+    public void onTeleportConfirmPre(Event<PlayerMoveC2SPacket> event) {
+        if (cache != null
+                && event.context instanceof PlayerMoveC2SPacketAccess acc
+                && acc.getCause() == PlayerMoveC2SPacketAccess.Cause.SET_BACK) {
+            setbackFlag = 1;
+            Entity entity = mc.world.getEntityById(
+                    PlayerInteractEntityC2SPacketAccess.of(cache).getEntityId());
+            var pkt0 = event.context;
+            Vec2f useLegacySnap = null;
+            if (entity != null) {
+                boolean canDirectlyHit = RaycastUtils.canRaycastHit(
+                        mc.player,
+                        pkt0.getPitch(PlayerStateManager.INSTANCE.lastPitch),
+                        pkt0.getYaw(PlayerStateManager.INSTANCE.lastYaw),
+                        entity);
+                if (canDirectlyHit) {
+                    // escape rot
+                } else {
+                    Vec3d predictedEyePos = mc.player.getEyePos();
+                    Vec3d eyePos = entity.getEyePos();
+                    Vec3d cacheDirection = eyePos.subtract(predictedEyePos).normalize();
+                    var py = EntityUtils.rotationToPitchYaw(cacheDirection);
+                    if (ViaFabricPlusHooks.isSupportDupRot()) {
+                        useLegacySnap = py;
+                    } else {
+                        acc.setPitch(py.x);
+                        acc.setYaw(EntityUtils.getSafeYaw(PlayerStateManager.INSTANCE.lastYaw, py.y));
+                    }
+                }
+            }
+            var pkt = cache;
+            var stack = cachedHandStack;
+            final Vec2f legacySnapTarget = useLegacySnap;
+            PacketManager.schedulePostCallback(event.context, () -> {
+                var weapon = mc.player.getStackInHand(Hand.MAIN_HAND);
+                // Debug.chat("Attack");
+                if (legacySnapTarget != null) {
+                    LegacySnapRotManager.INSTANCE.snapAt(legacySnapTarget.x, legacySnapTarget.y, false);
+                }
+                Runnable callback = null;
+                if (delaySwap.get()
+                        && stack != null
+                        && !stack.isEmpty()
+                        && !ItemStack.areItemsAndComponentsEqual(weapon, stack)) {
+                    var res = InventoryUtils.findPlayerItem(
+                            it -> ItemStack.areItemsAndComponentsEqual(it, stack), true, false);
+                    if (res != null) {
+                        callback = InvExtra.INSTANCE.swapInventoryIndexToHand(res.index());
+                    }
+                }
+                Listener.sendPacketNoEvents(pkt);
+                mc.player.swingHand(Hand.MAIN_HAND);
+                if (callback != null) {
+                    callback.run();
+                }
+            });
+            cache = null;
+            cachedHandStack = null;
+            lastSetBackCriticalTick = Tasks.getTick();
+        }
+    }
+
+    boolean lastFall = false;
+    boolean lastOnGroundT = false;
+    int fakeTicks = 0;
+    // grim ground critical optimize
+
+    public boolean shouldApplyCriticalConditionCheck() {
+        return hasNoMovement() && hasTargetNear();
+    }
+
+    public boolean shouldApplyGrimGroundSimulationAutoFakeGround() {
+        return (autoFakeGround.get() || nextAttackIsKillarua)
+                && mc.player.isOnGround()
+                && shouldApplyCriticalConditionCheck();
+    }
+
+    public static final double MIN_HEIGHT_THRESHOLD = 1E-4;
+    public static final double MIN_HEIGHT_DELTA = 1E-5;
+
+    boolean lastShiftUp = false;
+    Vec3d storedRotation1205;
+    int lastSetBackCriticalTick = 0;
+
+    @Override
+    public void applyBeforeMovementPacketModify(Event<LegalMovementManager> movementManagerEvent) {
+        // todo: optimize using falldistance
+        boolean lastLastOnGround = lastOnGroundT;
+        lastOnGroundT = mc.player.isOnGround() && !movementManagerEvent.context.playerStatus.onGround;
+        if (enable.get()
+                && mode.get() == Mode.FREEZE
+                && shouldApplyCriticalConditionCheck()
+                && !mc.player.isGliding()) {
+            boolean shouldApplyFreeze = false;
+            how_to_apply:
+            {
+                if (inWallFreezeCritical.get()
+                        && (PlayerStateManager.INSTANCE.lastUnderBlock || PlayerStateManager.INSTANCE.lastInWall)) {
+                    // wall shit
+                    double jumpMin = customInWallJumpFreezeHeight.get() / 4.0D;
+                    Box oldBox = mc.player.dimensions.getBoxAt(movementManagerEvent.context.playerStatus.pos);
+                    Set<BlockPos> moveablePoses =
+                            new HashSet<>(CollisionUtil.getIntersectingBlockPositions(mc.world, oldBox, false));
+                    List<BlockPos> moveDownWards =
+                            CollisionUtil.getIntersectingBlockPositions(mc.world, oldBox.offset(0, -jumpMin, 0), false);
+                    boolean realOnGround = moveDownWards.stream().anyMatch(pos -> !moveablePoses.contains(pos));
+                    if (realOnGround) {
+                        double yLevel = mc.player.getY() + jumpMin * 4;
+                        movementManagerEvent.context.playerStatus.restorePos();
+                        mc.player.setPosition(mc.player.getEntityPos().withAxis(Direction.Axis.Y, yLevel));
+                        mc.player.setOnGround(false);
+                        lastShiftUp = true;
+                        break how_to_apply;
+                    } else {
+                        if (PlayerStateManager.INSTANCE.fallDistance > 0) {
+                            mc.player.setOnGround(false);
+                            shouldApplyFreeze = true;
+                            break how_to_apply;
+                        } else if (lastShiftUp) {
+                            lastShiftUp = false;
+                            movementManagerEvent.context.playerStatus.restorePos();
+                            mc.player.setPosition(mc.player.getEntityPos().add(0, -jumpMin, 0));
+                            mc.player.setOnGround(false);
+                            break how_to_apply;
+                        }
+                    }
+                }
+                if (inAirFreeze.get()) {
+                    if (groundOnly.get()) {
+                        shouldApplyFreeze = lastLastOnGround || lastOnGroundT;
+                        if (shouldApplyFreeze) {
+                            lastOnGroundT = true;
+                        }
+                    } else {
+                        shouldApplyFreeze =
+                                mc.player.getY() < movementManagerEvent.context.playerStatus.pos.y && lastFall;
+                    }
+                }
+            }
+
+            if (shouldApplyFreeze) {
+                FloatingUtils.INSTANCE.setGrimFloatingTick(true);
+                FloatingUtils.INSTANCE.setForceSilent(true);
+                mc.player.setOnGround(false);
+                mc.player.setSprinting(false);
+            }
+        }
+        lastFall = mc.player.getY() < movementManagerEvent.context.playerStatus.pos.y;
+        // fake height
+        if (setbackFlag > 0) {
+            setbackFlag -= 1;
+        }
+        if (enable.get()
+                && mode.get() == Mode.GRIM_GROUND_SIMULATION
+                && !canNotCrit()
+                && lastSetBackCriticalTick + 2 <= Tasks.getTick()
+                && shouldApplyGrimGroundSimulationAutoFakeGround()) {
+            double yLevel = mc.player.getY();
+
+            if (setbackFlag <= 0) {
+                // may be flag as duplicate rot
+                double delta;
+                boolean move = mc.player
+                                        .getEntityPos()
+                                        .subtract(movementManagerEvent.context.playerStatus.pos)
+                                        .horizontalLengthSquared()
+                                > MathUtils.s2(2E-4)
+                        || Math.abs(mc.player.getEntityPos().y - movementManagerEvent.context.playerStatus.pos.y) > 2E-4;
+                delta = MIN_HEIGHT_DELTA;
+                double thres = MIN_HEIGHT_THRESHOLD;
+                double thresNeg = 1.0D / thres;
+                double newYLevel = (((int) (yLevel * thresNeg)) * thres) + delta;
+                Vec3d pos = mc.player.getEntityPos();
+                mc.player.setPosition(pos.withAxis(Direction.Axis.Y, newYLevel));
+                if (!Objects.equals(pos, mc.player.getEntityPos())) {
+                    // must resend because of ojng's shit move threshold
+                    if (!move && ViaFabricPlusHooks.isSupportDupRot()) {
+                        storedRotation1205 = mc.player.getRotationVector();
+                        PlayerStateManager.INSTANCE.restoreLastRotation(mc.player);
+                    }
+                    ClientPlayerAccess.of(mc.player).resyncPos();
+                }
+            }
+        }
+
+        if (fakeMovementThisTick) {
+            movementManagerEvent.cancel();
+            movementManagerEvent.context.playerStatus.restorePos();
+            fakeMovementThisTick = false;
+        }
+    }
+
+    public boolean hasTargetNear() {
+        if (targetAround.get()) {
+            var entity = CombatTasks.getTargetSelector()
+                    .searchAttackEntity(CombatTasks.getCombatExtra().getAttackRange(), false);
+            return entity != null;
+        }
+        return true;
+    }
+
+    public boolean movementOk() {
+        return switch (mode.get()) {
+            case FREEZE -> movementOkFreeze.get();
+            case GRIM_GROUND_SIMULATION -> movementOkGround.get();
+            default -> false;
+        };
+    }
+
+    public boolean hasNoMovement() {
+        var re = PlayerInputUtils.of(mc.options);
+        if (movementOk()) {
+            return !re.jump() && !re.sneak();
+        } else {
+            return !re.hasMovement() && !re.sneak();
+        }
+    }
+
+    @Override
+    public void applyPreTickModify(Event<LegalMovementManager> movementManagerEvent) {
+        nextAttackIsKillarua = CombatTasks.getAttack().delayAttacking;
+    }
+
+    @Override
+    public void applyAfterInputTick(Event<LegalMovementManager> movementManagerEvent) {
+        PlayerInputUtils.Input input = PlayerInputUtils.of(mc.player);
+        if (setbackFlag > 0 && mode.get() == Mode.GRIM_GROUND_SIMULATION && autoWalk.get()) {
+            if (!input.hasWASDMovement()) {
+                walkCnt += 1;
+                if (walkCnt % 2 == 0) {
+                    input.left(true);
+                } else {
+                    input.right(true);
+                }
+            }
+        }
+        if (lastStartCacheTick + 3 >= Tasks.getTick()) {
+            input.sprint(false).forward(false);
+            mc.player.setSprinting(false);
+        }
+        input.applyInput(mc.player);
+        LegalMovementManager.MovementModifier.super.applyAfterInputTick(movementManagerEvent);
+    }
+
+    @Override
+    public boolean postModify(Event<LegalMovementManager> movementManagerEvent, boolean enabledThisTick) {
+        if (storedRotation1205 != null) {
+            PlayerStateManager.setPlayerRotationSafe(mc.player, storedRotation1205);
+            LegacySnapRotManager.INSTANCE.snapAt(storedRotation1205, false);
+            storedRotation1205 = null;
+        }
+        return true;
+    }
+
+    public void onModulePreset(Event<EventContainer<ModulePreset>> eventModule) {
+        switch (eventModule.context.getValue()) {
+            case AC_GRIM_LEGACY -> {
+                if (mode.get().isIn(Mode.PACKET)) {
+                    mode.set(Mode.GRIM_GROUND_SIMULATION);
+                }
+                autoFakeGround.set(false);
+                autoWalk.set(false);
+            }
+            case AC_GRIM -> {
+                if (mode.get().isIn(Mode.PACKET)) {
+                    mode.set(Mode.GRIM_GROUND_SIMULATION);
+                }
+                autoFakeGround.set(true);
+                autoWalk.set(true);
+            }
+            case HACKING, VANILLA -> {
+                mode.set(Mode.PACKET);
+            }
+            default -> {}
+        }
+    }
+
+    public static enum Mode implements ConfigEnum {
+        PACKET,
+        FREEZE,
+        //        OLD_GRIM_V2,
+        //        OLD_GRIM_V3,
+        GRIM_GROUND_SIMULATION,
+        GRIM_WALL,
+        TEST;
+
+        @Override
+        public String getConfigEnumType() {
+            return "critical_mode";
+        }
+    }
+
+    @Override public void onDisableModule() { cache = null; cachedHandStack = null; fakeMovementThisTick = false; fakeTicks = 0; lastFall = false; lastOnGroundT = false; }
+}

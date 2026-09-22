@@ -35,7 +35,7 @@ public class TpUtils {
     public static boolean isPositionSafe(Vec3d pos, boolean checkHazards) {
         if (mc.world == null || mc.player == null) return false;
         BlockPos bp = BlockPos.ofFloored(pos);
-        if (!mc.world.isChunkLoaded(bp)) return false;
+        if (!mc.world.getChunkManager().isChunkLoaded(bp.getX() >> 4, bp.getZ() >> 4)) return false;
         Vec3d offset = pos.subtract(mc.player.getX(), mc.player.getY(), mc.player.getZ());
         Box box = mc.player.getBoundingBox().offset(offset);
         if (checkBoxCollision(box)) return false;

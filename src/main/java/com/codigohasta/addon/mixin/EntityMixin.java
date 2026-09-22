@@ -46,13 +46,13 @@ public abstract class EntityMixin {
         if (entity != MeteorClient.mc.player) return;
         if (!Rotation.rotation) return;
 
-        Vec3d vec3d = movementInputToVelocity(movementInput, speed, Rotation.targetYaw);
+        Vec3d vec3d = img$movementInputToVelocity(movementInput, speed, Rotation.targetYaw);
         this.setVelocity(this.getVelocity().add(vec3d));
         ci.cancel();
     }
 
     @Unique
-    private static Vec3d movementInputToVelocity(Vec3d movementInput, float speed, float yaw) {
+    private static Vec3d img$movementInputToVelocity(Vec3d movementInput, float speed, float yaw) {
         double d = movementInput.lengthSquared();
         if (d < 1.0E-7) {
             return Vec3d.ZERO;

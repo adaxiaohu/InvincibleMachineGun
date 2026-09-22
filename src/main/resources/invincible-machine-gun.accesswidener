@@ -1,6 +1,7 @@
 accessWidener	v1	named
 
 # ClientWorld
+accessible field net/minecraft/particle/TintedParticleEffect color I
 accessible method net/minecraft/client/world/ClientWorld getPendingUpdateManager ()Lnet/minecraft/client/network/PendingUpdateManager;
 accessible method net/minecraft/client/world/ClientWorld getEntityLookup ()Lnet/minecraft/world/entity/EntityLookup;
 
@@ -126,3 +127,19 @@ accessible method net/minecraft/client/gui/screen/ingame/HandledScreen getSlotAt
 # ChatScreen
 accessible field net/minecraft/client/gui/screen/ChatScreen chatField Lnet/minecraft/client/gui/widget/TextFieldWidget;
 accessible field net/minecraft/client/gui/screen/ChatScreen chatInputSuggestor Lnet/minecraft/client/gui/screen/ChatInputSuggestor;
+
+# SlimefunHelper elytra movement and inventory access
+accessible field net/minecraft/client/world/ClientChunkManager$ClientChunkMap radius I
+accessible field net/minecraft/client/world/ClientChunkManager$ClientChunkMap centerChunkX I
+accessible field net/minecraft/client/world/ClientChunkManager$ClientChunkMap centerChunkZ I
+accessible method net/minecraft/client/world/ClientChunkManager$ClientChunkMap getIndex (II)I
+accessible field net/minecraft/client/option/KeyBinding boundKey Lnet/minecraft/client/util/InputUtil$Key;
+accessible field net/minecraft/entity/Entity touchingWater Z
+accessible field net/minecraft/entity/Entity submergedInWater Z
+accessible method net/minecraft/entity/LivingEntity getEquipmentChanges ()Ljava/util/Map;
+accessible method net/minecraft/entity/LivingEntity tryUseDeathProtector (Lnet/minecraft/entity/damage/DamageSource;)Z
+accessible method net/minecraft/entity/player/PlayerEntity getDamageSource (Lnet/minecraft/item/ItemStack;)Lnet/minecraft/entity/damage/DamageSource;
+accessible field net/minecraft/entity/Entity movementMultiplier Lnet/minecraft/util/math/Vec3d;
+accessible field net/minecraft/block/AbstractCauldronBlock behaviorMap Lnet/minecraft/block/cauldron/CauldronBehavior$CauldronBehaviorMap;
+accessible method net/minecraft/entity/passive/AllayEntity canDuplicate ()Z
+accessible method net/minecraft/entity/passive/OcelotEntity isTrusting ()Z

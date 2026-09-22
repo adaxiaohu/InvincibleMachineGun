@@ -1,0 +1,1253 @@
+package com.codigohasta.addon.modules.slimefunhelper;
+
+import com.codigohasta.addon.utils.BlockStateCompat;
+
+import com.google.common.collect.Streams;
+import com.mojang.datafixers.util.Pair;
+import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Stream;
+import com.codigohasta.addon.utils.slimefunhelper.accessors.access.ClientPlayerAccess;
+import com.codigohasta.addon.utils.slimefunhelper.accessors.access.PlayerInteractEntityC2SPacketAccess;
+import com.codigohasta.addon.utils.slimefunhelper.accessors.access.PlayerMoveC2SPacketAccess;
+import com.codigohasta.addon.utils.slimefunhelper.accessors.interfaces.MetadataHolder;
+import com.codigohasta.addon.utils.slimefunhelper.events.CombatListener;
+import com.codigohasta.addon.utils.slimefunhelper.events.Event;
+import com.codigohasta.addon.utils.slimefunhelper.events.Listener;
+import com.codigohasta.addon.utils.slimefunhelper.events.impl.CombatPlayer;
+import com.codigohasta.addon.utils.slimefunhelper.events.impl.SlotClickAction;
+import com.codigohasta.addon.utils.slimefunhelper.hacks.ACTasks;
+import com.codigohasta.addon.utils.slimefunhelper.hacks.MovTasks;
+import com.codigohasta.addon.utils.slimefunhelper.hacks.api.BaseModule;
+import com.codigohasta.addon.utils.slimefunhelper.hooks.ViaFabricPlusHooks;
+import com.codigohasta.addon.utils.slimefunhelper.managers.Tasks;
+import com.codigohasta.addon.utils.slimefunhelper.utils.*;
+import com.codigohasta.addon.utils.slimefunhelper.utils.commands.params.api.CommandExecution;
+import com.codigohasta.addon.utils.slimefunhelper.utils.containers.MetaData;
+import com.codigohasta.addon.utils.slimefunhelper.utils.entity.PlayerInputUtils;
+import com.codigohasta.addon.utils.slimefunhelper.utils.inventory.ItemStackSample;
+import com.codigohasta.addon.utils.slimefunhelper.versioned.api.VDataFlag;
+import com.codigohasta.addon.utils.slimefunhelper.versioned.api.VPacket;
+import net.minecraft.block.BlockState;
+import net.minecraft.client.network.ClientPlayerEntity;
+import net.minecraft.client.network.PlayerListEntry;
+import net.minecraft.component.DataComponentTypes;
+import net.minecraft.component.type.*;
+import net.minecraft.enchantment.Enchantments;
+import net.minecraft.entity.*;
+import net.minecraft.entity.attribute.AttributeContainer;
+import net.minecraft.entity.attribute.DefaultAttributeRegistry;
+import net.minecraft.entity.data.DataTracker;
+import net.minecraft.entity.effect.StatusEffect;
+import net.minecraft.entity.effect.StatusEffectInstance;
+import net.minecraft.entity.effect.StatusEffects;
+import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.entity.projectile.thrown.PotionEntity;
+import net.minecraft.fluid.Fluid;
+import net.minecraft.fluid.FluidState;
+import net.minecraft.item.ItemStack;
+import net.minecraft.item.consume.ApplyEffectsConsumeEffect;
+import net.minecraft.item.consume.ClearAllEffectsConsumeEffect;
+import net.minecraft.item.consume.RemoveEffectsConsumeEffect;
+import net.minecraft.network.packet.c2s.play.*;
+import net.minecraft.network.packet.s2c.play.*;
+import net.minecraft.particle.TintedParticleEffect;
+import net.minecraft.registry.Registries;
+import net.minecraft.registry.entry.RegistryEntry;
+import net.minecraft.registry.tag.FluidTags;
+import net.minecraft.registry.tag.TagKey;
+import net.minecraft.text.Text;
+import net.minecraft.util.Hand;
+import net.minecraft.util.math.*;
+import net.minecraft.world.World;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+import org.joml.Vector2f;
+import org.joml.Vector3d;
+import com.google.common.collect.Streams;
+import java.util.*;
+import java.util.stream.Stream;
+import com.codigohasta.addon.utils.slimefunhelper.accessors.access.ClientPlayerAccess;
+import com.codigohasta.addon.utils.slimefunhelper.accessors.access.PlayerInteractEntityC2SPacketAccess;
+import com.codigohasta.addon.utils.slimefunhelper.accessors.access.PlayerMoveC2SPacketAccess;
+import com.codigohasta.addon.utils.slimefunhelper.events.Event;
+import com.codigohasta.addon.utils.slimefunhelper.hacks.ACTasks;
+import com.codigohasta.addon.utils.slimefunhelper.hacks.MovTasks;
+import com.codigohasta.addon.utils.slimefunhelper.hacks.api.BaseModule;
+import com.codigohasta.addon.utils.slimefunhelper.hooks.ViaFabricPlusHooks;
+import com.codigohasta.addon.utils.slimefunhelper.managers.Tasks;
+import com.codigohasta.addon.utils.slimefunhelper.utils.*;
+import com.codigohasta.addon.utils.slimefunhelper.utils.entity.PlayerInputUtils;
+import com.codigohasta.addon.utils.slimefunhelper.utils.inventory.ItemStackSample;
+import com.codigohasta.addon.utils.slimefunhelper.versioned.api.VPacket;
+import net.minecraft.block.BlockState;
+import net.minecraft.client.network.ClientPlayerEntity;
+import net.minecraft.component.DataComponentTypes;
+import net.minecraft.component.type.*;
+import net.minecraft.entity.*;
+import net.minecraft.entity.effect.StatusEffects;
+import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.fluid.Fluid;
+import net.minecraft.fluid.FluidState;
+import net.minecraft.item.ItemStack;
+import net.minecraft.network.packet.c2s.play.*;
+import net.minecraft.network.packet.s2c.play.*;
+import net.minecraft.registry.tag.FluidTags;
+import net.minecraft.registry.tag.TagKey;
+import net.minecraft.util.math.*;
+
+import com.codigohasta.addon.utils.slimefunhelper.events.Listener;
+public class PlayerStateManager extends BaseModule {
+    public static PlayerStateManager INSTANCE;
+    double startFallingY;
+    public double fallDistance;
+    public double lastX;
+    public double lastZ;
+    public double lastY;
+    public float lastPitch;
+    public float lastYaw;
+    public boolean lastOnGround;
+    public boolean lastPlayerOnGround;
+    public boolean lastSprint;
+    public Vec3d lastKnownMovementSpeed = Vec3d.ZERO;
+    public Vec3d lastKnownChangePosMovementSpeed = Vec3d.ZERO;
+    public Vec3d lastKnownRealMovementSpeed = Vec3d.ZERO;
+    public Vec3d lastKnownClientVelocity = Vec3d.ZERO;
+    public Vec3d lastAverageMovementSpeed = Vec3d.ZERO;
+    public Vec3d lastSetBackPosition = Vec3d.ZERO;
+    public int lastAttackStrengthResetTick = 0;
+    public boolean lastMovementContainsPosition = false;
+    boolean lastTickHasMovement = false;
+    public boolean lastClimbing;
+    public boolean lastInLava;
+    public boolean lastInWater;
+    public boolean lastWaterPush;
+    public boolean realInWater;
+    public boolean realInLava;
+    public boolean lastLavaPush;
+    public boolean lastInWeb;
+    private boolean inWeb;
+    public boolean lastInWall;
+    public boolean lastUnderBlock;
+    public boolean lastHasGroundSupport;
+    public PlayerInputUtils.Input lastInput = PlayerInputUtils.EMPTY.clone();
+    public boolean serverSideCanFly;
+    public Deque<Vec3d> last40Positions = new ArrayDeque<>();
+    public BlockPos lastVelocityAffectingPos = BlockPos.ORIGIN;
+    public Map<ItemStackSample, Integer> inventorySummary;
+    public Map<ItemStackSample, Integer> inventoryTotalSummary;
+    public int glidingTicks;
+    private static final int MAX_SIZE = 20;
+
+    {
+        for (int i = 0; i < MAX_SIZE; ++i) {
+            last40Positions.add(Vec3d.ZERO);
+        }
+    }
+
+    public PlayerStateManager() {
+        super("PlayerStateManager");
+        INSTANCE = this;
+    }
+
+
+
+    public void onMove(Event<PlayerMoveC2SPacket> event) {
+        if (event.isCancelled()) return;
+        PlayerMoveC2SPacket packet = event.context;
+        if (PlayerMoveC2SPacketAccess.of(packet).getCause() != PlayerMoveC2SPacketAccess.Cause.TRIGGER_SIMULATION) {
+            lastMovementContainsPosition = packet.changesPosition();
+
+            // will not be intercepted by antiCheat
+            Vec3d oldMove = new Vec3d(lastX, lastY, lastZ);
+
+            if (!packet.changesPosition()) {
+                if (packet.isOnGround()) {
+                    handleOnGroundFlag();
+                }
+            } else {
+                Vec3d vec3d = new Vec3d(packet.getX(lastX), packet.getY(lastY), packet.getZ(lastZ));
+                if (!containsInvalidValues(vec3d.x, vec3d.y, vec3d.z)) {
+                    handleMove(vec3d, packet.isOnGround());
+                }
+            }
+            lastOnGround = packet.isOnGround();
+            if (PlayerMoveC2SPacketAccess.of(packet).getCause() != PlayerMoveC2SPacketAccess.Cause.SET_BACK) {
+                lastPlayerOnGround = lastOnGround;
+            }
+            if (packet.changesLook()) {
+                lastPitch = packet.getPitch(lastPitch);
+                lastYaw = packet.getYaw(lastYaw);
+            }
+            lastKnownMovementSpeed = new Vec3d(lastX - oldMove.x, lastY - oldMove.y, lastZ - oldMove.z);
+            if (lastKnownMovementSpeed.lengthSquared() > 1E-7) {
+                lastKnownChangePosMovementSpeed = lastKnownMovementSpeed;
+            }
+            if (PlayerMoveC2SPacketAccess.of(packet).getCause() != PlayerMoveC2SPacketAccess.Cause.LEGACY_SNAP) {
+                if (PlayerMoveC2SPacketAccess.of(packet).getCause() == PlayerMoveC2SPacketAccess.Cause.SET_BACK) {
+                    lastKnownRealMovementSpeed = Vec3d.ZERO;
+                } else {
+                    lastKnownRealMovementSpeed = lastKnownMovementSpeed;
+                    lastKnownClientVelocity = lastKnownRealMovementSpeed;
+                }
+            }
+            lastTickHasMovement = true;
+        } else {
+            if (packet.changesLook()) {
+                lastPitch = packet.getPitch(lastPitch);
+                lastYaw = packet.getYaw(lastYaw);
+            }
+        }
+        // update input here , low version
+        if (!ViaFabricPlusHooks.isSupportEndTick()) {
+            lastInput = PlayerInputUtils.of(mc.player);
+        }
+    }
+
+    public void onPostPlayerPositionLook(Event<PlayerPositionLookS2CPacket> eventPositionLook) {
+        if (checkNull()) return;
+        if (mc.player.hasVehicle()) {
+            return;
+        }
+        // only when vanilla teleport
+        // grim teleport will send a EntityVelocityUpdateS2C to sync the clientVelocity
+        if (eventPositionLook.context.teleportId() >= 0) {
+            if (!ViaFabricPlusHooks.isSupportEndTick()) {
+                var relativesSet = eventPositionLook.context.relatives();
+                double lastClientVX = relativesSet.contains(PositionFlag.X) ? lastKnownClientVelocity.x : 0;
+                double lastClientVY = relativesSet.contains(PositionFlag.Y) ? lastKnownClientVelocity.y : 0;
+                double lastClientVZ = relativesSet.contains(PositionFlag.Z) ? lastKnownClientVelocity.z : 0;
+                lastKnownClientVelocity = new Vec3d(lastClientVX, lastClientVY, lastClientVZ);
+            } else {
+                var relativesSet = eventPositionLook.context.relatives();
+                EntityPosition position = eventPositionLook.context.change();
+                Vec3d deltaMovement = position.deltaMovement();
+                double lastClientVX = relativesSet.contains(PositionFlag.DELTA_X)
+                        ? lastKnownClientVelocity.x + deltaMovement.x
+                        : deltaMovement.x;
+                double lastClientVY = relativesSet.contains(PositionFlag.DELTA_Y)
+                        ? lastKnownClientVelocity.y + deltaMovement.y
+                        : deltaMovement.y;
+                double lastClientVZ = relativesSet.contains(PositionFlag.DELTA_Z)
+                        ? lastKnownClientVelocity.z + deltaMovement.z
+                        : deltaMovement.z;
+                lastKnownClientVelocity = new Vec3d(lastClientVX, lastClientVY, lastClientVZ);
+            }
+        }
+    }
+
+    public void onPostPlayerVelocityUpdate(Event<EntityVelocityUpdateS2CPacket> eventVC) {
+        if (checkNull()) return;
+        if (eventVC.context.getEntityId() != mc.player.getId()) return;
+        Vec3d velocity = VPacket.getVelocity(eventVC.context);
+        ACTasks.addPostTransactionAction(s -> lastKnownClientVelocity = velocity);
+    }
+
+    public void onPostPlayerExplosion(Event<ExplosionS2CPacket> eventBoom) {
+        if (checkNull()) return;
+        var exp = eventBoom.context;
+        if (exp.playerKnockback().isPresent()) {
+            Vec3d knockBack = exp.playerKnockback().get();
+            ACTasks.addPostTransactionAction(s -> lastKnownClientVelocity = lastKnownClientVelocity.add(knockBack));
+        }
+    }
+
+    public void onPlayerInput(Event<PlayerInputC2SPacket> eventInput) {
+        if (eventInput.isCancelled()) return;
+        if (ViaFabricPlusHooks.isSupportEndTick()) {
+            lastInput = PlayerInputUtils.of(eventInput.context);
+        }
+    }
+
+    public void onPrePlayerSendMovePacket(Event<ClientPlayerEntity> eventPre) {
+        // force resync
+        if (isRotationDifferent()) {
+            ClientPlayerAccess.of(mc.player).setLastRot(lastPitch, lastYaw);
+        }
+    }
+
+    public void onPlayerInitialize(Event<ClientPlayerEntity> event) {
+        onPlayerReset();
+    }
+
+    private static boolean containsInvalidValues(double x, double y, double z) {
+        return Double.isNaN(x) || Double.isNaN(y) || Double.isNaN(z);
+    }
+
+    public boolean checkRegionFluid(TagKey<Fluid> tag) {
+        if (mc.player.isRegionUnloaded()) {
+            return false;
+        } else {
+            Box box = mc.player.getBoundingBox().contract(0.001);
+            int i = MathHelper.floor(box.minX);
+            int j = MathHelper.ceil(box.maxX);
+            int k = MathHelper.floor(box.minY);
+            int l = MathHelper.ceil(box.maxY);
+            int m = MathHelper.floor(box.minZ);
+            int n = MathHelper.ceil(box.maxZ);
+            double d = 0.0;
+
+            boolean bl2 = false;
+            BlockPos.Mutable mutable = new BlockPos.Mutable();
+            find_liquid:
+            for (int p = i; p < j; ++p) {
+                for (int q = k; q < l; ++q) {
+                    for (int r = m; r < n; ++r) {
+                        mutable.set(p, q, r);
+                        FluidState fluidState = mc.world.getFluidState(mutable);
+                        if (fluidState.isIn(tag)) {
+                            double e = (double) ((float) q + fluidState.getHeight(mc.world, mutable));
+                            if (e >= box.minY) {
+                                bl2 = true;
+                                break find_liquid;
+                            }
+                        }
+                    }
+                }
+            }
+            return bl2;
+        }
+    }
+
+    public void handleY(double y, boolean onGround) {
+        // handle water
+        if (!mc.player.isTouchingWater()) {
+            if ((lastInWater = checkRegionFluid(FluidTags.WATER))) {
+                fallDistance = 0.0;
+            }
+        } else {
+            fallDistance = 0.0;
+        }
+        if (lastY > y) {
+            if (!mc.player.isTouchingWater()) {
+                fallDistance += lastY - y;
+            }
+        }
+        if (onGround) {
+            handleOnGroundFlag();
+        }
+        // handle reset
+        if (lastY < y) {
+            startFallingY = y;
+            fallDistance = 0;
+        }
+        handleFallDistanceEnvironmentCheck();
+    }
+
+    public void onLand() {}
+
+    public void handleFallDistanceEnvironmentCheck() {
+        if (fallDistance < 0) {
+            fallDistance = 0;
+        }
+        if (fallDistance > 0) {
+            // check water
+        }
+    }
+
+    public void handleOnGroundFlag() {
+        // fall on
+        if (!lastOnGround) {
+            onLand();
+            lastOnGround = true;
+            lastPlayerOnGround = true;
+        }
+        fallDistance = 0.0;
+    }
+
+    public void handleMove(Vec3d pos, boolean onGround) {
+        handleY(pos.getY(), onGround);
+        lastY = pos.getY();
+        lastX = pos.getX();
+        lastZ = pos.getZ();
+        lastOnGround = onGround;
+    }
+
+    public void handleInWeb(Event<Vec3d> vec3dEvent) {
+        fallDistance = 0.0;
+        lastInWeb = true;
+        inWeb = true;
+    }
+
+    public void handleInFluid(Event<Vec3d> vec3dEvent) {
+        TagKey<Fluid> fluidTag = vec3dEvent.getArgs(0);
+        if (Objects.equals(FluidTags.WATER, fluidTag)) {
+            realInWater = true;
+            lastWaterPush = true;
+            // do not reset falldistance , because move may be reverted
+        } else if (Objects.equals(FluidTags.LAVA, fluidTag)) {
+            realInLava = true;
+            lastLavaPush = true;
+        }
+    }
+
+    public void onPreGameTick(Event<ClientPlayerEntity> event) {
+        handleTick();
+    }
+
+    private BlockPos calculateVelocityAffectingPos() {
+        BlockPos pos = mc.player.getVelocityAffectingPos();
+        BlockState state = mc.world.getBlockState(pos);
+        if (!state.isAir() && !BlockStateCompat.isLiquid(state)) {
+            return pos;
+        }
+        Box box = mc.player.getBoundingBox();
+        int minX = (int) Math.floor(box.minX);
+        int maxX = (int) Math.floor(box.maxX - 1e-7); // 避免边界溢出，实际遍历时用 <= 处理
+        int minZ = (int) Math.floor(box.minZ);
+        int maxZ = (int) Math.floor(box.maxZ - 1e-7);
+        int y = pos.getY();
+        boolean hasBlock = false;
+        search:
+        for (int x = minX; x <= maxX; x++) {
+            for (int z = minZ; z <= maxZ; z++) {
+                BlockPos candidate = new BlockPos(x, y, z);
+                BlockState candidateState = mc.world.getBlockState(candidate);
+                if (!candidateState.isAir() && !BlockStateCompat.isLiquid(candidateState)) {
+                    hasBlock = true;
+                    break search;
+                }
+            }
+        }
+        if (!hasBlock) {
+            return pos;
+        }
+        Box velocityTest = box.offset(0, 0.500001F, 0);
+        List<BlockPos> blockPoses = CollisionUtil.getIntersectingBlockPositions(mc.world, velocityTest, false);
+        for (var re : blockPoses) {
+            if (pos.getY() == re.getY()) {
+                return re;
+            }
+        }
+        return pos;
+    }
+
+    private Stream<ItemStack> streamInvContent(ItemStack stack) {
+        var cp = stack.get(DataComponentTypes.CONTAINER);
+        return cp == null ? Stream.empty() : cp.stream();
+    }
+
+    private Stream<ItemStack> streamItems(ItemStack stack) {
+        return Streams.concat(Stream.of(stack), streamInvContent(stack).flatMap(this::streamItems));
+    }
+
+    private int cooldownInvSummary = 0;
+
+    public void handleTick() {
+        // base flag ticks;
+        lastInLava = mc.player.isInLava();
+        lastInWater = checkRegionFluid(FluidTags.WATER);
+        lastClimbing = mc.player.isClimbing();
+        lastInWeb = inWeb;
+        inWeb = false;
+        lastWaterPush = realInWater;
+        realInWater = false;
+        // fix error fluid state caused by reverting
+        if (!lastInWater && mc.player.isTouchingWater()) {
+            mc.player.touchingWater = false;
+        }
+        lastLavaPush = realInLava;
+        realInLava = false;
+        lastInWall = MovTasks.isCollidingWithEnvironment(mc.player);
+        Box box = mc.player.getBoundingBox();
+        lastUnderBlock = MovTasks.isCollidingWithEnvironment(
+                mc.player, box.withMinY(box.maxY).withMaxY(box.maxY + 0.42));
+        lastHasGroundSupport = CollisionUtil.isEntitySupported(mc.player, 1E-3);
+        lastVelocityAffectingPos = calculateVelocityAffectingPos();
+        if (++cooldownInvSummary > 10 || inventorySummary == null || inventoryTotalSummary == null) {
+            cooldownInvSummary = 0;
+            LinkedHashMap<ItemStackSample, Integer> map0 = new LinkedHashMap<>();
+            mc.player.getInventory().getMainStacks().stream()
+                    .filter(v -> !v.isEmpty())
+                    .forEach(s -> map0.merge(ItemStackSample.of(s), s.getCount(), Integer::sum));
+            inventorySummary = map0;
+            LinkedHashMap<ItemStackSample, Integer> map1 = new LinkedHashMap<>(map0.size());
+            for (var re : map0.entrySet()) {
+                int count = re.getValue();
+                streamItems(re.getKey().sample())
+                        .filter(v -> !v.isEmpty())
+                        .forEach(s -> map1.merge(ItemStackSample.of(s), s.getCount() * count, Integer::sum));
+            }
+
+            inventoryTotalSummary = map1;
+        }
+        // push vec3d
+        Vec3d nowPos = new Vec3d(lastX, lastY, lastZ);
+        last40Positions.addLast(nowPos);
+        Vec3d last1MinPos = null;
+        while (last40Positions.size() > MAX_SIZE) {
+            last1MinPos = last40Positions.removeFirst();
+        }
+        if (last1MinPos != null) {
+            lastAverageMovementSpeed = nowPos.subtract(last1MinPos).multiply(1D / MAX_SIZE);
+        }
+
+        // falldistance tick
+        if (lastInLava) {
+            fallDistance *= 0.5;
+        }
+        if (lastInWater) {
+            fallDistance = 0.0;
+        }
+        if (mc.player.hasVehicle()) {
+            fallDistance = 0.0;
+        }
+        if (mc.player.hasStatusEffect(StatusEffects.SLOW_FALLING)
+                || mc.player.hasStatusEffect(StatusEffects.LEVITATION)) {
+            fallDistance = 0.0;
+        }
+        if (lastClimbing) {
+            fallDistance = 0.0;
+        }
+        if (mc.player.isGliding()) {
+            glidingTicks += 1;
+        } else {
+            glidingTicks = 0;
+        }
+    }
+
+    public void onEntityAttackEvent(Event<EntityDamageS2CPacket> eventS2C) {
+        if (mc.player != null && eventS2C.context.sourceCauseId() == mc.player.getId()) {
+            // me attack them
+            var source = eventS2C.context.sourceType().getKey().orElse(null);
+            if (DamageUtils.isType(source, "mace_smash")) {
+                // we trigger a mace smash
+                handleMaceSmash();
+            }
+        }
+        if (mc.player != null && eventS2C.context.entityId() == mc.player.getId()) {
+            var source = eventS2C.context.sourceType().getKey().orElse(null);
+            if (DamageUtils.isType(source, "ender_pearl")) {
+                handlePearlTeleport();
+            }
+        }
+    }
+
+    public void onPlayerCommand(Event<ClientCommandC2SPacket> event) {
+        if (event.isCancelled()) return;
+        switch (event.context.getMode()) {
+            case START_SPRINTING -> {
+                lastSprint = true;
+            }
+            case STOP_SPRINTING -> {
+                lastSprint = false;
+            }
+        }
+    }
+
+    public void onSwingHand(Event<HandSwingC2SPacket> event) {
+        lastAttackStrengthResetTick = Tasks.getTick();
+    }
+
+    public void onAttack(Event<PlayerInteractEntityC2SPacket> event) {
+        if (PlayerInteractEntityC2SPacketAccess.of(event.context).isAttack()
+                && mc.world.getEntityById(PlayerInteractEntityC2SPacketAccess.of(event.context).getEntityId()) instanceof LivingEntity living) {
+            lastAttackStrengthResetTick = Tasks.getTick();
+        }
+    }
+
+    public void handleMaceSmash() {
+        if (fallDistance > 1.5) {
+            fallDistance = 0;
+        }
+    }
+
+
+
+    public void onInventoryUpdate(Event<InventoryS2CPacket> event) {
+        cooldownInvSummary = 100;
+    }
+
+    public void onInventorySlotUpdate(Event<ScreenHandlerSlotUpdateS2CPacket> event) {
+        cooldownInvSummary = 100;
+    }
+
+    public void onInventoryClose(Event<CloseHandledScreenC2SPacket> event) {
+        cooldownInvSummary = 100;
+    }
+
+    public void handlePearlTeleport() {
+        fallDistance = 0;
+    }
+
+    public void onPlayerReset() {
+        startFallingY = Double.MIN_VALUE;
+        fallDistance = 0;
+        lastKnownMovementSpeed = new Vec3d(0, 0, 0);
+        lastAverageMovementSpeed = new Vec3d(0, 0, 0);
+        lastSetBackPosition = new Vec3d(0, 0, 0);
+        last40Positions.clear();
+        for (int i = 0; i < MAX_SIZE; ++i) {
+            last40Positions.add(Vec3d.ZERO);
+        }
+        lastX = 0.0D;
+        lastY = 0.0D;
+        lastZ = 0.0D;
+        lastOnGround = false;
+        lastPlayerOnGround = false;
+        lastPitch = 0.0F;
+        lastYaw = 0.0F;
+        lastSprint = false;
+        lastInput = PlayerInputUtils.EMPTY.clone();
+        lastVelocityAffectingPos = BlockPos.ORIGIN;
+        inventoryTotalSummary = null;
+        inventorySummary = null;
+        glidingTicks = 0;
+    }
+
+    public void onTickEnd(Event<ClientTickEndC2SPacket> tickEndPacket) {
+        if (tickEndPacket.isCancelled()) return;
+        if (!lastTickHasMovement) {
+            lastKnownMovementSpeed = Vec3d.ZERO;
+            lastMovementContainsPosition = false;
+        } else {
+            lastKnownChangePosMovementSpeed = lastKnownMovementSpeed;
+        }
+        lastTickHasMovement = false;
+    }
+
+    // api methods
+
+    public Vec3d getLastPosition() {
+        return new Vec3d(lastX, lastY, lastZ);
+    }
+
+    public boolean isRotationDifferent() {
+        return EntityUtils.isRotationDifferent(lastPitch, mc.player.getPitch(), lastYaw, mc.player.getYaw());
+    }
+
+    public boolean isRotationDifferent(float pitch, float yaw) {
+        return EntityUtils.isRotationDifferent(lastPitch, pitch, lastYaw, yaw);
+    }
+
+    public Vec3d getLastRotationVector() {
+        return EntityUtils.pitchYawToRotation(lastPitch, lastYaw);
+    }
+
+    public void restoreLastRotation(PlayerEntity player) {
+        if (isRotationDifferent(player.getPitch(), player.getYaw())) {
+            mc.player.setPitch(lastPitch);
+            mc.player.setYaw(lastYaw);
+        }
+    }
+
+    public static void setPlayerYawSafe(PlayerEntity player, float yaw) {
+        float newYaw = EntityUtils.getSafeYaw(INSTANCE.lastYaw, yaw);
+        player.setYaw(newYaw);
+    }
+
+    public static void setPlayerYawSafe(PlayerEntity entity, Vec2f vec2f) {
+        setPlayerYawSafe(entity, (float) Math.toDegrees(Math.atan2(-vec2f.x, vec2f.y)));
+    }
+
+    public static void setPlayerRotationSafe(PlayerEntity entity, Vec3d vec) {
+        vec = vec.normalize();
+        EntityUtils.setEntityPitchSafe(entity, (float) Math.toDegrees(Math.asin(-vec.y)));
+
+        float newYaw = (float) Math.toDegrees(Math.atan2(-vec.x, vec.z));
+        setPlayerYawSafe(entity, newYaw);
+    }
+
+    public void sendSprintStatus(boolean sprint) {
+        if (sprint != lastSprint) {
+            if (sprint) {
+                mc.getNetworkHandler()
+                        .sendPacket(new ClientCommandC2SPacket(mc.player, ClientCommandC2SPacket.Mode.START_SPRINTING));
+            } else {
+                mc.getNetworkHandler()
+                        .sendPacket(new ClientCommandC2SPacket(mc.player, ClientCommandC2SPacket.Mode.STOP_SPRINTING));
+            }
+            ClientPlayerAccess.of(mc.player).setLastSprintFlag(sprint);
+        }
+    }
+
+
+
+    public void onClickSlot(Event<com.codigohasta.addon.utils.slimefunhelper.events.impl.SlotClickAction> eventClick) {
+        cooldownInvSummary = 100;
+    }
+public void reset(){onPlayerReset();}
+@Override public void registerAll(){
+        registerListener(Listener.getPreGameTick(), this::updateOtherPlayers);
+        registerListener(Listener.getPacketPoint().getChannel(EntityStatusS2CPacket.class), this::onTotemPop);
+        registerListener(Listener.getServerLeavePoint(), this::onLeave);
+        registerListener(
+                Listener.getEntityRemoveListener().getChannel(EntityType.PLAYER), this::onOtherPlayerRemoveDeath);
+        registerListener(Listener.getPacketPoint().getChannel(PlayerRespawnS2CPacket.class), this::onRespawn);
+        registerListener(
+                Listener.getEntityTrackDataUpdate().getChannel(EntityType.PLAYER), this::onEntityTrackedDataUpdate);
+        registerListener(Listener.getPacketPoint().getChannel(EntityStatusS2CPacket.class), this::onEntityConsume);
+        registerListener(
+                Listener.getEntityRemoveListener().getChannel(EntityType.SPLASH_POTION), this::onSplashedPotionHit);
+        registerListener(
+                Listener.getEntityRemoveListener().getChannel(EntityType.LINGERING_POTION), this::onLingerPotionHit);
+        registerListener(
+                Listener.getEntityPreTickListener().getChannel(EntityType.AREA_EFFECT_CLOUD),
+                this::onAreaEffectCloudTick);
+        registerListener(
+                Listener.getPacketPostHandlePoint().getChannel(EntityStatusEffectS2CPacket.class),
+                this::onEntityEffect);
+        registerListener(
+                Listener.getPacketPostHandlePoint().getChannel(EntityEquipmentUpdateS2CPacket.class),
+                this::onEntityEquipmentUpdate);
+        registerListener(
+                Listener.getPacketPostHandlePoint().getChannel(EntitySpawnS2CPacket.class),
+                this::onPlayerEnterVisualRange);
+        registerListener(Listener.getOtherPlayerExitPoint(), this::onPlayerLeave);
+
+registerServiceListener(Listener.getPostClickSlot(),this::onClickSlot);
+// Source tracks outgoing state at PacketPoint, before scheduling the write.
+registerServiceListener(Listener.getPacketPoint().getChannel(PlayerMoveC2SPacket.class),this::onMove,Integer.MAX_VALUE);
+registerServiceListener(Listener.getPacketPoint().getChannel(PlayerInputC2SPacket.class),this::onPlayerInput,Integer.MAX_VALUE);
+registerServiceListener(Listener.getPacketPoint().getChannel(ClientCommandC2SPacket.class),this::onPlayerCommand,Integer.MAX_VALUE);
+registerServiceListener(Listener.getPacketPoint().getChannel(ClientTickEndC2SPacket.class),this::onTickEnd,Integer.MAX_VALUE);
+registerServiceListener(Listener.getPacketPoint().getChannel(HandSwingC2SPacket.class),this::onSwingHand);
+registerServiceListener(Listener.getPacketPoint().getChannel(PlayerInteractEntityC2SPacket.class),this::onAttack);
+registerServiceListener(Listener.getPreGameTick(),this::onPreGameTick);
+registerServiceListener(Listener.getPlayerWebSlowPoint(),this::handleInWeb);
+registerServiceListener(Listener.getPlayerFluidVelocityPoint(),this::handleInFluid);
+registerServiceListener(Listener.getPacketPostHandlePoint().getChannel(EntityVelocityUpdateS2CPacket.class),this::onPostPlayerVelocityUpdate,Integer.MAX_VALUE);
+registerServiceListener(Listener.getPacketPostHandlePoint().getChannel(ExplosionS2CPacket.class),this::onPostPlayerExplosion,Integer.MAX_VALUE);
+registerServiceListener(Listener.getPacketPostHandlePoint().getChannel(PlayerPositionLookS2CPacket.class),this::onPostPlayerPositionLook,Integer.MAX_VALUE);
+registerServiceListener(Listener.getPacketPoint().getChannel(EntityDamageS2CPacket.class),this::onEntityAttackEvent,Integer.MAX_VALUE);
+registerServiceListener(Listener.getClientPlayerSendMovementPoint(),this::onPrePlayerSendMovePacket,Integer.MAX_VALUE);
+registerServiceListener(Listener.getPacketPoint().getChannel(InventoryS2CPacket.class),this::onInventoryUpdate);
+registerServiceListener(Listener.getPacketPoint().getChannel(ScreenHandlerSlotUpdateS2CPacket.class),this::onInventorySlotUpdate);
+registerServiceListener(Listener.getPacketPoint().getChannel(CloseHandledScreenC2SPacket.class),this::onInventoryClose);
+}
+
+    // other players;
+    public static final String KEY_RENDER_CONTROL = "slimefunhelper:player_manager/player_status";
+    public static final EquipmentSlot[] ARMOR =
+            new EquipmentSlot[] {EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET};
+
+    private PlayerStatus getOrCreateStatus(PlayerEntity pl) {
+        MetaData data = ((MetadataHolder) pl).getMetadata();
+        return data.getOrPut(this, KEY_RENDER_CONTROL, PlayerStatus::new);
+    }
+
+    private PlayerStatus getPlayerStatus0(PlayerEntity entity) {
+        if (entity instanceof MetadataHolder holder && !holder.isMetaEmpty()) {
+            return holder.getMetadata().get(this, KEY_RENDER_CONTROL);
+        }
+        return null;
+    }
+
+    public PlayerStatus getPlayerStatus(PlayerEntity entity) {
+        var re = getPlayerStatus0(entity);
+        if (re != null && re.lastUpdate < Tasks.getTick() - 10) {
+            re = null;
+        }
+        return re;
+    }
+
+    private final Map<UUID, Integer> popMap = new ConcurrentHashMap<>();
+
+    public int getPlayerPopCount(PlayerEntity entity) {
+        var re = popMap.get(entity.getUuid());
+        return re == null ? 0 : re;
+    }
+
+    public void updateOtherPlayers(Event<ClientPlayerEntity> eventUpdate) {
+        for (var player : mc.world.getPlayers()) {
+            if (player instanceof MetadataHolder metadataHolder) {
+                PlayerStatus status = getOrCreateStatus(player);
+                status.tickUpdate(player);
+            }
+        }
+    }
+
+    public void onTotemPop(Event<EntityStatusS2CPacket> event) {
+        if (checkNull()) return;
+        EntityStatusS2CPacket packet = event.context;
+        if (packet.getEntity(mc.world) instanceof PlayerEntity player) {
+            if (packet.getStatus() == EntityStatuses.USE_TOTEM_OF_UNDYING) {
+                UUID uid = player.getUuid();
+                int val = popMap.merge(uid, 1, Integer::sum);
+                CombatListener.getPlayerPopTotem().broadcast(new CombatPlayer(player, val));
+            }
+            if (packet.getStatus() == EntityStatuses.PLAY_DEATH_SOUND_OR_ADD_PROJECTILE_HIT_PARTICLES) {
+                onDeath(player);
+            }
+        }
+    }
+
+    private void onDeath(PlayerEntity entity) {
+        Integer popCount = popMap.remove(entity.getUuid());
+        CombatListener.getPlayerDeathInfo().broadcast(new CombatPlayer(entity, popCount == null ? 0 : popCount));
+    }
+
+    public void onRespawn(Event<PlayerRespawnS2CPacket> eventRespawn) {
+        if (checkNull()) return;
+        if (eventRespawn.context.flag() < 3 && mc.player.getHealth() <= 0) {
+            onDeath(mc.player);
+        }
+    }
+
+    public void onOtherPlayerRemoveDeath(Event<Entity> eventRemoval) {
+        if (eventRemoval.context instanceof PlayerEntity pl && pl != mc.player) {
+            CombatListener.getPlayerLeaveVisualRange().broadcast(new CombatPlayer(pl, getPlayerPopCount(pl)));
+            if (pl.getHealth() <= 0) {
+                onDeath(pl);
+            }
+        }
+    }
+
+    public void onPlayerEnterVisualRange(Event<EntitySpawnS2CPacket> event) {
+        if (event.context.getEntityType() == EntityType.PLAYER) {
+            UUID uid = event.context.getUuid();
+            Tasks.scheduleDelayedPre(
+                    () -> {
+                        Entity player = mc.world.getEntityLookup().get(uid);
+                        if (player instanceof PlayerEntity pl) {
+                            CombatListener.getPlayerEnterVisualRange()
+                                    .broadcast(new CombatPlayer(pl, getPlayerPopCount(pl)));
+                        }
+                    },
+                    0);
+        }
+    }
+
+    public void onLeave(Event<Void> event) {
+        popMap.clear();
+        onPlayerReset();
+    }
+
+    public void onPlayerLeave(Event<PlayerListEntry> eventRemove) {
+        popMap.remove(eventRemove.context.getProfile().id());
+    }
+
+    private static final Int2ObjectOpenHashMap<RegistryEntry<StatusEffect>> colorToRegistry =
+            new Int2ObjectOpenHashMap<>();
+
+    static {
+        for (var re : Registries.STATUS_EFFECT) {
+            var entry = Registries.STATUS_EFFECT.getEntry(re);
+            var color = re.getColor();
+            colorToRegistry.put(color, entry);
+        }
+    }
+
+    public void onEntityTrackedDataUpdate(Event<DataTracker.SerializedEntry<?>> eventDataUpdate) {
+        if (eventDataUpdate.getArgs(0) instanceof PlayerEntity pl) {
+            if (eventDataUpdate.context.id() == VDataFlag.ID_POTION_SWIRLS
+                    && eventDataUpdate.context.value() instanceof List<?> lst) {
+                // update visible effect list
+                List<?> particles = lst;
+                PlayerStatus status = getOrCreateStatus(pl);
+                Set<RegistryEntry<StatusEffect>> keys = new HashSet<>(status.visibleStatusEffects.keySet());
+                for (var ptc : particles) {
+                    if (ptc instanceof TintedParticleEffect tinted) {
+                        int colorValue = ColorUtils.withAlphaInt(tinted.color, 0);
+                        var effect = colorToRegistry.get(colorValue);
+                        if (effect != null) {
+                            keys.remove(effect);
+                            var effectTracker = status.visibleStatusEffects.computeIfAbsent(effect, EffectTracker::new);
+                            if (!effectTracker.hasInitialized()) {
+                                effectTracker.startTick = Tasks.getTick();
+                            }
+                            effectTracker.visible = true;
+                        }
+                    }
+                }
+                for (var re : keys) {
+                    status.visibleStatusEffects.remove(re);
+                }
+            } else if (eventDataUpdate.context.id() == VDataFlag.ID_LIVING_FLAGS
+                    && eventDataUpdate.context.value() instanceof Number lst) {
+                byte byteValue = lst.byteValue();
+                PlayerStatus status = getOrCreateStatus(pl);
+                boolean useItem = (byteValue & VDataFlag.USING_ITEM_FLAG_INDEX) > 0;
+                if (!useItem && pl.isUsingItem()) {
+                    // cancel use metadata
+                    ItemStack lastUsing = status.lastUsing;
+                    Hand lastHand = status.lastUsingHand;
+                    if (lastUsing != null && lastHand != null && !lastUsing.isEmpty()) {
+                        Tasks.scheduleDelayed(
+                                () -> {
+                                    ItemStack handItem = pl.getStackInHand(lastHand);
+                                    if ((lastUsing.getCount() > 1
+                                                    && ItemStack.areItemsAndComponentsEqual(lastUsing, handItem))
+                                            || (lastUsing.getCount() <= 1
+                                                    && handItem.getItem() != lastUsing.getItem())) {
+                                        // mark as consuming
+                                        ItemStack consumedUsing = lastUsing;
+                                        ConsumableComponent componentEat =
+                                                consumedUsing.get(DataComponentTypes.CONSUMABLE);
+                                        if (componentEat != null) {
+                                            consumedUsing
+                                                    .streamAll(Consumable.class)
+                                                    .forEach(s -> {
+                                                        if (s instanceof PotionContentsComponent foodComponent) {
+                                                            float scale = (Float) consumedUsing.getOrDefault(
+                                                                    DataComponentTypes.POTION_DURATION_SCALE, 1.0F);
+                                                            foodComponent.forEachEffect(
+                                                                    (instance) -> {
+                                                                        if (!(instance.getEffectType()
+                                                                                        .value())
+                                                                                .isInstant()) {
+                                                                            status.visibleStatusEffects
+                                                                                    .computeIfAbsent(
+                                                                                            instance.getEffectType(),
+                                                                                            EffectTracker::new)
+                                                                                    .refresh(instance);
+                                                                        }
+                                                                    },
+                                                                    scale);
+                                                        }
+                                                        ;
+                                                    });
+                                            if (!componentEat.onConsumeEffects().isEmpty()) {
+                                                for (var effect : componentEat.onConsumeEffects()) {
+                                                    if (effect instanceof ApplyEffectsConsumeEffect apply) {
+                                                        apply.effects().forEach(s -> status.visibleStatusEffects
+                                                                .computeIfAbsent(s.getEffectType(), EffectTracker::new)
+                                                                .refresh(s));
+                                                    } else if (effect instanceof ClearAllEffectsConsumeEffect clear) {
+                                                        // it will be cleared by tracked data update
+                                                        // status.visibleStatusEffects.clear();
+                                                    } else if (effect instanceof RemoveEffectsConsumeEffect remove) {
+                                                        // it will be cleared by tracked data update
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                },
+                                1);
+                    }
+                }
+            }
+        }
+    }
+
+    public void onEntityEffect(Event<EntityStatusEffectS2CPacket> event) {
+        if (checkNull()) return;
+        if (mc.world.getEntityById(event.context.getEntityId()) instanceof PlayerEntity pl) {
+            PlayerStatus status = getOrCreateStatus(pl);
+            for (var re : pl.getStatusEffects()) {
+                status.visibleStatusEffects
+                        .computeIfAbsent(re.getEffectType(), EffectTracker::new)
+                        .refresh(re);
+            }
+        }
+    }
+
+    private static final List<StatusEffectInstance> TOTEM_EFFECTS = List.of(
+            new StatusEffectInstance(StatusEffects.REGENERATION, 900, 1),
+            new StatusEffectInstance(StatusEffects.ABSORPTION, 100, 1),
+            new StatusEffectInstance(StatusEffects.FIRE_RESISTANCE, 800, 0));
+
+    public void onEntityConsume(Event<EntityStatusS2CPacket> eventEntityStatusS2CPacket) {
+        if (checkNull()) return;
+        EntityStatusS2CPacket packet = eventEntityStatusS2CPacket.context;
+        if (packet.getEntity(mc.world) instanceof PlayerEntity player) {
+            // shimt
+            if (packet.getStatus() == EntityStatuses.USE_TOTEM_OF_UNDYING) {
+                // experience
+                PlayerStatus status = getOrCreateStatus(player);
+                for (var effect : TOTEM_EFFECTS) {
+                    status.visibleStatusEffects
+                            .computeIfAbsent(effect.getEffectType(), EffectTracker::new)
+                            .refresh(effect);
+                }
+            }
+        }
+    }
+
+    public static float getToleranceMargin(Entity entity) {
+        return Math.max(0.0F, Math.min(0.3F, (float) (entity.age - 2) / 20.0F));
+    }
+
+    public void onSplashedPotionHit(Event<PotionEntity> eventPotionEntity) {
+        if (checkNull()) return;
+        Entity.RemovalReason reason = eventPotionEntity.getArgs(0);
+        if (reason.shouldDestroy()) {
+            PotionEntity potionEntity = eventPotionEntity.context;
+            ItemStack stack = potionEntity.getStack();
+            if (stack.isEmpty()) return;
+            PotionContentsComponent potionContentsComponent = stack.get(DataComponentTypes.POTION_CONTENTS);
+            if (potionContentsComponent == null
+                    || Objects.equals(potionContentsComponent, PotionContentsComponent.DEFAULT)) {
+                return;
+            }
+            float durationScale = stack.getOrDefault(DataComponentTypes.POTION_DURATION_SCALE, 1.0f);
+            Box boundingBox = potionEntity.getBoundingBox();
+            boundingBox = boundingBox.expand(4, 2, 4);
+            List<PlayerEntity> players = mc.world.getNonSpectatingEntities(PlayerEntity.class, boundingBox);
+            if (!players.isEmpty()) {
+                float g = getToleranceMargin(potionEntity);
+                for (PlayerEntity player : players) {
+                    if (player.isDead()) continue;
+                    double distanceSq = MathUtils.squaredMagnitude(
+                            boundingBox, player.getBoundingBox().expand(g));
+                    if (distanceSq >= 16.0) continue;
+                    double actualDistance = Math.sqrt(distanceSq);
+                    double attenuation = 1.0 - actualDistance / 4.0;
+                    for (StatusEffectInstance effectInstance : potionContentsComponent.getEffects()) {
+                        RegistryEntry<StatusEffect> effectType = effectInstance.getEffectType();
+                        StatusEffect effect = effectType.value();
+
+                        if (!effect.isInstant()) {
+                            // 持续效果：持续时间随衰减因子和 durationScale 缩放
+                            int originalDuration = effectInstance.getDuration(); // 假设有此方法，原代码通过 mapDuration 获取
+                            int newDuration = (int) (attenuation * originalDuration * durationScale + 0.5);
+                            // 避免施加过短的效果（小于 1 秒）
+                            if (newDuration < 20) continue;
+
+                            StatusEffectInstance newInstance = new StatusEffectInstance(
+                                    effectType,
+                                    newDuration,
+                                    effectInstance.getAmplifier(),
+                                    effectInstance.isAmbient(),
+                                    effectInstance.shouldShowParticles());
+                            getOrCreateStatus(player)
+                                    .visibleStatusEffects
+                                    .computeIfAbsent(newInstance.getEffectType(), EffectTracker::new)
+                                    .refresh(newInstance);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private static final String AREA_EFFECT_CLOUD_POTION_CONTENT =
+            "slimefunhelper:player_manager/tracking_linger_potion_type";
+
+    public void onLingerPotionHit(Event<PotionEntity> eventLinger) {
+        if (checkNull()) return;
+        Entity.RemovalReason reason = eventLinger.getArgs(0);
+        if (reason.shouldDestroy()) {
+            PotionEntity potionEntity = eventLinger.context;
+            ItemStack stack = potionEntity.getStack();
+            if (stack.isEmpty()) return;
+            PotionContentsComponent potionContentsComponent = stack.get(DataComponentTypes.POTION_CONTENTS);
+            if (potionContentsComponent == null
+                    || Objects.equals(potionContentsComponent, PotionContentsComponent.DEFAULT)) {
+                return;
+            }
+            float durationScale = stack.getOrDefault(DataComponentTypes.POTION_DURATION_SCALE, 1.0f);
+            Vec3d pos = potionEntity.getEntityPos();
+            int startTick = Tasks.getTick();
+            Box detectBox = new Box(pos.add(-0.2, -0.2, -0.2), pos.add(0.2, 0.2, 0.2));
+            Tasks.scheduleRepeated(
+                    () -> {
+                        if (checkNull()) return true;
+                        if (Tasks.getTick() > startTick + 20) return true;
+                        List<AreaEffectCloudEntity> near =
+                                mc.world.getNonSpectatingEntities(AreaEffectCloudEntity.class, detectBox);
+                        if (near.isEmpty()) return false;
+                        for (var en : near) {
+                            if (en instanceof MetadataHolder holder) {
+                                holder.getMetadata()
+                                        .put(
+                                                this,
+                                                AREA_EFFECT_CLOUD_POTION_CONTENT,
+                                                Pair.of(potionContentsComponent, durationScale));
+                            }
+                        }
+                        return true;
+                    },
+                    1,
+                    1);
+        }
+    }
+
+    public void onAreaEffectCloudTick(Event<AreaEffectCloudEntity> eventCloud) {
+        if (checkNull()) return;
+        if (Tasks.getTick() % 5 != 0) return;
+        var cloud = eventCloud.context;
+        float radius = cloud.getRadius();
+        performCloudUpdate(cloud, radius);
+    }
+
+    /**
+     * 核心更新逻辑（每 5 刻执行一次）
+     */
+    private void performCloudUpdate(AreaEffectCloudEntity cloud, float currentRadius) {
+        // 1. 清理过期记录（reapplicationDelay 默认 20 刻）
+        // 无药水效果则跳过
+        if (cloud instanceof MetadataHolder holder && !holder.isMetaEmpty()) {
+            MetaData data = holder.getMetadata();
+            Pair<PotionContentsComponent, Float> pairData = data.get(this, AREA_EFFECT_CLOUD_POTION_CONTENT);
+            if (pairData != null) {
+                List<PlayerEntity> targets =
+                        mc.world.getNonSpectatingEntities(PlayerEntity.class, cloud.getBoundingBox());
+                if (targets.isEmpty()) return;
+                List<StatusEffectInstance> effectList = new ArrayList<>();
+                pairData.getFirst().forEachEffect(effectList::add, pairData.getSecond());
+                for (PlayerEntity target : targets) {
+                    // 冷却检查
+                    if (target.isDead()) continue;
+                    // 水平距离检查
+                    double dx = target.getX() - cloud.getX();
+                    double dz = target.getZ() - cloud.getZ();
+                    if (dx * dx + dz * dz > currentRadius * currentRadius) continue;
+
+                    // 施加每个效果
+                    for (StatusEffectInstance effect : effectList) {
+                        StatusEffect statusEffect = effect.getEffectType().value();
+                        if (!statusEffect.isInstant()) {
+                            getOrCreateStatus(target)
+                                    .visibleStatusEffects
+                                    .computeIfAbsent(effect.getEffectType(), EffectTracker::new)
+                                    .refresh(effect);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private void onEntityEquipmentUpdate(Event<EntityEquipmentUpdateS2CPacket> eventUpdate) {
+        if (checkNull()) return;
+        if (mc.world.getEntityById(eventUpdate.context.getEntityId()) instanceof PlayerEntity pl) {
+            for (var re : eventUpdate.context.getEquipmentList()) {
+                if (!re.getSecond().isEmpty()) {
+                    // shit we should remove damage difference
+                    ItemStack cleanItem = ItemStackUtils.getCleanedItem(re.getSecond(), 1, true, false, true);
+                    getOrCreateStatus(pl).trackedInventoryItems.add(new ItemStackSample(cleanItem));
+                }
+            }
+        }
+    }
+
+    public static class PlayerStatus {
+
+        public int lastUpdate;
+        public AttributeContainer attributeSnapShot = null;
+        // public int popCount;
+        public int protection;
+        public int blastProtection;
+        public ItemStack lastUsing;
+        public Hand lastUsingHand;
+        public boolean lastInBlock;
+        public boolean lastUnderBlock;
+        public final Map<RegistryEntry<StatusEffect>, EffectTracker> visibleStatusEffects = new ConcurrentHashMap<>();
+        public final Set<ItemStackSample> trackedInventoryItems = new HashSet<>();
+        // todo: add more shit
+        public void tickUpdate(PlayerEntity player) {
+            AttributeContainer container = new AttributeContainer(
+                    DefaultAttributeRegistry.get(EntityType.PLAYER));
+            container.setFrom(player.getAttributes());
+            this.attributeSnapShot = container;
+            int protection = 0;
+            int blastProtection = 0;
+            for (var re : ARMOR) {
+                ItemStack stack = player.getEquippedStack(re);
+                if (stack.isEmpty()) continue;
+                ;
+                ItemEnchantmentsComponent itemEnchant = stack.get(DataComponentTypes.ENCHANTMENTS);
+                if (itemEnchant.isEmpty()) continue;
+                ;
+                int level = ItemStackUtils.getEnchantmentLevel(itemEnchant, Enchantments.PROTECTION);
+                protection += level;
+                level = ItemStackUtils.getEnchantmentLevel(itemEnchant, Enchantments.BLAST_PROTECTION);
+                blastProtection += level;
+            }
+            this.protection = protection;
+            this.blastProtection = blastProtection;
+            if (player.isUsingItem()) {
+                lastUsing = player.getActiveItem().copy();
+                lastUsingHand = player.getActiveHand();
+            } else {
+                lastUsing = null;
+                lastUsingHand = null;
+            }
+            lastInBlock = MovTasks.isCollidingWithEnvironment(player);
+            Box box = mc.player.getBoundingBox();
+            lastUnderBlock = MovTasks.isCollidingWithEnvironment(
+                    player, box.withMinY(box.maxY).withMaxY(box.maxY + 0.42));
+            this.lastUpdate = Tasks.getTick();
+        }
+    }
+
+    public static class EffectTracker {
+        int startTick = 0;
+        int duration = 0;
+        public boolean visible;
+        final StatusEffect effectInstance;
+
+        public EffectTracker(RegistryEntry<StatusEffect> effectRegistryEntry) {
+            effectInstance = effectRegistryEntry.value();
+        }
+
+        public EffectTracker(StatusEffectInstance effectInstance) {
+            this.effectInstance = effectInstance.getEffectType().value();
+            this.startTick = Tasks.getTick();
+            this.duration = effectInstance.getDuration();
+        }
+
+        public void refresh(StatusEffectInstance effectInstance) {
+            int startTick = Tasks.getTick();
+            int duration = effectInstance.getDuration();
+            if (startTick + duration > this.startTick + this.duration) {
+                this.startTick = startTick;
+                this.duration = duration;
+            }
+        }
+
+        public boolean hasInitialized() {
+            return startTick != 0;
+        }
+
+        public int getRemainDurations() {
+            int tick = startTick + duration;
+            return Math.max(tick - Tasks.getTick(), 0);
+        }
+    }
+
+    public static CommandExecution createServer() {
+        return ServerPlayerContext.instance;
+    }
+
+    public static class ServerPlayerContext implements CommandExecution {
+
+        static final ServerPlayerContext instance = new ServerPlayerContext();
+
+        @Nullable
+        @Override
+        public PlayerEntity getExecutor() {
+            return mc.player;
+        }
+
+        @Override
+        public boolean hasPermission(String permission) {
+            return true;
+        }
+
+        @Override
+        public void sendMessage(@NotNull String message) {
+            if (mc.player != null) {
+                Debug.sendPlayer(ChatUtils.stringToText(message));
+            }
+        }
+
+        @Override
+        public void sendMessage(Text message) {
+            if (mc.player != null) {
+                Debug.sendPlayer(message);
+            }
+        }
+
+        @Override
+        public Vector2f getExecuteRot() {
+            return new Vector2f(INSTANCE.lastPitch, INSTANCE.lastYaw);
+        }
+
+        @NotNull
+        @Override
+        public Vector3d getExecutePos() {
+            return new Vector3d(INSTANCE.lastX, INSTANCE.lastY, INSTANCE.lastZ);
+        }
+
+        @NotNull
+        @Override
+        public World getExecuteWorld() {
+            return mc.world;
+        }
+    }
+
+}

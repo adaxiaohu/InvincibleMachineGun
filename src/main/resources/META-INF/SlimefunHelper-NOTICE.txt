@@ -1,0 +1,21 @@
+
+
+SlimefunHelper 多数模块抄袭集成在 没敌机关枪
+
+sfimg列表的 模块来源： SlimefunHelper-1.21.11，原始项目。
+原始Java名称空间：me.matl114
+原始许可证：CC0 1.0 Universal。看到许可证/ SlimefunHelper-CC0-1.0.txt。
+
+抄袭的代码包括鞘翅和移动模块，战斗，采矿，
+库存和打印机功能，聊天和制作工具，以及他们的
+支持事件、包和状态管理代码。
+
+这些模块及其支持代码在本地维护
+com.codigohasta.addon.modules.slimefunhelper,
+com.codigohasta.addon.utils。slimefunhelper,
+com.codigohasta.addon.mixin.slimefunhelper。
+
+这个改编使用了主机插件的meteor设置、生命周期和渲染器，
+Minecraft 1.21.11 Yarn映射，以及主机现有的baritone集成。
+它不加载或需要原始的SlimefunHelper模块。
+

@@ -229,6 +229,7 @@ public class AutoRefreshTrade extends Module {
         }
         return (VillagerEntity)(target);
     }
+    @SafeVarargs
     public static boolean hasEnchantments(ItemStack itemStack, RegistryKey<Enchantment>... enchantments) {
         if (itemStack.isEmpty()) return false;
         Object2IntMap<RegistryEntry<Enchantment>> itemEnchantments = new Object2IntArrayMap<>();

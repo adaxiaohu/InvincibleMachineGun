@@ -1,0 +1,72 @@
+package com.codigohasta.addon.mixin.slimefunhelper;
+
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
+import com.codigohasta.addon.modules.slimefunhelper.SpearEnhance;
+import net.fabricmc.api.EnvType;
+import net.fabricmc.api.Environment;
+import net.minecraft.client.render.entity.state.Lancing;
+import net.minecraft.component.ComponentType;
+import net.minecraft.item.ItemStack;
+import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.injection.At;
+
+@Environment(EnvType.CLIENT)
+@Mixin(Lancing.class)
+public abstract class LancingVersionedSpearMixin {
+    @WrapOperation(
+            method = "positionArmForSpear",
+            at =
+                    @At(
+                            value = "INVOKE",
+                            target =
+                                    "Lnet/minecraft/item/ItemStack;get(Lnet/minecraft/component/ComponentType;)Ljava/lang/Object;"))
+    private static Object fixSpearRender1(ItemStack instance, ComponentType componentType, Operation<Object> original) {
+        if ((com.codigohasta.addon.utils.slimefunhelper.SlimefunRuntime.modifying() && SpearEnhance.INSTANCE.isActive() && SpearEnhance.INSTANCE.fixOldVersionSpear.get())) {
+            return SpearEnhance.INSTANCE.getRealComponent(instance);
+        }
+        return original.call(instance, componentType);
+    }
+
+    @WrapOperation(
+            method = "method_75392",
+            at =
+                    @At(
+                            value = "INVOKE",
+                            target =
+                                    "Lnet/minecraft/item/ItemStack;get(Lnet/minecraft/component/ComponentType;)Ljava/lang/Object;"))
+    private static Object fixSpearRender2(ItemStack instance, ComponentType componentType, Operation<Object> original) {
+        if ((com.codigohasta.addon.utils.slimefunhelper.SlimefunRuntime.modifying() && SpearEnhance.INSTANCE.isActive() && SpearEnhance.INSTANCE.fixOldVersionSpear.get())) {
+            return SpearEnhance.INSTANCE.getRealComponent(instance);
+        }
+        return original.call(instance, componentType);
+    }
+
+    @WrapOperation(
+            method = "method_75395",
+            at =
+                    @At(
+                            value = "INVOKE",
+                            target =
+                                    "Lnet/minecraft/item/ItemStack;get(Lnet/minecraft/component/ComponentType;)Ljava/lang/Object;"))
+    private static Object fixSpearRender3(ItemStack instance, ComponentType componentType, Operation<Object> original) {
+        if ((com.codigohasta.addon.utils.slimefunhelper.SlimefunRuntime.modifying() && SpearEnhance.INSTANCE.isActive() && SpearEnhance.INSTANCE.fixOldVersionSpear.get())) {
+            return SpearEnhance.INSTANCE.getRealComponent(instance);
+        }
+        return original.call(instance, componentType);
+    }
+
+    @WrapOperation(
+            method = "method_75396",
+            at =
+                    @At(
+                            value = "INVOKE",
+                            target =
+                                    "Lnet/minecraft/item/ItemStack;get(Lnet/minecraft/component/ComponentType;)Ljava/lang/Object;"))
+    private static Object fixSpearRender4(ItemStack instance, ComponentType componentType, Operation<Object> original) {
+        if ((com.codigohasta.addon.utils.slimefunhelper.SlimefunRuntime.modifying() && SpearEnhance.INSTANCE.isActive() && SpearEnhance.INSTANCE.fixOldVersionSpear.get())) {
+            return SpearEnhance.INSTANCE.getRealComponent(instance);
+        }
+        return original.call(instance, componentType);
+    }
+}

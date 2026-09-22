@@ -1,0 +1,2 @@
+package com.codigohasta.addon.utils.slimefunhelper.hacks.utils.config; public record WrapColor(int rgb) { public WrapColor(net.minecraft.util.Formatting f){this(0xff000000|(f.getColorValue()==null?0xffffff:f.getColorValue()));} public java.awt.Color color(){return new java.awt.Color(rgb, true);} public WrapColor(java.awt.Color c){this(c.getRGB());}public int withAlpha(int a){return (rgb&0xffffff)|((a&255)<<24);}
+}
