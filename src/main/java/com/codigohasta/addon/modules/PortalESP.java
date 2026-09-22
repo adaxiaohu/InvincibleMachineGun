@@ -15,6 +15,7 @@ import meteordevelopment.orbit.EventHandler;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.Blocks;
+import net.minecraft.client.world.ClientWorld;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.ChunkPos;
 import net.minecraft.world.chunk.ChunkSection;
@@ -129,6 +130,7 @@ public class PortalESP extends Module {
     private final Set<BlockPos> netherPortals = Collections.synchronizedSet(new HashSet<>());
     private final Set<BlockPos> endPortals = Collections.synchronizedSet(new HashSet<>());
     private final Set<BlockPos> gateways = Collections.synchronizedSet(new HashSet<>());
+    private ClientWorld cachedWorld;
 
     public PortalESP() {
         super(AddonTemplate.CATEGORY, "PortalESP", "给下界、末地及折跃门方块画框。");
@@ -137,20 +139,30 @@ public class PortalESP extends Module {
     @Override
     public void onActivate() {
         clearPortals();
+        cachedWorld = mc.world;
         reloadChunks();
     }
 
     @Override
     public void onDeactivate() {
         clearPortals();
+        cachedWorld = null;
     }
 
     @EventHandler
     private void onGameLeft(GameLeftEvent event) {
         clearPortals();
+        cachedWorld = null;
     }
 
     // --- 扫描逻辑 ---
+
+    private void refreshWorld() {
+        if (cachedWorld == mc.world) return;
+        clearPortals();
+        cachedWorld = mc.world;
+        reloadChunks();
+    }
 
     private void reloadChunks() {
         if (mc.world == null || mc.player == null) return;
@@ -160,6 +172,7 @@ public class PortalESP extends Module {
 
         for (int x = -renderDist; x <= renderDist; x++) {
             for (int z = -renderDist; z <= renderDist; z++) {
+                if (!mc.world.getChunkManager().isChunkLoaded(playerPos.x + x, playerPos.z + z)) continue;
                 WorldChunk chunk = mc.world.getChunk(playerPos.x + x, playerPos.z + z);
                 if (chunk != null && !chunk.isEmpty()) {
                     scanChunk(chunk);
@@ -171,8 +184,9 @@ public class PortalESP extends Module {
     @EventHandler
     private void onChunkData(ChunkDataEvent event) {
         if (mc.world != null) {
+            refreshWorld();
             WorldChunk chunk = event.chunk();
-            if (chunk != null) {
+            if (chunk != null && chunk.getWorld() == mc.world) {
                 scanChunk(chunk);
             }
         }
@@ -180,6 +194,8 @@ public class PortalESP extends Module {
 
     @EventHandler
     private void onBlockUpdate(BlockUpdateEvent event) {
+        if (mc.world == null) return;
+        refreshWorld();
         BlockPos pos = event.pos;
         BlockState newState = event.newState;
         BlockState oldState = event.oldState;
@@ -255,35 +271,43 @@ public class PortalESP extends Module {
 
     @EventHandler
     private void onRender3D(Render3DEvent event) {
-        if (mc.player == null) return;
+        refreshWorld();
+        if (mc.player == null || mc.world == null) return;
         
         if (netherEnabled.get()) {
             synchronized (netherPortals) {
-                renderSet(event, netherPortals, netherSideColor.get(), netherLineColor.get(), netherShapeMode.get());
+                renderSet(event, netherPortals, Blocks.NETHER_PORTAL, netherSideColor.get(), netherLineColor.get(), netherShapeMode.get());
             }
         }
 
         if (endEnabled.get()) {
             synchronized (endPortals) {
-                renderSet(event, endPortals, endSideColor.get(), endLineColor.get(), endShapeMode.get());
+                renderSet(event, endPortals, Blocks.END_PORTAL, endSideColor.get(), endLineColor.get(), endShapeMode.get());
             }
         }
 
         if (gatewayEnabled.get()) {
             synchronized (gateways) {
-                renderSet(event, gateways, gatewaySideColor.get(), gatewayLineColor.get(), gatewayShapeMode.get());
+                renderSet(event, gateways, Blocks.END_GATEWAY, gatewaySideColor.get(), gatewayLineColor.get(), gatewayShapeMode.get());
             }
         }
     }
 
-    private void renderSet(Render3DEvent event, Set<BlockPos> positions, SettingColor sideColor, SettingColor lineColor, ShapeMode shapeMode) {
+    private void renderSet(Render3DEvent event, Set<BlockPos> positions, Block portalBlock, SettingColor sideColor, SettingColor lineColor, ShapeMode shapeMode) {
         int rangeSq = renderDistance.get() * renderDistance.get();
         Vec3d cameraPos = mc.player.getEyePos();
-double cameraX = cameraPos.x;
-double cameraY = cameraPos.y;
-double cameraZ = cameraPos.z;
+        double cameraX = cameraPos.x;
+        double cameraY = cameraPos.y;
+        double cameraZ = cameraPos.z;
 
-        for (BlockPos pos : positions) {
+        for (var iterator = positions.iterator(); iterator.hasNext();) {
+            BlockPos pos = iterator.next();
+            // Remove stale positions even outside the render range, without loading chunks.
+            if (!mc.world.getChunkManager().isChunkLoaded(pos.getX() >> 4, pos.getZ() >> 4)
+                || !mc.world.getBlockState(pos).isOf(portalBlock)) {
+                iterator.remove();
+                continue;
+            }
             double distSq = pos.getSquaredDistance(cameraX, cameraY, cameraZ);
             if (distSq > rangeSq) continue;
 
