@@ -163,7 +163,6 @@ public final class SlimefunRuntime {
 
     // ==================== 模块禁用与清理 ====================
 
-    /** No pending SF movement is allowed to survive the last module being disabled. */
     public static void onModuleDisabled() {
         if (!installed) return;
 
@@ -348,7 +347,7 @@ public final class SlimefunRuntime {
         }
     }
 
-    // ==================== 数据包发送 ====================
+    // ==================== 包发 ====================
 
     public static Packet<?> prepareOutgoing(Packet<?> packet, net.minecraft.network.ClientConnection connection) {
         if (!modifying()) return packet;
@@ -373,7 +372,7 @@ public final class SlimefunRuntime {
         }
     }
 
-    // ==================== 数据包接收 ====================
+    // ==================== 包接 ====================
 
     public static void received(Packet<?> packet) {
         if (!modifying()) return;
