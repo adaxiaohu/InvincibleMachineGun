@@ -136,7 +136,7 @@ public class AddonTemplate extends MeteorAddon {
          modules.add(new AutoLibrarian());
          modules.add(new SpearKill()); 
         // modules.add(new AntiLag());
-         // modules.add(new SprintStatusModule());
+        modules.add(new SprintStatusModule());
          // modules.add(new Backtrack());
          modules.add(new PortalGodMode());
         
