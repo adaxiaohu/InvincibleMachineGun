@@ -1,5 +1,6 @@
 package com.codigohasta.addon.utils.slimefunhelper;
 
+import com.codigohasta.addon.utils.SlimefunHelperCompat;
 import com.codigohasta.addon.modules.slimefunhelper.*;
 import com.codigohasta.addon.utils.slimefunhelper.hacks.*;
 import com.codigohasta.addon.utils.slimefunhelper.hacks.api.BaseModule;
@@ -39,6 +40,8 @@ public final class SlimefunRuntime {
     // ==================== 初始化与注册 ====================
     //注意!此处是sfIMG部分的模块注册，IMG 的模块要去主类addontemplate文件里注册。
 
+    private static final boolean SF_HELPER_PRESENT = SlimefunHelperCompat.isSlimefunHelperLoaded();
+
     public static void initialize() {
         if (installed) return;
 
@@ -61,6 +64,7 @@ public final class SlimefunRuntime {
         add(new PacketMine());
         add(new FastMine());
         add(new InteractExtra());
+        add(new com.codigohasta.addon.modules.slimefunhelper.SequencedActionManager());
         add(new DisablerManager());
         add(new MultiPlaceDisabler());
         add(new PlayerInputManager());
@@ -117,21 +121,99 @@ public final class SlimefunRuntime {
         // add(new ElytraFinder());
 
         // 初始化每个模块
-        for (var module : modules) {
-            module.onCreate();
-            module.registerAll();
+        // 有 SlimefunHelper 时跳过运行时装配：它的 mixin 已被 SfImgMixinPlugin 跳过，
+        // 事件通道不会有人投递，装配只会白跑并让模块看起来可用。
+        if (!SF_HELPER_PRESENT) {
+            for (var module : modules) {
+                module.onCreate();
+                module.registerAll();
+            }
+
+            WorldTasks.init();
+            InvTasks.initialize();
         }
 
-        WorldTasks.init();
-        InvTasks.initialize();
-
         installed = true;
+
+        if (SF_HELPER_PRESENT) {
+            // 完全不订阅运行时事件：sfIMG 的 mixin 已被 SfImgMixinPlugin 跳过，事件通道不会有人投递，
+            // 订阅只会让 onLeft/onRender 等清理逻辑去碰已经失效的 accessor。
+            com.codigohasta.addon.AddonTemplate.LOG.info(
+                    "SlimefunHelper detected: IMG sfIMG subsystem stood down, {} modules kept registered for config compatibility",
+                    modules.size()
+            );
+            return;
+        }
+
         MeteorClient.EVENT_BUS.subscribe(new SlimefunRuntime());
 
         com.codigohasta.addon.AddonTemplate.LOG.info(
                 "SlimefunHelper migration initialized: {} independent modules",
                 modules.size()
         );
+    }
+
+    /**
+     * Keeps Meteor's ClickGUI visibility in sync with whether SlimefunHelper is installed.
+     *
+     * <p>While SlimefunHelper is present the sfIMG modules must not be shown: their supporting
+     * mixins are skipped, so they are inert, and exposing them would offer the player switches that
+     * silently do nothing. Meteor has no hidden-category or "registered but invisible" flag; the
+     * only supported mechanism is {@code Config.hiddenModules}, which {@code ModulesScreen}
+     * consults while building its category windows. Hiding every sfIMG module leaves the
+     * {@code sfIMG} category with no visible module, and Meteor then omits the empty window.
+     *
+     * <p>Because {@code Config} is persisted, hiding must be <b>reversible</b>: an earlier build
+     * hid the modules but never unhid them, so after running with SlimefunHelper once, single-mod
+     * installs lost the {@code sfIMG} category for good. To undo exactly our own edit without
+     * clobbering a player's own preferences, the modules are only unhidden when <em>every</em>
+     * sfIMG module is currently hidden - that is the signature our hide leaves behind. If the
+     * player deliberately hid only a few sfIMG modules, some remain visible and their choice is
+     * left untouched.
+     *
+     * <p>Must run after {@code Systems.load()}: that reloads {@code Config} from disk and would
+     * otherwise overwrite this list on a first launch. The {@code @PostInit} hook below runs at
+     * exactly that point. Repeated calls are harmless.
+     */
+    @meteordevelopment.meteorclient.utils.PostInit
+    public static void applyCompatHideIfNeeded() {
+        if (!installed) return;
+
+        var config = meteordevelopment.meteorclient.systems.config.Config.get();
+        if (config == null) return;
+
+        var hidden = config.hiddenModules.get();
+        boolean changed = false;
+
+        if (SF_HELPER_PRESENT) {
+            for (var module : modules) {
+                if (!hidden.contains(module)) {
+                    hidden.add(module);
+                    changed = true;
+                }
+            }
+        } else if (allModulesHidden(hidden)) {
+            // 这些隐藏是本 Mod 早先加进去的（含旧版本只加不减留下的状态），单开时必须恢复显示。
+            changed = hidden.removeAll(modules);
+            if (changed) {
+                com.codigohasta.addon.AddonTemplate.LOG.info(
+                        "SlimefunHelper absent: restored sfIMG module visibility for {} modules",
+                        modules.size()
+                );
+            }
+        }
+
+        // Persist immediately so the list survives even if the session ends without a normal save.
+        if (changed) config.save();
+    }
+
+    /** True when every sfIMG module is currently in Meteor's hidden list. */
+    private static boolean allModulesHidden(java.util.List<meteordevelopment.meteorclient.systems.modules.Module> hidden) {
+        if (modules.isEmpty()) return false;
+        for (var module : modules) {
+            if (!hidden.contains(module)) return false;
+        }
+        return true;
     }
 
     private static void add(BaseModule module) {
@@ -142,6 +224,8 @@ public final class SlimefunRuntime {
     // ==================== 状态查询 ====================
 
     public static boolean ready() {
+        // Stood down: every sfIMG event channel and mixin is absent, so nothing may run.
+        if (SF_HELPER_PRESENT) return false;
         return installed && mc.player != null && mc.world != null;
     }
 
@@ -172,7 +256,6 @@ public final class SlimefunRuntime {
 
         inTick = false;
         FlightPacketDiagnostics.clear();
-        FlightImpulseGuard.clear();
         LegacySnapRotManager.INSTANCE.reset();
 
         ACTasks.clear();
@@ -186,7 +269,9 @@ public final class SlimefunRuntime {
         FloatingUtils.INSTANCE.resetRuntimeState();
         SpearEnhance.INSTANCE.setForceSpearReset(false);
 
-        if (mc.player != null) {
+        // Stood down: ClientPlayerAccess is one of the skipped sfimg mixins, so this cast would
+        // throw ClassCastException on a live player.
+        if (!SF_HELPER_PRESENT && mc.player != null) {
             com.codigohasta.addon.utils.slimefunhelper.accessors.access.ClientPlayerAccess
                     .of(mc.player)
                     .setForceNoFall(false);
@@ -203,7 +288,6 @@ public final class SlimefunRuntime {
     private static void ensurePlayer(ClientPlayerEntity player) {
         if (player != current) {
             resetBatch3State();
-            FlightImpulseGuard.clear();
             current = player;
             movement = new LegalMovementManager();
 
@@ -216,6 +300,9 @@ public final class SlimefunRuntime {
             Listener.getPlayerInitConfiguration().fire(player);
             Listener.getGameJoinPoint().fire(player);
             Listener.getWorldSwitchPoint().fire(mc.world);
+            // Ported from upstream 1.1.7.2 ClientPlayNetworkHandlerEvents: respawn is also a
+            // game-join entry point for the player-carrying respawn channel.
+            Listener.getPlayerRespawnPoint().fire(player);
         }
     }
 
@@ -286,10 +373,6 @@ public final class SlimefunRuntime {
         var original = player.input.playerInput;
         movement.postInputTick(player);
 
-        if (inTick && ElytraBot.INSTANCE != null) {
-            ElytraBot.INSTANCE.applyAutoTakeoffInput(player);
-        }
-
         if (inTick && !original.equals(player.input.playerInput)) {
             var input = PlayerInputUtils.of(player);
             var vector = new Vec2f(input.sidewaysSpeed(), input.forwardSpeed());
@@ -319,6 +402,10 @@ public final class SlimefunRuntime {
     public static boolean beforeTravel(ClientPlayerEntity player, Event<Vec3d> input) {
         if (!inTick) return true;
 
+        // Ported from upstream 1.1.7.2 PlayerEntityEvents.onPlayerTravel: the travel channel
+        // fires before the legal-movement pre-travel tick.
+        Listener.getPlayerTravelingTick().dispatch(input);
+
         boolean apply = movement.preTravelTick(player, input) && !input.isCancelled();
         if (!apply && inTick) {
             movement.postTravelTick(player, input);
@@ -329,7 +416,6 @@ public final class SlimefunRuntime {
     public static void afterTravel(ClientPlayerEntity player, Vec3d input) {
         if (inTick) {
             movement.postTravelTick(player, new Event<>(input, false, false, player));
-            FlightImpulseGuard.afterTravel();
         }
     }
 
@@ -342,7 +428,6 @@ public final class SlimefunRuntime {
                 movement.postProgress(player);
             }
         } finally {
-            FlightImpulseGuard.finishTick();
             inTick = false;
         }
     }
@@ -377,7 +462,6 @@ public final class SlimefunRuntime {
     public static void received(Packet<?> packet) {
         if (!modifying()) return;
 
-        FlightImpulseGuard.received(packet);
         FlightPacketDiagnostics.received(packet);
 
         if (packet instanceof PlayerPositionLookS2CPacket p) {
@@ -403,7 +487,6 @@ public final class SlimefunRuntime {
     private void onLeft(GameLeftEvent event) {
         resetBatch3State();
         FlightPacketDiagnostics.clear();
-        FlightImpulseGuard.clear();
         ServerFlightState.clear();
 
         if (installed) {

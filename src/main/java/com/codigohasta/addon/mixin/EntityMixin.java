@@ -41,7 +41,7 @@ public abstract class EntityMixin {
 
     @Inject(method = "updateVelocity", at = @At("HEAD"), cancellable = true)
     private void hookUpdateVelocity(float speed, Vec3d movementInput, CallbackInfo ci) {
-        if (!GlobalSetting.INSTANCE.moveFix.get()) return;
+        if (!GlobalSetting.on() || !GlobalSetting.INSTANCE.moveFix.get()) return;
         Entity entity = (Entity) (Object) this;
         if (entity != MeteorClient.mc.player) return;
         if (!Rotation.rotation) return;

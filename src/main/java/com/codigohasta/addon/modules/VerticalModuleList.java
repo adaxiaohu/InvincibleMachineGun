@@ -30,23 +30,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
-/**
- * Vertical module list for IMG / Meteor 1.21.11.
- *
- * <p>Each enabled module occupies one column. CJK text flows top-to-bottom. Latin runs
- * stay as complete words and are rotated clockwise by 90 degrees, so the top of every
- * Latin glyph points to the right instead of stacking letters one per row.
- * Visual effects remain independently configurable so users can keep the HUD restrained
- * or enable high-energy animation combinations.</p>
- *
- * <p>Custom Font support is inherited from Meteor's TextRenderer.get(). The
- * small reflection bridge in beginText() supports both the older 1.21.11
- * snapshot signature begin(scale, scaleOnly, big) and the newer signature
- * begin(graphics, scale, scaleOnly, big).</p>
- */
+
 public class VerticalModuleList extends Module {
-    // Keep the settings screen intentionally sectional. Most high-density effect controls live
-    // in their own collapsed groups so the normal layout/style controls stay readable.
     private final SettingGroup sgLayout = settings.createGroup("位置与排版");
     private final SettingGroup sgStyle = settings.createGroup("文字与外观");
     private final SettingGroup sgBackground = settings.createGroup("背景");
@@ -989,9 +974,6 @@ public class VerticalModuleList extends Module {
     private int currentScreenWidth;
     private int currentScreenHeight;
     private transient Render2DEvent currentRenderEvent;
-
-    // TextRenderer API bridge cache. Keep one resolved overload per renderer class so using
-    // Custom Font text + Minecraft-font symbols does not rescan reflection methods every frame.
     private final Map<Class<?>, Method> cachedBegin3 = new HashMap<>();
     private final Map<Class<?>, Method> cachedBegin4 = new HashMap<>();
     private final Set<Class<?>> resolvedBeginClasses = new HashSet<>();
@@ -1131,8 +1113,7 @@ public class VerticalModuleList extends Module {
                 int interval = state.active ? typingEnterInterval.get() : typingExitInterval.get();
                 duration = Math.max(duration, chars * Math.max(1, interval) / 1000.0);
             }
-            // On removal, keep the column alive for the longest transition burst. Otherwise a
-            // 0.3s fade could erase the column while a 0.7s hologram/lock/burst is still playing.
+
             if (!state.active) {
                 long effectEnd = transitionEffectEndNanos(state);
                 if (effectEnd > state.transitionNanos) {
@@ -1146,26 +1127,13 @@ public class VerticalModuleList extends Module {
     }
 
     private void triggerTransitionEffects(EntryState state, boolean entering, long startNanos) {
-        // Transition effects are intentionally symmetrical: anything the user enabled should be
-        // able to participate when a column is inserted AND when it is removed. Continuous effects
-        // (wave / parallax / scan beam / echo / converge) already run from state.progress, while the
-        // burst-style effects below need an explicit trigger timestamp.
         if (glitch.get() && glitchOnTransition.get()) triggerGlitch(state, startNanos);
         if (neonFlicker.get()) triggerFlicker(state, startNanos);
         if (robocopLock.get()) triggerRobocop(state, startNanos);
         if (hologram.get()) triggerHologram(state, startNanos);
         if (pulseFrame.get()) triggerPulseFrame(state, startNanos);
-
-        // Typing itself is driven by transitionNanos/progress, so it already runs in both
-        // directions. Extended instant effects previously only appeared from the idle random
-        // scheduler; now every add/remove transition also selects one effect from the currently
-        // configured preset/custom pool. Across transitions every configured burst is eligible.
         long salt = entering ? 0x4F1BBCDCBFA54001L : 0x9E3779B97F4A7C15L;
         long seed = startNanos ^ ((long) state.module.hashCode() * salt) ^ state.sequence;
-
-        // The random-instant selections are also eligible at the exact moment a module enters or
-        // leaves the list, not only while the HUD is idle. One of the enabled instant families is
-        // picked per transition so the stack remains readable while still exercising the pool.
         if (randomBursts.get()) {
             List<BurstType> instant = new ArrayList<>();
             if (glitch.get() && randomGlitch.get()) instant.add(BurstType.Glitch);
@@ -1180,9 +1148,6 @@ public class VerticalModuleList extends Module {
             }
         }
 
-        // Extended preset/custom effects use a separate slot so an add/remove always gets one of
-        // the configured 2D bursts as well; this fixes the old behavior where they only appeared
-        // from the idle random scheduler.
         if (extraBursts.get()) {
             List<BurstType> transitionBursts = new ArrayList<>();
             addPresetBurstTypes(transitionBursts, burstPreset.get());
@@ -1936,9 +1901,6 @@ public class VerticalModuleList extends Module {
             nextRandomBurstNanos = 0L;
             return;
         }
-
-        // Do not rebuild the 20+ effect pool every rendered frame. Only resolve the pool when
-        // an event is actually due; this keeps the HUD allocation-free during the quiet interval.
         if (nextRandomBurstNanos == 0L) {
             scheduleNextRandomBurst(now);
             return;
@@ -2387,11 +2349,7 @@ public class VerticalModuleList extends Module {
         return end;
     }
 
-    /**
-     * 1.21.11 Meteor snapshots transitioned TextRenderer.begin to carry the GUI graphics object.
-     * Resolve the compatible overload once per renderer class; Custom Font and vanilla font can
-     * therefore be used side by side without hardcoding an older snapshot signature.
-     */
+    
     private boolean beginText(TextRenderer renderer, Render2DEvent event, double textScale) {
         try {
             Class<?> rendererClass = renderer.getClass();

@@ -255,7 +255,7 @@ public class AntiAntiXray extends Module {
     private boolean wasMining = false;     // 上一轮是否在挖矿（用于检测挖矿完成）
 
     public AntiAntiXray() {
-        super(AddonTemplate.CATEGORY, "反反矿透", "可以通过点击附近方块来获得真实的矿物信息，实现矿透。好像有些假矿反作弊插件修复了这种方法。有些服务器可以有用");
+        super(AddonTemplate.CATEGORY, "反反矿透", "有些服务器可以有用");
     }
 
     @Override

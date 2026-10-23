@@ -32,7 +32,7 @@ public class AttractAura extends Module {
     }
 
     private final SettingGroup sgGeneral = settings.getDefaultGroup();
-    private final SettingGroup sgBypass = settings.createGroup("绕过设置 (防踢)");
+    private final SettingGroup sgCompat = settings.createGroup("设置 ");
     private final SettingGroup sgFilters = settings.createGroup("目标过滤");
 
     // --- 常规设置 ---
@@ -45,16 +45,16 @@ public class AttractAura extends Module {
     private final Setting<Boolean> middleClickLock = sgGeneral.add(new BoolSetting.Builder().name("中键锁定").defaultValue(true).build());
 
     // --- 绕过设置 ---
-    private final Setting<AntiKickMode> antiKick = sgBypass.add(new EnumSetting.Builder<AntiKickMode>()
-        .name("反踢模式")
-        .description("向下抖动：每隔一段时间强制向下沉一下；地板伪造：告诉服务器你在地上。")
+    private final Setting<AntiKickMode> antiKick = sgCompat.add(new EnumSetting.Builder<AntiKickMode>()
+        .name("反踢")
+        .description("向下抖动：每隔一段时间强制向下沉一下；另外一个：告诉服务器你在地上。")
         .defaultValue(AntiKickMode.向下抖动)
         .build()
     );
 
-    private final Setting<Integer> kickDelay = sgBypass.add(new IntSetting.Builder()
+    private final Setting<Integer> kickDelay = sgCompat.add(new IntSetting.Builder()
         .name("检测频率")
-        .description("每隔多少个Tick执行一次反踢动作。")
+        .description("每隔多少个Tick执行一次动作。")
         .defaultValue(25)
         .min(5)
         .visible(() -> antiKick.get() != AntiKickMode.无)

@@ -29,14 +29,15 @@ public class Rotation {
     public static float lastPitch = 0;
     public static boolean lastGround;
     public static void snapAt(float yaw, float pitch) {
-        if (GlobalSetting.INSTANCE.moveFix.get()) {
+        // ★ 全局设置模块未激活时，「高版本转头(MoveFix)」不生效 ⇒ 走 else 分支（直接发 Look 包）
+        if (GlobalSetting.on() && GlobalSetting.INSTANCE.moveFix.get()) {
             rotation = true;
             targetPitch = pitch;
             targetYaw = yaw;
         } else {
             rotationYaw = mc.player.getYaw();
             rotationPitch = mc.player.getPitch();
-            if (GlobalSetting.INSTANCE.grimRotation.get()) {
+            if (GlobalSetting.on() && GlobalSetting.INSTANCE.grimRotation.get()) {
                 sendPacket(new PlayerMoveC2SPacket.LookAndOnGround(yaw, pitch, mc.player.isOnGround(), mc.player.horizontalCollision));
             } else {
                 sendPacket(new PlayerMoveC2SPacket.LookAndOnGround(yaw, pitch, mc.player.isOnGround(), mc.player.horizontalCollision));
@@ -44,6 +45,7 @@ public class Rotation {
         }
     }
     public static void snapBack() {
+        if (!GlobalSetting.on()) return;
         if (!GlobalSetting.INSTANCE.snapBack.get()) return;
         if (GlobalSetting.INSTANCE.moveFix.get()) return;
         sendPacket(new PlayerMoveC2SPacket.LookAndOnGround(rotationYaw, rotationPitch, mc.player.isOnGround(), mc.player.horizontalCollision));
@@ -51,6 +53,7 @@ public class Rotation {
     @EventHandler
     public void onKeyInput(KeyboardInputEvent event) {
         if (!Rotation.rotation) return;
+        if (!GlobalSetting.on()) return;
         MoveFixUtil.fixMovement(event, Rotation.targetYaw);
     }
     public static void sendPacket(Packet<?> packet) {

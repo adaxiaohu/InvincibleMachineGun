@@ -1,6 +1,7 @@
 package com.codigohasta.addon.modules.slimefunhelper;
 
 import com.codigohasta.addon.utils.BlockStateCompat;
+import com.codigohasta.addon.utils.slimefunhelper.events.impl.MetadataUpdate;
 
 import com.google.common.collect.Streams;
 import com.mojang.datafixers.util.Pair;
@@ -36,6 +37,7 @@ import net.minecraft.component.DataComponentTypes;
 import net.minecraft.component.type.*;
 import net.minecraft.enchantment.Enchantments;
 import net.minecraft.entity.*;
+import net.minecraft.registry.tag.DamageTypeTags;
 import net.minecraft.entity.attribute.AttributeContainer;
 import net.minecraft.entity.attribute.DefaultAttributeRegistry;
 import net.minecraft.entity.data.DataTracker;
@@ -52,6 +54,7 @@ import net.minecraft.item.consume.ClearAllEffectsConsumeEffect;
 import net.minecraft.item.consume.RemoveEffectsConsumeEffect;
 import net.minecraft.network.packet.c2s.play.*;
 import net.minecraft.network.packet.s2c.play.*;
+import net.minecraft.particle.ParticleEffect;
 import net.minecraft.particle.TintedParticleEffect;
 import net.minecraft.registry.Registries;
 import net.minecraft.registry.entry.RegistryEntry;
@@ -138,6 +141,29 @@ public class PlayerStateManager extends BaseModule {
     public Map<ItemStackSample, Integer> inventorySummary;
     public Map<ItemStackSample, Integer> inventoryTotalSummary;
     public int glidingTicks;
+    /** Ported from upstream 1.1.7.2 PlayerStateManager. */
+    public int lastActiveTicks;
+    public int lastSelectedSlot = 0;
+    boolean isGrimResyncPacket = false;
+    boolean lastHit = false;
+
+    private void updateAFK() {
+        lastActiveTicks = Tasks.getTick();
+    }
+    /**
+     * Tick at which the client last sent {@code START_FALL_FLYING}, or 0 when unknown.
+     *
+     * <p>Added in upstream 1.1.7.2 and used to throttle the mace-fix armour pre-swap
+     * ({@code ElytraBot.tryPreSwapArmorForAttack} requires
+     * {@code tick - lastStartGlidingTick >= maceSwapMinDelay}) and the armour-glide delay engine
+     * ({@code ElytraExtra.onArmorGlideDelay}). Anchored to the moment the command is SENT, which is
+     * what the server observes.
+     *
+     * <p>Not interchangeable with {@link #glidingTicks}: both are zeroed on reset, but
+     * {@code tick - 0} makes this one read as "takeoff long ago" while {@code glidingTicks = 0}
+     * makes {@code 0 >= delay} false, so substituting one for the other inverts the comparison.
+     */
+    public int lastStartGlidingTick = 0;
     private static final int MAX_SIZE = 20;
 
     {
@@ -159,7 +185,7 @@ public class PlayerStateManager extends BaseModule {
         if (PlayerMoveC2SPacketAccess.of(packet).getCause() != PlayerMoveC2SPacketAccess.Cause.TRIGGER_SIMULATION) {
             lastMovementContainsPosition = packet.changesPosition();
 
-            // will not be intercepted by antiCheat
+            // will not be intercepted by the server
             Vec3d oldMove = new Vec3d(lastX, lastY, lastZ);
 
             if (!packet.changesPosition()) {
@@ -179,10 +205,12 @@ public class PlayerStateManager extends BaseModule {
             if (packet.changesLook()) {
                 lastPitch = packet.getPitch(lastPitch);
                 lastYaw = packet.getYaw(lastYaw);
+                updateAFK();
             }
             lastKnownMovementSpeed = new Vec3d(lastX - oldMove.x, lastY - oldMove.y, lastZ - oldMove.z);
             if (lastKnownMovementSpeed.lengthSquared() > 1E-7) {
                 lastKnownChangePosMovementSpeed = lastKnownMovementSpeed;
+                updateAFK();
             }
             if (PlayerMoveC2SPacketAccess.of(packet).getCause() != PlayerMoveC2SPacketAccess.Cause.LEGACY_SNAP) {
                 if (PlayerMoveC2SPacketAccess.of(packet).getCause() == PlayerMoveC2SPacketAccess.Cause.SET_BACK) {
@@ -197,11 +225,15 @@ public class PlayerStateManager extends BaseModule {
             if (packet.changesLook()) {
                 lastPitch = packet.getPitch(lastPitch);
                 lastYaw = packet.getYaw(lastYaw);
+                updateAFK();
             }
         }
         // update input here , low version
         if (!ViaFabricPlusHooks.isSupportEndTick()) {
             lastInput = PlayerInputUtils.of(mc.player);
+            if (lastInput.hasMovementControl()) {
+                updateAFK();
+            }
         }
     }
 
@@ -234,12 +266,22 @@ public class PlayerStateManager extends BaseModule {
                         : deltaMovement.z;
                 lastKnownClientVelocity = new Vec3d(lastClientVX, lastClientVY, lastClientVZ);
             }
+        } else {
+            isGrimResyncPacket = true;
         }
     }
 
     public void onPostPlayerVelocityUpdate(Event<EntityVelocityUpdateS2CPacket> eventVC) {
         if (checkNull()) return;
         if (eventVC.context.getEntityId() != mc.player.getId()) return;
+        if (lastHit) {
+            lastHit = false;
+            if (isGrimResyncPacket) {
+                isGrimResyncPacket = false;
+            } else {
+                return;
+            }
+        }
         Vec3d velocity = VPacket.getVelocity(eventVC.context);
         ACTasks.addPostTransactionAction(s -> lastKnownClientVelocity = velocity);
     }
@@ -257,6 +299,9 @@ public class PlayerStateManager extends BaseModule {
         if (eventInput.isCancelled()) return;
         if (ViaFabricPlusHooks.isSupportEndTick()) {
             lastInput = PlayerInputUtils.of(eventInput.context);
+            if (lastInput.hasMovementControl()) {
+                updateAFK();
+            }
         }
     }
 
@@ -461,6 +506,10 @@ public class PlayerStateManager extends BaseModule {
             mc.player.getInventory().getMainStacks().stream()
                     .filter(v -> !v.isEmpty())
                     .forEach(s -> map0.merge(ItemStackSample.of(s), s.getCount(), Integer::sum));
+            ItemStack offHand = mc.player.getOffHandStack();
+            if (!offHand.isEmpty()) {
+                map0.merge(ItemStackSample.of(offHand), offHand.getCount(), Integer::sum);
+            }
             inventorySummary = map0;
             LinkedHashMap<ItemStackSample, Integer> map1 = new LinkedHashMap<>(map0.size());
             for (var re : map0.entrySet()) {
@@ -527,6 +576,7 @@ public class PlayerStateManager extends BaseModule {
     public void onPlayerCommand(Event<ClientCommandC2SPacket> event) {
         if (event.isCancelled()) return;
         switch (event.context.getMode()) {
+            case START_FALL_FLYING -> lastStartGlidingTick = Tasks.getTick();
             case START_SPRINTING -> {
                 lastSprint = true;
             }
@@ -536,14 +586,46 @@ public class PlayerStateManager extends BaseModule {
         }
     }
 
+
+    /** Ported from upstream 1.1.7.2 PlayerStateManager.onInteract. */
+    public void onInteract(Event<PlayerInteractItemC2SPacket> event) {
+        updateAFK();
+    }
+
+    /** Ported from upstream 1.1.7.2 PlayerStateManager.onInteractBlock. */
+    public void onInteractBlock(Event<PlayerInteractBlockC2SPacket> event) {
+        updateAFK();
+    }
+
+    /** Ported from upstream 1.1.7.2 PlayerStateManager.onPlayerDamage. */
+    public void onPlayerDamage(Event<EntityDamageS2CPacket> damage) {
+        if (checkNull()) return;
+        if (mc.player != null
+                && damage.context.entityId() == mc.player.getId()
+                && damage.context.sourceType().isIn(DamageTypeTags.NO_KNOCKBACK)) {
+            lastHit = true;
+        }
+    }
+
+    /** Ported from upstream 1.1.7.2 PlayerStateManager.onSelectedSlot. */
+    public void onSelectedSlot(Event<UpdateSelectedSlotC2SPacket> event) {
+        if (event.isCancelled()) {
+            return;
+        }
+        lastSelectedSlot = event.context.getSelectedSlot();
+        updateAFK();
+    }
+
     public void onSwingHand(Event<HandSwingC2SPacket> event) {
         lastAttackStrengthResetTick = Tasks.getTick();
+        updateAFK();
     }
 
     public void onAttack(Event<PlayerInteractEntityC2SPacket> event) {
         if (PlayerInteractEntityC2SPacketAccess.of(event.context).isAttack()
-                && mc.world.getEntityById(PlayerInteractEntityC2SPacketAccess.of(event.context).getEntityId()) instanceof LivingEntity living) {
+                && mc.world.getEntityById(event.context.entityId) instanceof LivingEntity living) {
             lastAttackStrengthResetTick = Tasks.getTick();
+            updateAFK();
         }
     }
 
@@ -594,6 +676,9 @@ public class PlayerStateManager extends BaseModule {
         inventoryTotalSummary = null;
         inventorySummary = null;
         glidingTicks = 0;
+        lastStartGlidingTick = 0;
+        lastSelectedSlot = 0;
+        updateAFK();
     }
 
     public void onTickEnd(Event<ClientTickEndC2SPacket> tickEndPacket) {
@@ -711,6 +796,11 @@ registerServiceListener(Listener.getPacketPostHandlePoint().getChannel(EntityVel
 registerServiceListener(Listener.getPacketPostHandlePoint().getChannel(ExplosionS2CPacket.class),this::onPostPlayerExplosion,Integer.MAX_VALUE);
 registerServiceListener(Listener.getPacketPostHandlePoint().getChannel(PlayerPositionLookS2CPacket.class),this::onPostPlayerPositionLook,Integer.MAX_VALUE);
 registerServiceListener(Listener.getPacketPoint().getChannel(EntityDamageS2CPacket.class),this::onEntityAttackEvent,Integer.MAX_VALUE);
+        // Ported from upstream 1.1.7.2 PlayerStateManager.registerAll.
+        registerServiceListener(Listener.getPacketPoint().getChannel(EntityDamageS2CPacket.class),this::onPlayerDamage);
+        registerServiceListener(Listener.getPacketPoint().getChannel(UpdateSelectedSlotC2SPacket.class),this::onSelectedSlot,Integer.MAX_VALUE);
+        registerServiceListener(Listener.getPacketPoint().getChannel(PlayerInteractBlockC2SPacket.class),this::onInteractBlock);
+        registerServiceListener(Listener.getPacketPoint().getChannel(PlayerInteractItemC2SPacket.class),this::onInteract);
 registerServiceListener(Listener.getClientPlayerSendMovementPoint(),this::onPrePlayerSendMovePacket,Integer.MAX_VALUE);
 registerServiceListener(Listener.getPacketPoint().getChannel(InventoryS2CPacket.class),this::onInventoryUpdate);
 registerServiceListener(Listener.getPacketPoint().getChannel(ScreenHandlerSlotUpdateS2CPacket.class),this::onInventorySlotUpdate);
@@ -783,6 +873,8 @@ registerServiceListener(Listener.getPacketPoint().getChannel(CloseHandledScreenC
         if (eventRespawn.context.flag() < 3 && mc.player.getHealth() <= 0) {
             onDeath(mc.player);
         }
+        // Ported from upstream 1.1.7.2 ClientPlayNetworkHandlerEvents.onPlayerSwitchDimension.
+        Listener.getPlayerRespawnPoint().fire(mc.player);
     }
 
     public void onOtherPlayerRemoveDeath(Event<Entity> eventRemoval) {
@@ -829,12 +921,13 @@ registerServiceListener(Listener.getPacketPoint().getChannel(CloseHandledScreenC
         }
     }
 
-    public void onEntityTrackedDataUpdate(Event<DataTracker.SerializedEntry<?>> eventDataUpdate) {
-        if (eventDataUpdate.getArgs(0) instanceof PlayerEntity pl) {
-            if (eventDataUpdate.context.id() == VDataFlag.ID_POTION_SWIRLS
-                    && eventDataUpdate.context.value() instanceof List<?> lst) {
+    public void onEntityTrackedDataUpdate(Event<MetadataUpdate> event) {
+        var eventDataUpdate = event.context();
+        if (eventDataUpdate.entity() instanceof PlayerEntity pl) {
+            if (eventDataUpdate.metadata().id() == VDataFlag.ID_POTION_SWIRLS
+                    && eventDataUpdate.metadata().value() instanceof List<?> lst) {
                 // update visible effect list
-                List<?> particles = lst;
+                List<ParticleEffect> particles = (List<ParticleEffect>) lst;
                 PlayerStatus status = getOrCreateStatus(pl);
                 Set<RegistryEntry<StatusEffect>> keys = new HashSet<>(status.visibleStatusEffects.keySet());
                 for (var ptc : particles) {
@@ -854,8 +947,8 @@ registerServiceListener(Listener.getPacketPoint().getChannel(CloseHandledScreenC
                 for (var re : keys) {
                     status.visibleStatusEffects.remove(re);
                 }
-            } else if (eventDataUpdate.context.id() == VDataFlag.ID_LIVING_FLAGS
-                    && eventDataUpdate.context.value() instanceof Number lst) {
+            } else if (eventDataUpdate.metadata().id() == VDataFlag.ID_LIVING_FLAGS
+                    && eventDataUpdate.metadata().value() instanceof Number lst) {
                 byte byteValue = lst.byteValue();
                 PlayerStatus status = getOrCreateStatus(pl);
                 boolean useItem = (byteValue & VDataFlag.USING_ITEM_FLAG_INDEX) > 0;
@@ -1130,7 +1223,7 @@ registerServiceListener(Listener.getPacketPoint().getChannel(CloseHandledScreenC
         // todo: add more shit
         public void tickUpdate(PlayerEntity player) {
             AttributeContainer container = new AttributeContainer(
-                    DefaultAttributeRegistry.get(EntityType.PLAYER));
+                    DefaultAttributeRegistry.get((EntityType<? extends LivingEntity>) player.getType()));
             container.setFrom(player.getAttributes());
             this.attributeSnapShot = container;
             int protection = 0;

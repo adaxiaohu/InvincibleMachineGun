@@ -253,7 +253,7 @@ public class DamageUtil {
     }
 
     private static float getExposure(Vec3d source, Box box, RaycastFactory raycastFactory) {
-        if (GlobalSetting.INSTANCE.optimizedCalc.get()) {
+        if (GlobalSetting.on() && GlobalSetting.INSTANCE.optimizedCalc.get()) {
             int miss = 0;
             int hit = 0;
 

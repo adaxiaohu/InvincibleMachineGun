@@ -245,7 +245,7 @@ public abstract class SourcePlayerInteractionMixin implements PlayerInteractionA
     /**
      * 清理“原版仍在持续挖掘”的本地标记。
      *
-     * <p>很多 bypass 分支在提前 stop 时，都需要先把原版 breaking 标志降下来，避免后续 tick 继续按普通挖掘流推进。
+     * <p>很多 compat 分支在提前 stop 时，都需要先把原版 breaking 标志降下来，避免后续 tick 继续按普通挖掘流推进。
      */
     @Unique
     private void clearBreakingState() {

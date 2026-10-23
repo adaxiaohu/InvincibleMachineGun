@@ -1,4 +1,4 @@
-//最开始抄袭了wurst，然后又抄袭了Trouser-Streak的ProjectileLauncher
+
 package com.codigohasta.addon.modules;
 
 import com.codigohasta.addon.AddonTemplate;
@@ -38,7 +38,7 @@ import java.util.Set;
 
 public class Pitcher extends Module {
     private final SettingGroup sgGeneral = settings.getDefaultGroup();
-    private final SettingGroup sgTP = settings.createGroup("超远TP设置(copy in Trouser-Streak");
+    private final SettingGroup sgTP = settings.createGroup("超远TP设置");
     public enum Mode { Vanilla, Paper }
     public enum TPMode { Reverse, Forward }
     private final SettingGroup sgAuto = settings.createGroup("连射");
@@ -147,30 +147,30 @@ public class Pitcher extends Module {
         .build()
     );
 
-    private final Setting<Boolean> totemBypass = sgTotem.add(new BoolSetting.Builder()
+    private final Setting<Boolean> totemCompat = sgTotem.add(new BoolSetting.Builder()
         .name("破图腾双发扳机")
         .description("释放时自动连射两箭。第一箭取基础力量破图腾，第二箭高伤在无敌帧内秒杀。")
         .defaultValue(false)
         .build()
     );
 
-    private final Setting<Double> bypassStrength = sgTotem.add(new DoubleSetting.Builder()
+    private final Setting<Double> compatStrength = sgTotem.add(new DoubleSetting.Builder()
         .name("第二箭力量")
         .description("第二箭的力量倍数（必须比基础力量高才能产生伤害差）,也就是第一箭力量要低于第二箭力量。")
         .defaultValue(20.0)
         .min(0.1)
         .sliderMax(30.0)
-        .visible(totemBypass::get)
+        .visible(totemCompat::get)
         .build()
     );
 
-    private final Setting<Integer> bypassDelay = sgTotem.add(new IntSetting.Builder()
+    private final Setting<Integer> compatDelay = sgTotem.add(new IntSetting.Builder()
         .name("第二箭延迟")
         .description("第一箭射出后，自动蓄力多少Tick再射第二箭（推荐 4）。")
         .defaultValue(4)
         .min(1)
         .sliderMax(10)
-        .visible(totemBypass::get)
+        .visible(totemCompat::get)
         .build()
     );
 
@@ -248,11 +248,11 @@ public class Pitcher extends Module {
     private Entity currentTarget = null; 
     private boolean isSecondShot = false;
   private int totemStep = 0; // 0: 空闲, 1: 正在蓄力第二箭
-    private int bypassTimer = -1;
+    private int compatTimer = -1;
   
 
     public Pitcher() {
-        super(AddonTemplate.CATEGORY, "大力投手", "大力投手，可以把自己后退或者前进距离，来丢东西。可以把没影珍珠丢出15000格。来自trouser-streak，被我抄袭并且做了修改。没那么好用，比较混乱，娱乐功能");
+        super(AddonTemplate.CATEGORY, "大力投手", "大力投手，可以把自己后退或者前进距离，来丢东西。可以把没影珍珠丢出15000格 娱乐功能");
     }
 
     @Override
@@ -262,7 +262,7 @@ public class Pitcher extends Module {
             forcedPressed = false;
         }
         totemStep = 0;
-        bypassTimer = -1;
+        compatTimer = -1;
         isShooting = false;
     }
 
@@ -277,18 +277,18 @@ public class Pitcher extends Module {
         Hand hand = validMain ? Hand.MAIN_HAND : Hand.OFF_HAND;
 
         // --- 图腾双发状态机修复 ---
-        if (totemBypass.get() && totemStep == 1) {
+        if (totemCompat.get() && totemStep == 1) {
             // 倒计时刚开始：强制触发右键拉弓动作
-            if (bypassTimer == bypassDelay.get()) {
+            if (compatTimer == compatDelay.get()) {
                 mc.interactionManager.interactItem(mc.player, hand);
             }
 
-            if (bypassTimer > 0) {
+            if (compatTimer > 0) {
                 // 蓄力期间：强制锁定右键按下状态
                 mc.options.useKey.setPressed(true);
-                bypassTimer--;
+                compatTimer--;
             } 
-            else if (bypassTimer == 0) {
+            else if (compatTimer == 0) {
                 // 倒计时结束：执行射击
                 // 修复：移除 mc.player.isUsingItem() 判断，防止因为延迟导致的失效
                 mc.interactionManager.stopUsingItem(mc.player);
@@ -296,7 +296,7 @@ public class Pitcher extends Module {
                 // 关键修复：强制松开按键并重置状态机，防止死循环拉弓
                 mc.options.useKey.setPressed(false);
                 totemStep = 0; 
-                bypassTimer = -1;
+                compatTimer = -1;
             }
             return; // 补刀期间跳过其他逻辑
         }
@@ -412,13 +412,13 @@ public class Pitcher extends Module {
         if (mc.player == null || mc.getNetworkHandler() == null) return;
 
         isShooting = true;
-        double currentStr = (totemStep == 1) ? bypassStrength.get() : strength.get();
+        double currentStr = (totemStep == 1) ? compatStrength.get() : strength.get();
         mc.getNetworkHandler().sendPacket(new ClientCommandC2SPacket(mc.player, ClientCommandC2SPacket.Mode.START_SPRINTING));
 
         double x = mc.player.getX(), y = mc.player.getY(), z = mc.player.getZ();
         Vec3d startPos = new Vec3d(x, y, z);
         Vec3d lookVec = mc.player.getRotationVector();
-        currentStr = (isSecondShot && totemBypass.get()) ? bypassStrength.get() : strength.get();
+        currentStr = (isSecondShot && totemCompat.get()) ? compatStrength.get() : strength.get();
         double maxDist = mode.get() == Mode.Vanilla ? 21.9 : paperDistance.get();
         double adjustedStrength = (currentStr / 10.0) * Math.sqrt(500.0);
 
@@ -473,15 +473,15 @@ public class Pitcher extends Module {
         isShooting = false;
 
 
-        if (totemBypass.get()) {
+        if (totemCompat.get()) {
             // 如果刚刚完成的是正常射击（第一箭）
             if (totemStep == 0) {
                 totemStep = 1;
-                bypassTimer = bypassDelay.get(); 
+                compatTimer = compatDelay.get(); 
             } else {
                 // 如果刚刚完成的是补刀箭（第二箭），重置回到空闲
                 totemStep = 0;
-                bypassTimer = -1;
+                compatTimer = -1;
             }
         }
     }

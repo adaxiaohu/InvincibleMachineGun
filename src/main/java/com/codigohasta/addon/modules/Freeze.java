@@ -26,17 +26,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 
-/**
- * Freeze — 融合实现：
- * - BMWClient-nextgen (LiquidBounce) ModuleFreeze 的 Queue / Cancel / Stationary 三模式
- * - MeteorPlus Freeze 的 Grim 兼容设计（不 cancel S08、PlayerMoveEvent 拦截移动）
- * - 重锤伤害累计：Stationary 模式下缓慢下沉积累服务端 fallDistance
- *
- * 核心策略：
- * - Queue / Cancel 保留原 BMW 逻辑（用于非 Grim 服务器）
- * - Stationary 不取消移动包，而是替换为冻结坐标包，保持包序避免 PacketOrderO
- * - Mace 模式下冷冻 Y 缓慢下沉，让服务端累计坠落高度，每次攻击均有暴击伤害
- */
 public class Freeze extends Module {
 
     public enum FreezeMode {
@@ -61,14 +50,14 @@ public class Freeze extends Module {
 
     private final Setting<Boolean> disableOnFlag = sgGeneral.add(new BoolSetting.Builder()
         .name("disable-on-flag")
-        .description("收到服务端位置校正包时自动禁用模块")
+        .description("收到S08时自动禁用模块")
         .defaultValue(false)
         .build()
     );
 
     private final Setting<Boolean> notification = sgGeneral.add(new BoolSetting.Builder()
         .name("notification")
-        .description("被 flag 时发送聊天提示")
+        .description("flag 聊天提示")
         .defaultValue(false)
         .build()
     );
@@ -80,8 +69,8 @@ public class Freeze extends Module {
         .build()
     );
 
-    private final Setting<Boolean> bypassNegativeTimer = sgGeneral.add(new BoolSetting.Builder()
-        .name("bypass-negative-timer")
+    private final Setting<Boolean> compatNegativeTimer = sgGeneral.add(new BoolSetting.Builder()
+        .name("compat-negative-timer")
         .description("禁用时执行一次物品交互以绕过负计时检测")
         .defaultValue(true)
         .build()
@@ -90,7 +79,7 @@ public class Freeze extends Module {
     // --- Stationary 专用 ---
     private final Setting<Boolean> cancelC0B = sgStationary.add(new BoolSetting.Builder()
         .name("cancel-c0b")
-        .description("取消 CommonPongC2SPacket（绕过 Grim BadPacketsR）")
+        .description("取消 CommonPongC2SPacket")
         .defaultValue(false)
         .visible(() -> mode.get() == FreezeMode.Stationary)
         .build()
@@ -161,9 +150,7 @@ public class Freeze extends Module {
 
     public Freeze() {
         super(AddonTemplate.CATEGORY, "冻结",
-            "冻结自身位置。Stationary 模式兼容 Grim（不取消 S08，替换移动包保持包序）。\n" +
-            "Mace 模式下缓慢下沉累计服务端 fallDistance，重锤攻击持续有暴击伤害。\n" +
-            "三种模式：Queue（缓存包）/ Cancel（丢弃包）/ Stationary（替换移动包，交互正常）没啥用");
+            "冻结自身位置。没啥用");
     }
 
     // ===== 生命周期 =====
@@ -208,7 +195,7 @@ public class Freeze extends Module {
         }
 
         missedOutTick = 0;
-        if (bypassNegativeTimer.get()) interact();
+        if (compatNegativeTimer.get()) interact();
     }
 
     // ===== 事件：Ticks & 移动 =====
@@ -224,10 +211,9 @@ public class Freeze extends Module {
 
         mc.player.setVelocity(Vec3d.ZERO);
 
-        // Mace 模式：Stationary 下缓慢下沉，累计服务端 fallDistance
+    
         if (mode.get() == FreezeMode.Stationary && maceMode.get() && accumulatedDrift < maxDrift.get()) {
             double nextY = frozenY - driftSpeed.get();
-            // 检测下一 tick 的下沉位置是否会撞到方块（防止钻地+穿墙 flag）
             if (mc.world != null && mc.player != null) {
                 Box nextBox = mc.player.getBoundingBox().offset(0, nextY - frozenY, 0);
                 if (mc.world.isSpaceEmpty(mc.player, nextBox)) {
@@ -245,20 +231,13 @@ public class Freeze extends Module {
         mc.player.setPosition(frozenX, frozenY, frozenZ);
     }
 
-    /** 移动发生前置零，让客户端位置不变化 */
+
     @EventHandler
     public void onPlayerMove(PlayerMoveEvent event) {
         event.movement = Vec3d.ZERO;
     }
 
-    // ===== 事件：数据包 =====
 
-    /**
-     * S08 处理：
-     * - 不 cancel S08！让服务端正常校正，避免飞行踢出和 Grim Timer 检测。
-     * - 接受服务端校正的位置/视角，更新冻结状态。
-     * - 根据 disableOnFlag 决定是否自动禁用。
-     */
     @EventHandler
     public void onPacketReceive(PacketEvent.Receive event) {
         if (event.packet instanceof PlayerPositionLookS2CPacket) {
@@ -315,17 +294,6 @@ public class Freeze extends Module {
         }
     }
 
-    // ===== Stationary 模式（核心） =====
-
-    /**
-     * Stationary 策略：
-     * - PlayerMoveC2SPacket → 替换为冻结坐标包（不取消！保持包序）
-     * - CommonPongC2SPacket → 可选取消（绕过 BadPacketsR）
-     * - 其余所有包（交互、动画、物品使用）正常放行
-     *
-     * 由于移动包正常流动，Grim 不会触发 PacketOrderO。
-     * 替换包使用 isFlushing 守卫防止递归。
-     */
     @SuppressWarnings("rawtypes")
     private void handleStationary(PacketEvent.Send event, Packet<?> packet) {
         if (packet instanceof PlayerMoveC2SPacket movePacket) {
@@ -336,7 +304,6 @@ public class Freeze extends Module {
                 sendPacketRaw(replacement);
                 isFlushing = false;
             }
-            // replacement == movePacket 时不 cancel，原包正常通过
             return;
         }
 
@@ -346,35 +313,22 @@ public class Freeze extends Module {
         }
     }
 
-    /**
-     * 替换移动包内容：
-     * - Full（位置+视角）→ PositionAndOnGround（仅锁定位置，不带视角，避免 AimDuplicateLook）
-     * - PositionAndOnGround → 位置锁定为 frozen
-     * - LookAndOnGround → 视角锁定为 frozen（仅当 freezeLook 开启）
-     * - OnGroundOnly / LookAndOnGround (无 freezeLook) → 原包通过
-     */
     private PlayerMoveC2SPacket replaceMovePacket(PlayerMoveC2SPacket original) {
         boolean onGround = mc.player != null && mc.player.isOnGround();
         boolean horizCollision = mc.player != null && mc.player.horizontalCollision;
 
         if (original.changesPosition() && original.changesLook()) {
-            // Full → PositionAndOnGround: 仅替换位置，丢弃视角数据
-            // 不发送 Full 包（不携带 rotation），Server 不会触发 RotationUpdate，
-            // 避免连续两个 rotation 包 yaw/pitch 完全相同时 AimDuplicateLook 误判
             return new PlayerMoveC2SPacket.PositionAndOnGround(frozenX, frozenY, frozenZ, onGround, horizCollision);
         }
 
         if (original.changesPosition()) {
-            // PositionAndOnGround: 替换位置
             return new PlayerMoveC2SPacket.PositionAndOnGround(frozenX, frozenY, frozenZ, onGround, horizCollision);
         }
 
         if (original.changesLook() && freezeLook.get()) {
-            // LookAndOnGround + freezeLook: 替换视角
             return new PlayerMoveC2SPacket.LookAndOnGround(frozenYaw, frozenPitch, onGround, horizCollision);
         }
 
-        // LookAndOnGround (无 freezeLook) 或 OnGroundOnly: 无需替换
         return original;
     }
 
@@ -422,7 +376,7 @@ public class Freeze extends Module {
         return offset;
     }
 
-    // ===== bypassNegativeTimer 物品交互 =====
+    // ===== compatNegativeTimer 物品交互 =====
 
     private boolean isInteractable(ItemStack stack) {
         if (stack.getItem() == Items.ENDER_PEARL

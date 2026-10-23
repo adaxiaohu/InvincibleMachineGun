@@ -352,7 +352,7 @@ public class BlockUtil {
         if (rotate) Rotation.snapAt(directionVec);
         EntityUtil.placeSwingHand();
         BlockHitResult result = new BlockHitResult(directionVec, side, pos, false);
-        if (GlobalSetting.INSTANCE.packetPlace.get()){
+        if (GlobalSetting.on() && GlobalSetting.INSTANCE.packetPlace.get()){
             mc.getNetworkHandler().sendPacket(new PlayerInteractBlockC2SPacket(Hand.MAIN_HAND, result, 0));
         } else {
             mc.interactionManager.interactBlock(mc.player, Hand.MAIN_HAND, result);
@@ -369,7 +369,7 @@ public class BlockUtil {
         Vec3d directionVec = new Vec3d(pos.getX() + 0.5 + side.getVector().getX() * 0.5, pos.getY() + yOffset + side.getVector().getY() * 0.5, pos.getZ() + 0.5 + side.getVector().getZ() * 0.5);
         if (rotate) Rotation.snapAt(directionVec);
         BlockHitResult result = new BlockHitResult(directionVec, side, pos, false);
-        if (GlobalSetting.INSTANCE.packetPlace.get()){
+        if (GlobalSetting.on() && GlobalSetting.INSTANCE.packetPlace.get()){
             mc.getNetworkHandler().sendPacket(new PlayerInteractBlockC2SPacket(Hand.MAIN_HAND, result, 0));
             mc.player.swingHand(Hand.MAIN_HAND);
         } else {

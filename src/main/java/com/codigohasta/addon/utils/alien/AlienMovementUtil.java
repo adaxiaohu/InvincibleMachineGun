@@ -14,6 +14,31 @@ public class AlienMovementUtil {
             || mc.player.input.playerInput.right();
     }
 
+    /**
+     * ★ 读**真实按键**，不读 {@code player.input.playerInput}。
+     *
+     * <p>为什么需要它：{@code KeyboardInput.tick()} 在 {@code aiStep()} 里才刷新
+     * {@code playerInput}，而 {@code TickEvent.Pre} 在 {@code MinecraftClient.tick()}
+     * 的 HEAD（更早）就发布了。所以在 {@code Pre} 里读 {@code playerInput}
+     * 拿到的是<b>上一 tick</b> 的值 —— 表现为：
+     * <ul>
+     *   <li>按键松开的那一 tick 仍判「在动」⇒ 多发一个 offset 的 yaw 包</li>
+     *   <li>按下那一 tick 判「没动」⇒ 漏发</li>
+     * </ul>
+     * 两者都会让相邻包之间的 yaw 跳变（realYaw ↔ fixYaw 交替），
+     * 既让移动方向错乱，也会触发 Grim {@code AimModulo360}
+     * （它判 {@code |deltaYaw| > 320}，见 {@code AimModulo360.java:31}）。
+     *
+     * <p>{@link #isMoving()} 保留原语义给 ElytraFly 等模块用，不改动它们的行为。
+     */
+    public static boolean isMovingRaw() {
+        if (mc.player == null) return false;
+        return mc.options.forwardKey.isPressed()
+            || mc.options.backKey.isPressed()
+            || mc.options.leftKey.isPressed()
+            || mc.options.rightKey.isPressed();
+    }
+
     public static double getMotionX() {
         return mc.player.getVelocity().x;
     }

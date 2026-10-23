@@ -21,7 +21,7 @@ public interface PlayerInteractionAccess {
      * 本地进度复位时机，以及与 MineExtra 统计链保持一致的 start 上下文。
      *
      * <p>对于可瞬间破坏的方块，实现方允许保留当前 {@code currentBreakingPos}，以兼容同位置复用和
-     * 部分 bypass 流程对服务端状态机的依赖。
+     * 部分 compat 流程对服务端状态机的依赖。
      */
     public void startMiningBlock(BlockPos pos, Direction direction);
 

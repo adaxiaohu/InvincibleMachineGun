@@ -1,5 +1,5 @@
 [versions]
-mod-version = "1.0"
+mod-version = "1.8.5"
 
 # Fabric (https://fabricmc.net/develop)
 minecraft = "1.21.11"
@@ -12,6 +12,9 @@ loom = "1.16-SNAPSHOT"
 # Meteor (https://github.com/MeteorDevelopment/meteor-client/)
 meteor = "1.21.11-SNAPSHOT"
 
+# JSVG (https://github.com/weisJ/jsvg) —— 纯 Java2D 的 SVG 渲染器，零传递依赖
+jsvg = "2.0.0"
+
 # Mods
 
 [libraries]
@@ -22,6 +25,9 @@ fabric-loader = { module = "net.fabricmc:fabric-loader", version.ref = "fabric-l
 
 # Meteor client
 meteor-client = { module = "meteordevelopment:meteor-client", version.ref = "meteor" }
+
+# JSVG（CatLean 的图标库用它把 vector/*.svg 栅格化；MIT、零传递依赖）
+jsvg = { module = "com.github.weisj:jsvg", version.ref = "jsvg" }
 
 # Mods
 

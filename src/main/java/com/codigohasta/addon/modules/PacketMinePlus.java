@@ -107,8 +107,8 @@ public class PacketMinePlus extends Module {
             .sliderMax(1000)
             .build()
     );
-    private final Setting<Boolean> fastBypass = sgGeneral.add(new BoolSetting.Builder()
-            .name("FastBypass")
+    private final Setting<Boolean> fastCompat = sgGeneral.add(new BoolSetting.Builder()
+            .name("FastCompat")
             .description("快速挖掘绕过")
             .defaultValue(true)
             .build()
@@ -125,8 +125,8 @@ public class PacketMinePlus extends Module {
             .defaultValue(true)
             .build()
     );
-    private final Setting<Boolean> bypassGround = sgGeneral.add(new BoolSetting.Builder()
-            .name("BypassGround")
+    private final Setting<Boolean> compatGround = sgGeneral.add(new BoolSetting.Builder()
+            .name("CompatGround")
             .description("滞空挖掘绕过")
             .defaultValue(false)
             .build()
@@ -256,7 +256,7 @@ public class PacketMinePlus extends Module {
     private static boolean started, secondStarted;
     private double render = 1, secondRender = 1;
     private int oldSlot = -1;
-    private final Timer bypassTimer = new Timer();
+    private final Timer compatTimer = new Timer();
     private final Timer timer = new Timer();
     private final Timer secondTimer = new Timer();
     public final Timer mineTimer = new Timer();
@@ -268,7 +268,7 @@ public class PacketMinePlus extends Module {
         maxBreaksCount = 0;
         hasSwitch = false;
         secondHasSwitch = false;
-        bypassTimer.setMs(999999);
+        compatTimer.setMs(999999);
         mineTimer.setMs(999999);
         instantTimer.setMs(999999);
         timer.setMs(999999);
@@ -478,9 +478,9 @@ public class PacketMinePlus extends Module {
 
     private void sendStart(BlockPos pos) {
         sendPacket(new PlayerActionC2SPacket(PlayerActionC2SPacket.Action.START_DESTROY_BLOCK, pos, BlockUtil.getClickSide(pos)));
-        if (fastBypass.get()) {
-            BlockPos bypassPos = new BlockPosX(mc.player.getX(), 321, mc.player.getZ());
-            sendSequencedPacket(id -> new PlayerActionC2SPacket(PlayerActionC2SPacket.Action.START_DESTROY_BLOCK, bypassPos, Direction.DOWN, id));
+        if (fastCompat.get()) {
+            BlockPos compatPos = new BlockPosX(mc.player.getX(), 321, mc.player.getZ());
+            sendSequencedPacket(id -> new PlayerActionC2SPacket(PlayerActionC2SPacket.Action.START_DESTROY_BLOCK, compatPos, Direction.DOWN, id));
         }
         if (doubleBreak.get()) {
             long delay = packetDelay.get();
@@ -519,7 +519,7 @@ public class PacketMinePlus extends Module {
                 hasSwitch = true;
             }
         }
-        if (bypassGround.get() && !mc.player.isGliding() && targetPos != null && !isAir(targetPos) && !mc.player.isOnGround()){
+        if (compatGround.get() && !mc.player.isGliding() && targetPos != null && !isAir(targetPos) && !mc.player.isOnGround()){
             mc.getNetworkHandler().sendPacket(new PlayerMoveC2SPacket.Full(mc.player.getX(), mc.player.getY() + 1.0e-9, mc.player.getZ(), mc.player.getYaw(), mc.player.getPitch(), true, mc.player.horizontalCollision));
             mc.player.onLanding();
         }
@@ -527,7 +527,7 @@ public class PacketMinePlus extends Module {
         sendSequencedPacket(id -> new PlayerActionC2SPacket(PlayerActionC2SPacket.Action.STOP_DESTROY_BLOCK, targetPos, BlockUtil.getClickSide(targetPos), id));
     }
     private void sendStopSecond() {
-        if (bypassGround.get() && !mc.player.isGliding() && secondPos != null && !isAir(secondPos) && !mc.player.isOnGround()){
+        if (compatGround.get() && !mc.player.isGliding() && secondPos != null && !isAir(secondPos) && !mc.player.isOnGround()){
             mc.getNetworkHandler().sendPacket(new PlayerMoveC2SPacket.Full(mc.player.getX(), mc.player.getY() + 1.0e-9, mc.player.getZ(), mc.player.getYaw(), mc.player.getPitch(), true, mc.player.horizontalCollision));
             mc.player.onLanding();
         }

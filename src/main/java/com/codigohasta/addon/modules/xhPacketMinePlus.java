@@ -60,8 +60,8 @@ public class xhPacketMinePlus extends Module {
     private final Setting<Double> rangeConfig = sgGeneral.add(new DoubleSetting.Builder().name("范围").defaultValue(5.0).min(0.1).sliderRange(0.1, 6.0).visible(() -> modeConfig.get() == SpeedmineMode.PACKET).build());
     private final Setting<Double> speedConfig = sgGeneral.add(new DoubleSetting.Builder().name("速度").defaultValue(1.0).min(0.1).sliderRange(0.1, 1.0).build());
     
-    // --- New Bypass Settings ---
-    private final Setting<Boolean> bypassGround = sgGeneral.add(new BoolSetting.Builder().name("Bypass Ground").description("在水中或空中全速挖掘 (Grim/NCP)").defaultValue(true).build());
+    // --- New Compat Settings ---
+    private final Setting<Boolean> compatGround = sgGeneral.add(new BoolSetting.Builder().name("Compat Ground").description("在水中或空中全速挖掘 (Grim/NCP)").defaultValue(true).build());
     
     private final Setting<Boolean> instantConfig = sgGeneral.add(new BoolSetting.Builder().name("瞬间挖掘").defaultValue(true).build());
     private final Setting<Keybind> instantToggleKey = sgGeneral.add(new KeybindSetting.Builder().name("瞬间挖掘切换键").defaultValue(Keybind.none()).build());
@@ -101,7 +101,7 @@ public class xhPacketMinePlus extends Module {
     private int serverSideSlot = -1;
 
     public xhPacketMinePlus() {
-        super(AddonTemplate.CATEGORY, "发包挖掘", "抄袭的bep的发包挖掘模块，没有用了");
+        super(AddonTemplate.CATEGORY, "发包挖掘", "bep的发包挖掘模块，没有用了");
     }
 
     @Override
@@ -184,7 +184,7 @@ public class xhPacketMinePlus extends Module {
 
             if (!data.isStarted()) startMining(data);
 
-            // 使用自定义的计算方法，支持 Bypass Ground
+            // 使用自定义的计算方法，支持 Compat Ground
             float damageDelta = getBreakDelta(data.getSlot(), data.getState(), data.getPos());
             data.damage(damageDelta);
         }
@@ -217,11 +217,11 @@ public class xhPacketMinePlus extends Module {
                         Rotations.rotate(Rotations.getYaw(data.getPos()), Rotations.getPitch(data.getPos()));
                     }
 
-                    // --- Bypass Ground 核心逻辑 (修复版) ---
+                    // --- Compat Ground 核心逻辑 (修复版) ---
                     // 修复: 使用字符串检查避免编译错误 (EntityPose.GLIDING)
                     boolean isFallFlying = mc.player.getPose().name().equals("GLIDING");
                     
-                    if (bypassGround.get() && !isFallFlying && !data.getState().isAir()) {
+                    if (compatGround.get() && !isFallFlying && !data.getState().isAir()) {
                         // 发送一个位置包，标记 onGround = true
                         // 使用微小的偏移(1.0e-9)来确保服务器处理这个包，但视觉上不动
                         // 1.21.4 适配: Full 构造器增加 false (horizontalCollision)
@@ -310,8 +310,8 @@ public class xhPacketMinePlus extends Module {
         
         float speed = getBlockBreakingSpeed(slot, state);
         
-        // 关键逻辑: 如果开启 BypassGround，我们就不进行原本的 5倍减速惩罚
-        if (!bypassGround.get()) {
+        // 关键逻辑: 如果开启 CompatGround，我们就不进行原本的 5倍减速惩罚
+        if (!compatGround.get()) {
             // 原版逻辑：如果在水下且没有亲水附魔
             // 修复: 1.21.4 附魔检查逻辑更新
             boolean hasAquaAffinity = false;

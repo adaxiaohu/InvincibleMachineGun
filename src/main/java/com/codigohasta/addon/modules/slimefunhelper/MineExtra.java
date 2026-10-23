@@ -60,13 +60,13 @@ public class MineExtra extends BaseModule {
     public final FlagRef fakeInstaBreak =
             flagBuilder(fastbreak.add("use-fake-instant-break")).build();
 
-    public final EnumRef<Mode> fastBreakBypassMode = builder(fastbreak.add("bypass-mode"), Mode.class)
-            .defaultValue(Mode.NO_BYPASS)
+    public final EnumRef<Mode> fastBreakCompatMode = builder(fastbreak.add("compat-mode"), Mode.class)
+            .defaultValue(Mode.NO_COMPAT)
             .build();
 
     public final IntRef grimAcCounterThreshold = builder(fastbreak.add("grim-punishment-threshold"), Integer.class)
             .defaultValue(500)
-            .show(() -> fastBreakBypassMode.get() == Mode.BYPASS_GRIM_LEGIT)
+            .show(() -> fastBreakCompatMode.get() == Mode.COMPAT_GRIM_LEGIT)
             .build();
 
     public final DoubleRef breakThreshold = builder(fastbreak.add("break-threshold"), Double.class)
@@ -227,7 +227,7 @@ public class MineExtra extends BaseModule {
             case STOP_DESTROY_BLOCK -> {
                 lastGrimACWrongBreakCheck = null;
                 currentMiningBlock = null;
-                // FastBreak cooldown tryBypass
+                // FastBreak cooldown tryCompat
                 lastFinishBreakingTick = Tasks.getTick();
                 lastFinishBreakingCooldownTill = Tasks.getTick() + cooldownManaging();
             }
@@ -291,7 +291,7 @@ public class MineExtra extends BaseModule {
     }
 
     public void onGrimSBFastBreakExplode(Event<PlayerActionC2SPacket> event) {
-        if (quickMine.get() && fastBreakBypassMode.get() == Mode.BYPASS_GRIM_BAD_PACKETS && mc.player != null) {
+        if (quickMine.get() && fastBreakCompatMode.get() == Mode.COMPAT_GRIM_BAD_PACKETS && mc.player != null) {
             var packet = event.context();
             if (packet.getAction() == PlayerActionC2SPacket.Action.START_DESTROY_BLOCK
                     && packet.getPos().getY() < 1145
@@ -308,7 +308,7 @@ public class MineExtra extends BaseModule {
                 }
                 // hacking instant break
                 double currentBreakSpeed = WorldUtils.calcBlockBreakingDelta(state, mc.world, packet.getPos());
-                // instant break, no need to bypass fastbreak
+                // instant break, no need to compat fastbreak
                 if (currentBreakSpeed > 1.01) {
                     return;
                 }
@@ -359,7 +359,7 @@ public class MineExtra extends BaseModule {
     }
 
     public void onGrimCooldownResetPackets(Event<ClientPlayerEntity> tickEvent) {
-        if (quickMine.get() && fastBreakBypassMode.get() == Mode.BYPASS_GRIM_BAD_PACKETS && mc.player != null) {
+        if (quickMine.get() && fastBreakCompatMode.get() == Mode.COMPAT_GRIM_BAD_PACKETS && mc.player != null) {
             // exact tick we send,
             if (currentMiningBlock != null && Tasks.getTick() - lastFinishBreakingTick >= 6) {
                 if (mc.player.getAbilities().creativeMode) {
@@ -429,13 +429,13 @@ public class MineExtra extends BaseModule {
         int cooldownOverride = (fastBreak && breakCooldown.get() >= 0) ? breakCooldown.get() : 5;
 
         if (cooldownOverride < 5) {
-            if (fastBreakBypassMode.get().hasAc()) {
+            if (fastBreakCompatMode.get().hasAc()) {
                 // shit......
-                if (fastBreakBypassMode.get() == Mode.BYPASS_GRIM_LEGIT) {
+                if (fastBreakCompatMode.get() == Mode.COMPAT_GRIM_LEGIT) {
                     if (gainedAdvantageCooldown > grimAcCounterThreshold.get()) {
                         return 5;
                     }
-                } else if (fastBreakBypassMode.get() == Mode.BYPASS_GRIM_BAD_PACKETS) {
+                } else if (fastBreakCompatMode.get() == Mode.COMPAT_GRIM_BAD_PACKETS) {
                     // still magic numbers...
                     if (doubleBreak.get()) {
                         if (!isVanillaDoubleMineCooldownComplete(7)
@@ -476,7 +476,7 @@ public class MineExtra extends BaseModule {
         // we will deal the cooldown shit of bad packets mode in the duplication count of bad packets
         if (gainedAdvantageCooldown > threshold
                 && canResetThisTime
-                && mineExtra.fastBreakBypassMode.getValue() == Mode.BYPASS_GRIM_LEGIT
+                && mineExtra.fastBreakCompatMode.getValue() == Mode.COMPAT_GRIM_LEGIT
                 && mc.player != null) {
             // reset
             gainedAdvantageCooldown = 150;
@@ -500,13 +500,13 @@ public class MineExtra extends BaseModule {
         int threshold = mineExtra.grimAcCounterThreshold.get();
         ignoreNextFastBreakStatus = 0;
         if (!mineExtra.isActive() || !mineExtra.quickMine.get()) return;
-        if (mineExtra.fastBreakBypassMode.getValue() == Mode.BYPASS_GRIM_BAD_PACKETS) {
+        if (mineExtra.fastBreakCompatMode.getValue() == Mode.COMPAT_GRIM_BAD_PACKETS) {
             // badpackets, no punishment, 桀桀桀
             gainedAdvantageMining = 0;
         } else {
             gainedAdvantageMining = (int) (gainedAdvantageMining * 0.9);
             if (gainedAdvantageMining > threshold
-                    && mineExtra.fastBreakBypassMode.getValue() == Mode.BYPASS_GRIM_LEGIT
+                    && mineExtra.fastBreakCompatMode.getValue() == Mode.COMPAT_GRIM_LEGIT
                     && mc.player != null) {
                 gainedAdvantageMining = 150;
                 if (!mc.player.getAbilities().creativeMode) {
@@ -537,8 +537,8 @@ public class MineExtra extends BaseModule {
         gainedAdvantageMining += (diff + 1) * 50;
         int threshold = mineExtra.grimAcCounterThreshold.get();
         gainedAdvantageMining = MathHelper.clamp(gainedAdvantageMining, -1000, 1000);
-        if (gainedAdvantageMining > threshold && mineExtra.fastBreakBypassMode.getValue() == Mode.BYPASS_GRIM_LEGIT) {
-            // only when starting bypass will we do
+        if (gainedAdvantageMining > threshold && mineExtra.fastBreakCompatMode.getValue() == Mode.COMPAT_GRIM_LEGIT) {
+            // only when starting compat will we do
             // trigger a common mine
             ignoreNextFastBreakStatus = 2;
         }
@@ -715,26 +715,26 @@ public class MineExtra extends BaseModule {
         var modulePreset = presetEvent.context().getValue();
         switch (modulePreset) {
             case AC_GRIM, AC_GRIM_LEGACY -> {
-                fastBreakBypassMode.set(Mode.BYPASS_GRIM_BAD_PACKETS);
+                fastBreakCompatMode.set(Mode.COMPAT_GRIM_BAD_PACKETS);
             }
             default -> {
-                fastBreakBypassMode.set(Mode.NO_BYPASS);
+                fastBreakCompatMode.set(Mode.NO_COMPAT);
             }
         }
     }
 
     public static enum Mode implements ConfigEnum {
-        NO_BYPASS,
-        BYPASS_GRIM_LEGIT,
-        BYPASS_GRIM_BAD_PACKETS;
+        NO_COMPAT,
+        COMPAT_GRIM_LEGIT,
+        COMPAT_GRIM_BAD_PACKETS;
 
         public boolean hasAc() {
-            return this != NO_BYPASS;
+            return this != NO_COMPAT;
         }
 
         @Override
         public String getConfigEnumType() {
-            return "fast_break_bypass_mode";
+            return "fast_break_compat_mode";
         }
     }
 }

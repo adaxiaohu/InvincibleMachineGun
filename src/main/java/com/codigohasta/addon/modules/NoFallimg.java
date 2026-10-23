@@ -39,7 +39,7 @@ public class NoFallimg extends Module {
     private boolean flag;
     private boolean jumpScheduled;
     private boolean jumpInjected;
-    private boolean bypass;
+    private boolean compat;
     private double lastOnGroundHeight;
     private int tickCounter;
 
@@ -170,7 +170,7 @@ public class NoFallimg extends Module {
     @EventHandler
     private void onPacketSend(PacketEvent.Send event) {
         if (mc.player == null) return;
-        if (bypass) return;
+        if (compat) return;
         if (!flag) return;
         if (!(event.packet instanceof PlayerMoveC2SPacket)) return;
         if (!mc.player.isOnGround()) return;
@@ -186,18 +186,18 @@ public class NoFallimg extends Module {
 
             case Packet -> {
                 event.cancel();
-                bypass = true;
+                compat = true;
                 mc.getNetworkHandler().sendPacket(
                     new PlayerMoveC2SPacket.OnGroundOnly(false, mc.player.horizontalCollision));
-                bypass = false;
+                compat = false;
                 flag = false;
             }
 
             case GrimMotion -> {
                 event.cancel();
-                bypass = true;
+                compat = true;
                 mc.getNetworkHandler().sendPacket(EpsilonMovementUtil.createGrimPositionPacket(0.1));
-                bypass = false;
+                compat = false;
                 jumpScheduled = true;
                 flag = false;
             }
@@ -218,10 +218,10 @@ public class NoFallimg extends Module {
                 lastStartWaitTick = tickCounter;
 
                 mc.player.setOnGround(true);
-                bypass = true;
+                compat = true;
                 mc.getNetworkHandler().sendPacket(
                     new PlayerMoveC2SPacket.OnGroundOnly(true, mc.player.horizontalCollision));
-                bypass = false;
+                compat = false;
 
                 step = 1;
                 lastOnGroundHeight = mc.player.getY();

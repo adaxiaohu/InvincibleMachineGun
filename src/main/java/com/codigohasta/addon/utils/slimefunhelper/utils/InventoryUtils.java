@@ -37,6 +37,26 @@ private static final net.minecraft.client.MinecraftClient mc=net.minecraft.clien
             Predicate<ItemStack> predicate, boolean doNotFSearchWhenOpenOtherScreen, boolean acceptEmpty) {
         return findPlayerItem(predicate, doNotFSearchWhenOpenOtherScreen, acceptEmpty, true);
     }
+    /** Ported from upstream 1.1.7.2 InventoryUtils: bounded search (e.g. hotbar-only). */
+    public static IndexEntry<ItemStack> findPlayerItem(
+            Predicate<ItemStack> predicate, int size, boolean doNotFSearchWhenOpenOtherScreen, boolean acceptEmpty) {
+        return findPlayerItem(predicate, size, doNotFSearchWhenOpenOtherScreen, acceptEmpty, true, false);
+    }
+    public static IndexEntry<ItemStack> findPlayerItem(
+            Predicate<ItemStack> predicate,
+            int size,
+            boolean doNotFSearchWhenOpenOtherScreen,
+            boolean acceptEmpty,
+            boolean handPriority,
+            boolean offHandPriority) {
+        return findPlayerInventory(
+                (val) -> predicate.test(val.val()),
+                size,
+                doNotFSearchWhenOpenOtherScreen,
+                acceptEmpty,
+                handPriority,
+                offHandPriority);
+    }
     public static IndexEntry<ItemStack> findPlayerItem(
             Predicate<ItemStack> predicate,
             boolean doNotFSearchWhenOpenOtherScreen,
@@ -124,10 +144,47 @@ private static final net.minecraft.client.MinecraftClient mc=net.minecraft.clien
                 doNotFSearchWhenOpenOtherScreen,
                 acceptEmpty);
     }
+    /** Ported from upstream 1.1.7.2 InventoryUtils: bounded search (e.g. hotbar-only). */
+    public static IndexEntry<ItemStack> findBestPlayerItem(
+            Function<ItemStack, Double> maxFunction,
+            int size,
+            boolean doNotFSearchWhenOpenOtherScreen,
+            boolean acceptEmpty) {
+        return findBestPlayerInventory(
+                s -> {
+                    return maxFunction.apply(s.val());
+                },
+                size,
+                doNotFSearchWhenOpenOtherScreen,
+                acceptEmpty,
+                true,
+                false);
+    }
     public static IndexEntry<ItemStack> findBestPlayerInventory(
             Function<IndexEntry<ItemStack>, Double> maxFunction,
             boolean doNotFSearchWhenOpenOtherScreen,
             boolean acceptEmpty) {
+        return findBestPlayerInventory(
+                maxFunction, getPlayerInvSize(), doNotFSearchWhenOpenOtherScreen, acceptEmpty, true);
+    }
+
+    /** Ported from upstream 1.1.7.2 InventoryUtils: adds the search bound and hand-priority flag. */
+    public static IndexEntry<ItemStack> findBestPlayerInventory(
+            Function<IndexEntry<ItemStack>, Double> maxFunction,
+            int searchTo,
+            boolean doNotFSearchWhenOpenOtherScreen,
+            boolean acceptEmpty,
+            boolean handPriority) {
+        return findBestPlayerInventory(
+                maxFunction, searchTo, doNotFSearchWhenOpenOtherScreen, acceptEmpty, handPriority, false);
+    }
+    public static IndexEntry<ItemStack> findBestPlayerInventory(
+            Function<IndexEntry<ItemStack>, Double> maxFunction,
+            int searchTo,
+            boolean doNotFSearchWhenOpenOtherScreen,
+            boolean acceptEmpty,
+            boolean handPriority,
+            boolean offHandPriority) {
         // while player is open Screen
         PlayerInventory pinv = mc.player.getInventory();
         ItemStack item = mc.player.getStackInHand(Hand.MAIN_HAND);
@@ -137,21 +194,24 @@ private static final net.minecraft.client.MinecraftClient mc=net.minecraft.clien
         Double maxValue = null;
         IndexEntry<ItemStack> result = null;
         IndexEntry<ItemStack> test = null;
-        if ((acceptEmpty || !item.isEmpty())) {
-            test = new IndexEntry<>(selecedSlot, item);
-            maxValue = maxFunction.apply(test);
-            if (maxValue != null) {
-                result = test;
+        boolean ret = doNotFSearchWhenOpenOtherScreen
+                && ClientPlayerAccess.of(mc.player).getServerScreenHandler().syncId
+                        != mc.player.playerScreenHandler.syncId;
+        if (handPriority || ret) {
+            if ((acceptEmpty || !item.isEmpty())) {
+                test = new IndexEntry<>(selecedSlot, item);
+                maxValue = maxFunction.apply(test);
+                if (maxValue != null) {
+                    result = test;
+                }
             }
         }
-        if (doNotFSearchWhenOpenOtherScreen
-                && ClientPlayerAccess.of(mc.player).getServerScreenHandler().syncId
-                        != mc.player.playerScreenHandler.syncId) {
+        if (ret) {
             return result;
         }
 
         Double currentValue;
-        for (var i = 0; i < getPlayerInvSize(); ++i) {
+        for (var i = 0; i < searchTo; ++i) {
             ItemStack stack = pinv.getStack(i);
             test = new IndexEntry<>(i, stack);
             if ((acceptEmpty || !stack.isEmpty()) && (currentValue = maxFunction.apply(test)) != null) {
@@ -193,10 +253,29 @@ private static final net.minecraft.client.MinecraftClient mc=net.minecraft.clien
     }
     public static IndexEntry<ItemStack> findPlayerInventory(
             Predicate<IndexEntry<ItemStack>> predicate, boolean doNotFSearchWhenOpenOtherScreen, boolean acceptEmpty) {
-        return findPlayerInventory(predicate, doNotFSearchWhenOpenOtherScreen, acceptEmpty, true, false);
+        return findPlayerInventory(
+                predicate, getPlayerInvSize(), doNotFSearchWhenOpenOtherScreen, acceptEmpty, true, false);
+    }
+    /** Ported from upstream 1.1.7.2 InventoryUtils: bounded search (e.g. hotbar-only). */
+    public static IndexEntry<ItemStack> findPlayerInventory(
+            Predicate<IndexEntry<ItemStack>> predicate,
+            int searchTo,
+            boolean doNotFSearchWhenOpenOtherScreen,
+            boolean acceptEmpty) {
+        return findPlayerInventory(predicate, searchTo, doNotFSearchWhenOpenOtherScreen, acceptEmpty, true, false);
     }
     public static IndexEntry<ItemStack> findPlayerInventory(
             Predicate<IndexEntry<ItemStack>> predicate,
+            boolean doNotFSearchWhenOpenOtherScreen,
+            boolean acceptEmpty,
+            boolean handPriority,
+            boolean offHandPriority) {
+        return findPlayerInventory(
+                predicate, getPlayerInvSize(), doNotFSearchWhenOpenOtherScreen, acceptEmpty, handPriority, offHandPriority);
+    }
+    public static IndexEntry<ItemStack> findPlayerInventory(
+            Predicate<IndexEntry<ItemStack>> predicate,
+            int searchTo,
             boolean doNotFSearchWhenOpenOtherScreen,
             boolean acceptEmpty,
             boolean handPriority,
@@ -229,7 +308,7 @@ private static final net.minecraft.client.MinecraftClient mc=net.minecraft.clien
                         != mc.player.playerScreenHandler.syncId) {
             return result;
         }
-        for (var i = 0; i < getPlayerInvSize(); ++i) {
+        for (var i = 0; i < searchTo; ++i) {
             ItemStack stack = pinv.getStack(i);
             test = new IndexEntry<>(i, stack);
             if ((acceptEmpty || !stack.isEmpty()) && predicate.test(test)) {

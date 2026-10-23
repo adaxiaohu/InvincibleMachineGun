@@ -10,6 +10,10 @@ public class GlobalSetting extends Module {
         super(AddonTemplate.CATEGORY, "L全局设置", "leaveshack的全局设置");
         INSTANCE = this;
     }
+    public static boolean on() {
+        return INSTANCE != null && INSTANCE.isActive();
+    }
+
     private final SettingGroup sgGeneral = this.settings.getDefaultGroup();
     private final SettingGroup sgRotation = this.settings.createGroup("Rotation");
     private final SettingGroup sgElytra = this.settings.createGroup("Elytra");

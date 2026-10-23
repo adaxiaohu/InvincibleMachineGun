@@ -63,14 +63,14 @@ public class NoFall extends BaseModule implements LegalMovementManager.MovementM
                     moduleMeta(() -> this.noFallMode))
             .build();
 
-    public final EnumRef<Mode> noFallMode = builder(noFallPath.add("bypass-mode"), Mode.class)
+    public final EnumRef<Mode> noFallMode = builder(noFallPath.add("compat-mode"), Mode.class)
             .defaultValue(Mode.LAZY_MODE)
             .build();
 
     public final IntRef noFallSafeDistance =
             intBuilder(noFallPath.add("safe-distance-modify")).defaultValue(0).build();
 
-    public final NBTRef<Regex> equipmentIdBypass = builder(noFallPath.add("equipment-id-bypass-nofall"), Regex.class)
+    public final NBTRef<Regex> equipmentIdCompat = builder(noFallPath.add("equipment-id-compat-nofall"), Regex.class)
             .defaultValue(new Regex("^(SLIME.*_BOOTS)$"))
             .build();
 
@@ -92,10 +92,10 @@ public class NoFall extends BaseModule implements LegalMovementManager.MovementM
 
     private void initDelegate() {
         delegateMap.clear();
-        delegateMap.put(Mode.NO_BYPASS, new NoFallNoBypass(this));
+        delegateMap.put(Mode.NO_COMPAT, new NoFallNoCompat(this));
         delegateMap.put(Mode.LAZY_MODE, new NoFallLazy(this));
-        delegateMap.put(Mode.BYPASS_GRIM, new NoFallBypassGrim(this));
-        delegateMap.put(Mode.LAZY_BYPASS_GRIM, new NoFallLazyBypassGrim(this));
+        delegateMap.put(Mode.COMPAT_GRIM, new NoFallCompatGrim(this));
+        delegateMap.put(Mode.LAZY_COMPAT_GRIM, new NoFallLazyCompatGrim(this));
         delegateMap.put(Mode.LAZY_GRIM_PLUS, new NoFallGrimLazyPlus(this));
         delegateMap.put(Mode.LAZY_GRIM_PLUS_2, new NoFallFuckGrimLazyPlusV2(this));
         delegateMap.put(Mode.DUP_FULL_FAKE_GROUND, new NoFallDupFullFakeGround(this));
@@ -126,7 +126,7 @@ public class NoFall extends BaseModule implements LegalMovementManager.MovementM
 
     protected void onVcUpdate(Event<Vec3d> vc) {
         if (vc.getArgs(0) == mc.player) {
-            if (getDelegate() instanceof NoFallLazyBypassGrim grimLazy) {
+            if (getDelegate() instanceof NoFallLazyCompatGrim grimLazy) {
                 grimLazy.onVelocity(vc);
             }
         }
@@ -198,7 +198,7 @@ public class NoFall extends BaseModule implements LegalMovementManager.MovementM
 
     public boolean checkInvulnerableEquipment() {
 
-        Predicate<String> pd = equipmentIdBypass.get().asPredicate();
+        Predicate<String> pd = equipmentIdCompat.get().asPredicate();
         for (var slot :
                 new EquipmentSlot[] {EquipmentSlot.FEET, EquipmentSlot.LEGS, EquipmentSlot.CHEST, EquipmentSlot.HEAD}) {
             ItemStack stack = mc.player.getEquippedStack(slot);
@@ -313,9 +313,9 @@ public class NoFall extends BaseModule implements LegalMovementManager.MovementM
         public void onPlayerVelocity(Event<Vec3d> vec3d) {}
     }
 
-    public static class NoFallNoBypass extends NoFallDelegate {
+    public static class NoFallNoCompat extends NoFallDelegate {
 
-        public NoFallNoBypass(NoFall module) {
+        public NoFallNoCompat(NoFall module) {
             super(module);
         }
 
@@ -461,13 +461,13 @@ public class NoFall extends BaseModule implements LegalMovementManager.MovementM
         }
     }
 
-    public static class NoFallBypassGrim extends NoFallDelegate {
+    public static class NoFallCompatGrim extends NoFallDelegate {
         boolean canDoJump = false;
         boolean doJump = false;
         boolean nofallWaitSetbackFlag = false;
         int waitTimeout = 0;
 
-        public NoFallBypassGrim(NoFall module) {
+        public NoFallCompatGrim(NoFall module) {
             super(module);
         }
 
@@ -606,7 +606,7 @@ public class NoFall extends BaseModule implements LegalMovementManager.MovementM
     // see log analysis for more information
     // todo: grim code analysis
     // todo: can not work in 1.21.11
-    public static class NoFallLazyBypassGrim extends NoFallDelegate {
+    public static class NoFallLazyCompatGrim extends NoFallDelegate {
         int lastResyncTime = -1;
         int lastNoFall = -1;
         boolean afterSetbackFlag;
@@ -623,7 +623,7 @@ public class NoFall extends BaseModule implements LegalMovementManager.MovementM
         int duplicateSetback = 0;
         private static final int latency = 10;
 
-        public NoFallLazyBypassGrim(NoFall module) {
+        public NoFallLazyCompatGrim(NoFall module) {
             super(module);
             this.afterSetbackFlag = true;
             this.duplicateCount = 0;
@@ -1766,7 +1766,7 @@ public class NoFall extends BaseModule implements LegalMovementManager.MovementM
                             module.lastOnGroundHeight = entity.pos.getY();
                             // ClientTickEndC2SPacket());
                             Vec3d lastPosPos = movementManagerEvent.context.playerStatus.pos;
-                            //                            // try use simple nofall to bypass other ac
+                            //                            // try use simple nofall to compat other ac
                             //                            storedPacketMove = VPacket.newPositionAndOnGround(
                             //                                    lastPosPos.x,
                             //                                    module.lastServerY + 9E-8,
@@ -1890,7 +1890,7 @@ public class NoFall extends BaseModule implements LegalMovementManager.MovementM
                     flagTick = false;
                     mc.player.setPosition(mc.player.getEntityPos()
                             .withAxis(Direction.Axis.Y, movementManagerEvent.context.playerStatus.pos.y + 9E-5));
-                    // can not bypass
+                    // can not compat
                     mc.player.setOnGround(false);
                     ClientPlayerAccess.of(mc.player).resyncPos();
                 }
@@ -1938,11 +1938,11 @@ public class NoFall extends BaseModule implements LegalMovementManager.MovementM
     }
 
     public static enum Mode implements ConfigEnum {
-        NO_BYPASS,
+        NO_COMPAT,
         LAZY_MODE,
-        BYPASS_GRIM,
+        COMPAT_GRIM,
         @ApiStatus.Experimental
-        LAZY_BYPASS_GRIM,
+        LAZY_COMPAT_GRIM,
         LAZY_GRIM_PLUS,
         LAZY_GRIM_PLUS_2,
         DUP_FULL_FAKE_GROUND,
@@ -1951,7 +1951,7 @@ public class NoFall extends BaseModule implements LegalMovementManager.MovementM
 
         @Override
         public String getConfigEnumType() {
-            return "no_fall_bypass_mode";
+            return "no_fall_compat_mode";
         }
     }
 

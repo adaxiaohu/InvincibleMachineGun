@@ -181,7 +181,6 @@ public class ElytraFlight extends BaseModule implements LegalMovementManager.Mov
     }
 
     public boolean shouldControlFlight() {
-        if (BaritoneFix.INSTANCE != null && BaritoneFix.INSTANCE.shouldYieldFlightControl()) return false;
         return enable.get() || (ElytraBot.INSTANCE.canControlFlight());
     }
 
@@ -200,18 +199,6 @@ public class ElytraFlight extends BaseModule implements LegalMovementManager.Mov
 
     public void applyPreTickModify(Event<LegalMovementManager> movementManagerEvent) {
         ClientPlayerEntity player = movementManagerEvent.context.playerStatus.entity;
-        if (BaritoneFix.INSTANCE != null && BaritoneFix.INSTANCE.shouldYieldFlightControl()) {
-            // Baritone predicts vanilla glide/firework motion. Manual SF velocity and
-            // idle floating would overwrite that route, even without keyboard input.
-            lastVelocity = null;
-            holdJumpCounter = 0;
-            currentTakeOff = false;
-            return;
-        }
-        if (com.codigohasta.addon.utils.slimefunhelper.FlightImpulseGuard.preserving()) {
-            lastVelocity = player.getVelocity();
-            return;
-        }
         if (player.isGliding()) {
             currentTakeOff = true;
         }
@@ -255,6 +242,16 @@ public class ElytraFlight extends BaseModule implements LegalMovementManager.Mov
                         Vec3d movementInput =
                                 new Vec3d(input.sidewaysSpeed(), input.upwardSpeed(), input.forwardSpeed());
                         Vec3d velocity = EntityUtils.movementInputToVelocity(movementInput, 1.0F, player.getYaw());
+                        if (useAutoRescale.get()
+                                && autoRescaleBestClimbingSpeed.get()
+                                && movementInput.horizontalLength() > 0) {
+                            if (movementInput.y > 0 && velocity.y > 0) {
+
+                                velocity = ElytraOptimizeUtils.calculateBestPullupSpeed(velocity);
+                            } else if (movementInput.y < 0 && velocity.y < 0) {
+                                velocity = ElytraOptimizeUtils.calculateBestDownForwardSpeed(velocity, false);
+                            }
+                        }
                         if (movementInput.horizontalLengthSquared() > 0.0D) {
                             if (movementInput.y > 0) {
                                 if (overridePullupAngle.get().isPresent()) {
@@ -277,16 +274,6 @@ public class ElytraFlight extends BaseModule implements LegalMovementManager.Mov
                                     double yLevel = Math.tan(Math.toRadians(angle)) * velocity.horizontalLength();
                                     velocity = velocity.withAxis(Direction.Axis.Y, -yLevel);
                                 }
-                            }
-                        }
-                        if (useAutoRescale.get()
-                                && autoRescaleBestClimbingSpeed.get()
-                                && movementInput.horizontalLength() > 0) {
-                            if (movementInput.y > 0 && velocity.y > 0) {
-
-                                velocity = ElytraOptimizeUtils.calculateBestPullupSpeed(velocity);
-                            } else if (movementInput.y < 0 && velocity.y < 0) {
-                                velocity = ElytraOptimizeUtils.calculateBestDownForwardSpeed(velocity, false);
                             }
                         }
 
@@ -403,7 +390,7 @@ public class ElytraFlight extends BaseModule implements LegalMovementManager.Mov
                 if (shouldControlRotation && realVector.lengthSquared() > 5e-3) {
                     // fliter zero control
                     if (!movementManagerEvent.context.hasImportantRotation()) {
-                        if (realVector.horizontalLengthSquared() > 5E-3) {
+                        if (realVector.horizontalLengthSquared() > 1E-7) {
                             movementManagerEvent.context.pushImportantRotation(true, true);
                             Vec2f py = EntityUtils.rotationToPitchYaw(realVector.normalize());
                             movementManagerEvent.context.markForResetRot();
@@ -419,7 +406,7 @@ public class ElytraFlight extends BaseModule implements LegalMovementManager.Mov
                     // pitch reset to trigger grim lastPitch lastYaw update
                     if (useAutoRescale.get()) {
                         float yaw = mc.player.getYaw();
-                        float newYaw = (Tasks.getTick() % 2 == 0) ? yaw + 0.01F : yaw - 0.01F;
+                        float newYaw = (Tasks.getTick() % 2 == 0) ? yaw + 0.001F : yaw - 0.001F;
                         PlayerStateManager.setPlayerYawSafe(mc.player, newYaw);
                         Vec3d newVectorRot = EntityUtils.pitchYawToRotation(mc.player.getPitch(), newYaw);
                         realVector = newVectorRot.normalize().multiply(realVector.length());
@@ -439,15 +426,15 @@ public class ElytraFlight extends BaseModule implements LegalMovementManager.Mov
                                             !mc.player.hasNoGravity())
                                     : realVector);
                 } else if (realVector.length() > 0) {
-                    Debug.info(
-                            "Lost Control",
-                            PlayerStateManager.INSTANCE.lastKnownClientVelocity,
-                            EntityUtils.calculateGlidingVelocity(
-                                    mc.player,
-                                    PlayerStateManager.INSTANCE.lastKnownClientVelocity,
-                                    mc.player.getRotationVector(),
-                                    true),
-                            mc.player.getVelocity());
+                    //                    Debug.info(
+                    //                            "Lost Control",
+                    //                            PlayerStateManager.INSTANCE.lastKnownClientVelocity,
+                    //                            EntityUtils.calculateGlidingVelocity(
+                    //                                    mc.player,
+                    //                                    PlayerStateManager.INSTANCE.lastKnownClientVelocity,
+                    //                                    mc.player.getRotationVector(),
+                    //                                    true),
+                    //                            mc.player.getVelocity());
                 }
 
                 if (shouldCheckRocket) {

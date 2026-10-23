@@ -31,13 +31,13 @@ public abstract class LivingEntityMixin {
     private void sf$jumpCooldown(CallbackInfo ci){if(sf$nextJumpCooldown!=null){if(SlimefunRuntime.modifying())jumpingCooldown=sf$nextJumpCooldown;sf$nextJumpCooldown=null;}}
     @Inject(method="travel",at=@At(value="INVOKE",target="Lnet/minecraft/entity/LivingEntity;travelInFluid(Lnet/minecraft/util/math/Vec3d;)V"),cancellable=true)
     private void sf$water(Vec3d input,CallbackInfo ci){
-        if((Object)this!=MinecraftClient.getInstance().player||!SlimefunRuntime.extraActive()||com.codigohasta.addon.utils.slimefunhelper.FlightImpulseGuard.preserving())return;
+        if((Object)this!=MinecraftClient.getInstance().player||!SlimefunRuntime.extraActive())return;
         ClientPlayerEntity player=(ClientPlayerEntity)(Object)this;ElytraExtra extra=ElytraExtra.INSTANCE;
         if(player.isGliding()&&extra.canFireworkControlMotion()&&(extra.fireworksLiquidFly.get()||extra.hasFireworkVelocityOverrides())){ci.cancel();Vec3d velocity=extra.requestNextOverrideVelocity();player.setVelocity(velocity!=null?velocity:EntityUtils.calculateGlidingVelocity(player,player.getVelocity(),player.getRotationVector(),!player.hasNoGravity()));player.move(MovementType.SELF,player.getVelocity());}
     }
     @WrapOperation(method="travelGliding",at=@At(value="INVOKE",target="Lnet/minecraft/entity/LivingEntity;calcGlidingVelocity(Lnet/minecraft/util/math/Vec3d;)Lnet/minecraft/util/math/Vec3d;"))
     private Vec3d sf$velocity(LivingEntity instance,Vec3d old,Operation<Vec3d> original){
-        if(instance!=MinecraftClient.getInstance().player||!SlimefunRuntime.extraActive()||com.codigohasta.addon.utils.slimefunhelper.FlightImpulseGuard.preserving())return original.call(instance,old);
+        if(instance!=MinecraftClient.getInstance().player||!SlimefunRuntime.extraActive())return original.call(instance,old);
         Vec3d velocity=ElytraExtra.INSTANCE.requestNextOverrideVelocity();return ElytraExtra.INSTANCE.clampFireworkSpeedInWeb(velocity==null?original.call(instance,old):velocity);
     }
 }

@@ -8,13 +8,19 @@ import static meteordevelopment.meteorclient.MeteorClient.mc;
 
 public class EntityUtil {
     public static void attackSwingHand() {
-        Hand hand = GlobalSetting.INSTANCE.handMode.get() == GlobalSetting.HandMode.MainHand ? Hand.MAIN_HAND : Hand.OFF_HAND;
-        if (GlobalSetting.INSTANCE.attackSwing.get() != GlobalSetting.SwingMode.Packet && GlobalSetting.INSTANCE.attackSwing.get() != GlobalSetting.SwingMode.None) mc.player.swingHand(hand);
-        if (GlobalSetting.INSTANCE.attackSwing.get() != GlobalSetting.SwingMode.Client && GlobalSetting.INSTANCE.attackSwing.get() != GlobalSetting.SwingMode.None) mc.getNetworkHandler().sendPacket(new HandSwingC2SPacket(hand));
+        var swing = GlobalSetting.on() ? GlobalSetting.INSTANCE.attackSwing.get() : GlobalSetting.SwingMode.Both;
+        if (swing == GlobalSetting.SwingMode.None) return;
+        Hand hand = !GlobalSetting.on() || GlobalSetting.INSTANCE.handMode.get() == GlobalSetting.HandMode.MainHand
+                ? Hand.MAIN_HAND : Hand.OFF_HAND;
+        if (swing != GlobalSetting.SwingMode.Packet) mc.player.swingHand(hand);
+        if (swing != GlobalSetting.SwingMode.Client) mc.getNetworkHandler().sendPacket(new HandSwingC2SPacket(hand));
     }
     public static void placeSwingHand() {
-        Hand hand = GlobalSetting.INSTANCE.handMode.get() == GlobalSetting.HandMode.MainHand ? Hand.MAIN_HAND : Hand.OFF_HAND;
-        if (GlobalSetting.INSTANCE.placeSwing.get() != GlobalSetting.SwingMode.Packet && GlobalSetting.INSTANCE.placeSwing.get() != GlobalSetting.SwingMode.None) mc.player.swingHand(hand);
-        if (GlobalSetting.INSTANCE.placeSwing.get() != GlobalSetting.SwingMode.Client && GlobalSetting.INSTANCE.placeSwing.get() != GlobalSetting.SwingMode.None) mc.getNetworkHandler().sendPacket(new HandSwingC2SPacket(hand));
+        var swing = GlobalSetting.on() ? GlobalSetting.INSTANCE.placeSwing.get() : GlobalSetting.SwingMode.Both;
+        if (swing == GlobalSetting.SwingMode.None) return;
+        Hand hand = !GlobalSetting.on() || GlobalSetting.INSTANCE.handMode.get() == GlobalSetting.HandMode.MainHand
+                ? Hand.MAIN_HAND : Hand.OFF_HAND;
+        if (swing != GlobalSetting.SwingMode.Packet) mc.player.swingHand(hand);
+        if (swing != GlobalSetting.SwingMode.Client) mc.getNetworkHandler().sendPacket(new HandSwingC2SPacket(hand));
     }
 }

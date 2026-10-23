@@ -34,7 +34,17 @@ import net.minecraft.util.shape.VoxelShape;
 import org.apache.commons.lang3.mutable.MutableObject;
 public final class MovTasks {
 private static final net.minecraft.client.MinecraftClient mc=net.minecraft.client.MinecraftClient.getInstance();
-    public static boolean hasHorizontalCollision(Entity entity,Vec3d direction){Vec3d moved=simulateMovement(entity,entity.getEntityPos(),direction,false);return Math.abs(moved.x-direction.x)>1E-7||Math.abs(moved.z-direction.z)>1E-7;}
+    public static boolean hasHorizontalCollision(Entity entity,Vec3d move){
+        // Ported from upstream 1.1.7.2: passengers never register a horizontal collision, and
+        // the comparison uses MathHelper.approximatelyEquals against a server-mode simulation.
+        if (entity.hasPassengers()) {
+            return false;
+        } else {
+            Vec3d movement = simulateMovement(entity, entity.getEntityPos(), move, true);
+            return !MathHelper.approximatelyEquals(movement.x, move.x)
+                    || !MathHelper.approximatelyEquals(movement.z, move.z);
+        }
+    }
     public static final LegalMovementManager.ModifierPipeline PLAYER_PIPELINE_0=new LegalMovementManager.ModifierPipeline(0);
     public static Sprint getSprint(){return meteordevelopment.meteorclient.systems.modules.Modules.get().get(Sprint.class);}
     public static Velocity getVelocity(){return meteordevelopment.meteorclient.systems.modules.Modules.get().get(Velocity.class);}
@@ -45,8 +55,40 @@ private static final net.minecraft.client.MinecraftClient mc=net.minecraft.clien
     public static ElytraJump getElytraJump(){return meteordevelopment.meteorclient.systems.modules.Modules.get().get(ElytraJump.class);}
     public static FloatingUtils getFloatingUtils(){return FloatingUtils.INSTANCE;}
     public static NoFall getNoFall(){return meteordevelopment.meteorclient.systems.modules.Modules.get().get(NoFall.class);}
-    public static boolean isCollidingWithEnvironment(Entity entity){return isCollidingWithEnvironment(entity,entity.getBoundingBox());}
-    public static boolean isCollidingWithEnvironment(Entity entity,Box box){return !entity.getEntityWorld().isSpaceEmpty(entity,box);}
+    public static boolean isCollidingWithEnvironment(Entity entity){
+        // Ported from upstream 1.1.7.2: uses CollisionUtil.getCollisionsForBlocksOrWorldBorder
+        // with COLLISION_FLAG_CHECK_BORDER instead of vanilla isSpaceEmpty, so the result matches
+        // the server's collision set (world border included).
+        final List<Box> collisionsBB = new java.util.ArrayList<>();
+        final List<VoxelShape> collisionsVoxel = new java.util.ArrayList<>();
+        return CollisionUtil.getCollisionsForBlocksOrWorldBorder(
+                entity.getEntityWorld(),
+                entity,
+                entity.getBoundingBox(),
+                collisionsVoxel,
+                collisionsBB,
+                null,
+                CollisionUtil.COLLISION_FLAG_CHECK_BORDER,
+                null,
+                null,
+                true);
+    }
+
+    public static boolean isCollidingWithEnvironment(Entity entity,Box box){
+        final List<Box> collisionsBB = new java.util.ArrayList<>();
+        final List<VoxelShape> collisionsVoxel = new java.util.ArrayList<>();
+        return CollisionUtil.getCollisionsForBlocksOrWorldBorder(
+                mc.world,
+                entity,
+                box,
+                collisionsVoxel,
+                collisionsBB,
+                null,
+                CollisionUtil.COLLISION_FLAG_CHECK_BORDER,
+                null,
+                null,
+                true);
+    }
     public static List<Vec3d> tpAttackSearch(
             Vec3d from, Box to, double availableRange, double maxAtOnce, int maxAttempt) {
         double avRS = MathUtils.s2(availableRange);
@@ -193,20 +235,16 @@ private static final net.minecraft.client.MinecraftClient mc=net.minecraft.clien
         getAutoResync().setAutoResyncSchedule(Optional.empty());
     }
     public static boolean doMovementInvolveStepheight(Entity entity, Vec3d movement) {
-        boolean oldFeature = getMovExtra().noStepHeightFeature.get();
-        boolean oldDebug = DEBUG_RENDER_COLLISION_RENDERING;
-        boolean oldStep = INTERNAL_VALUE_USE_STEPHEIGHT.get();
-        try {
-            getMovExtra().noStepHeightFeature.set(false);
-            INTERNAL_VALUE_USE_STEPHEIGHT.set(false);
-            DEBUG_RENDER_COLLISION_RENDERING = true;
-            collide(entity, movement);
-            return INTERNAL_VALUE_USE_STEPHEIGHT.get();
-        } finally {
-            getMovExtra().noStepHeightFeature.set(oldFeature);
-            DEBUG_RENDER_COLLISION_RENDERING = oldDebug;
-            INTERNAL_VALUE_USE_STEPHEIGHT.set(oldStep);
-        }
+        boolean stepheightFlag = getMovExtra().noStepHeightFeature.get();
+        // enable stepheight feature to simulate
+        getMovExtra().noStepHeightFeature.set(false);
+        INTERNAL_VALUE_USE_STEPHEIGHT.set(false);
+        DEBUG_RENDER_COLLISION_RENDERING = true;
+        Vec3d c = collide(entity, movement);
+        DEBUG_RENDER_COLLISION_RENDERING = false;
+        boolean useStepheight = INTERNAL_VALUE_USE_STEPHEIGHT.get();
+        getMovExtra().noStepHeightFeature.set(stepheightFlag);
+        return useStepheight;
     }
 
     public static Vec3d simulateMovement(Entity entity, Vec3d from, Vec3d vec3d, boolean serverMode) {
@@ -246,13 +284,10 @@ private static final net.minecraft.client.MinecraftClient mc=net.minecraft.clien
         //            mc.player.setOnGround(onGround);
         //
         //        }else{
-        try {
-            result = collide(rootEnity, vec3d);
+        result = collide(rootEnity, vec3d);
         //        }
-        } finally {
-            RenderTasks.DEBUG_RENDER_COLLISION_RENDERING = false;
-            rootEnity.setPosition(rootVec);
-        }
+        RenderTasks.DEBUG_RENDER_COLLISION_RENDERING = false;
+        rootEnity.setPosition(rootVec);
         //  simu.restore();
         return result;
     }
@@ -271,7 +306,7 @@ private static final net.minecraft.client.MinecraftClient mc=net.minecraft.clien
         {
             boolean startFirstMove = false;
             List<MovInfo> moveList = new ArrayList<>();
-            Vec3d currentVec330 = context.from.get();
+            Vec3d currentVec330 = context.from.getValue();
             for (int i = 0; i < deltaMovements.size(); ++i) {
                 // filter packets that are not removing at the front
                 if (!startFirstMove && deltaMovements.get(i).isEmptyTo(currentVec330)) {
@@ -286,11 +321,11 @@ private static final net.minecraft.client.MinecraftClient mc=net.minecraft.clien
             deltaMovements = moveList;
         }
 
-        Vec3d originalPositionTick = context.tickFirstGoodVec.get();
+        Vec3d originalPositionTick = context.tickFirstGoodVec.getValue();
         boolean riding = mc.player.hasVehicle();
         Entity rootEntity = mc.player.getRootVehicle();
         double deltaY = rootEntity.getY() - mc.player.getY();
-        double minY = context.from.get().y;
+        double minY = context.from.getValue().y;
         double maxY = minY;
         boolean currentOnGround = !considerNoFall && mc.player.isOnGround();
         Vec2f currentPitchYaw = new Vec2f(mc.player.getPitch(), mc.player.getYaw());
@@ -349,7 +384,7 @@ private static final net.minecraft.client.MinecraftClient mc=net.minecraft.clien
         // calculate tokens depends on paper sourceocode
         for (int i = 0; i < deltaMovements.size(); ++i) {
             MovInfo info = deltaMovements.get(i);
-            Vec3d fromNow = context.from.get();
+            Vec3d fromNow = context.from.getValue();
             Vec3d vec3d = info.vec3d().subtract(fromNow);
             maxY = Math.max(maxY, info.vec3d().y);
             minY = Math.min(minY, info.vec3d().y);
@@ -835,7 +870,7 @@ private static final net.minecraft.client.MinecraftClient mc=net.minecraft.clien
             currentTokenInTick.set(0);
 
             currentTokenLimit.set(0);
-            tickFirstGoodVec.setValue(from.get());
+            tickFirstGoodVec.setValue(from.getValue());
             return this;
         }
     }
@@ -1072,7 +1107,7 @@ public static boolean doingTp;
             boolean considerNoFall) {
         if (mc.player == null) return;
         if (command) Debug.chat("正在向", ChatUtils.getDisplayedLocationDouble(target), "执行tp行为");
-        Vec3d current = context.from.get();
+        Vec3d current = context.from.getValue();
         // simulate direct move
         Vec3d movement0 = target.subtract(current);
         // flying into lava fuck, so we consider Environment

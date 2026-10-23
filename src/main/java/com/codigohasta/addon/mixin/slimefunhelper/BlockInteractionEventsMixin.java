@@ -42,8 +42,9 @@ public abstract class BlockInteractionEventsMixin {
     private void onPreInteractBlock(ClientPlayerEntity player, Hand hand, BlockHitResult hitResult,
             CallbackInfoReturnable<ActionResult> cir, @Local(argsOnly = true) LocalRef<BlockHitResult> hand2) {
         if (!sf$placementActive()) return;
+        ItemStack currentStack = player.getStackInHand(hand);
         Event<UseItemOnBlock> blockHitResultEvent =
-                new Event<>(new UseItemOnBlock(hitResult, ActionResult.SUCCESS, false, hand), true, true);
+                new Event<>(new UseItemOnBlock(hitResult, ActionResult.SUCCESS, java.util.Optional.empty(), hand, currentStack), true, true);
         Listener.getPrePlayerUseItemAtBlock().dispatch(blockHitResultEvent);
         if (blockHitResultEvent.isCancelled()) {
             cir.setReturnValue(blockHitResultEvent.context.actionResult());
@@ -66,13 +67,16 @@ public abstract class BlockInteractionEventsMixin {
         ItemStack stackCopy = client.player.getStackInHand(hand).copy();
         BlockState state = client.world.getBlockState(hitResult.getBlockPos());
         MutableBoolean placeBlock = new MutableBoolean(false);
+        net.minecraft.util.math.BlockPos predictingPlace =
+                new net.minecraft.item.ItemPlacementContext(client.player, hand, stackCopy, hitResult).getBlockPos();
         original.call(instance, world, (SequencedPacketCreator) (seq) -> {
             lastInteractCaptureBlockPlace.addLast(placeBlock);
             try {
                 var packet = packetCreator.predict(seq);
                 if (packet instanceof PlayerInteractBlockC2SPacketAccess access) {
                     access.setUseContext(new PlayerInteractBlockC2SPacketAccess.UseContext(
-                            stackCopy, state, actionResult.get(), placeBlock.booleanValue()));
+                            stackCopy, state, actionResult.get(),
+                            placeBlock.booleanValue() ? java.util.Optional.of(predictingPlace) : java.util.Optional.empty()));
                 }
                 return packet;
             } finally {
@@ -81,7 +85,9 @@ public abstract class BlockInteractionEventsMixin {
         });
         ActionResult acc = actionResult.get();
         Event<UseItemOnBlock> eventResult =
-                new Event<>(new UseItemOnBlock(hitResult, acc, placeBlock.booleanValue(), hand), false, true);
+                new Event<>(new UseItemOnBlock(hitResult, acc,
+                        placeBlock.booleanValue() ? java.util.Optional.of(predictingPlace) : java.util.Optional.empty(),
+                        hand, stackCopy), false, true);
         Listener.getPostPlayerUseItemAtBlock().dispatch(eventResult);
         actionResult.setValue(eventResult.context.actionResult());
     }

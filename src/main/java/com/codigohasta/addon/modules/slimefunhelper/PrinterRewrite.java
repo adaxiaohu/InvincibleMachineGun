@@ -339,10 +339,10 @@ public class PrinterRewrite extends BaseModule {
             }
             FlagRef enableRotateFix = InteractionTasks.getBlockRotate().enable2;
             FlagRef enableLegalLook = InteractionTasks.getBlockRotate().legal;
-            EnumRef<Configs.BypassMode> enableRot = InteractionTasks.getBlockRotate().bypassMode2;
+            EnumRef<Configs.CompatMode> enableRot = InteractionTasks.getBlockRotate().compatMode2;
             boolean state = enableRotateFix.get();
             boolean state2 = enableLegalLook.get();
-            Configs.BypassMode bypassMode = enableRot.get();
+            Configs.CompatMode compatMode = enableRot.get();
             if (!state) {
                 enableRotateFix.set(true);
             }
@@ -350,7 +350,7 @@ public class PrinterRewrite extends BaseModule {
                 // cancel legal look fix because we here handle the look, do not duplicate
                 enableLegalLook.set(true);
             }
-            enableRot.set(Configs.BypassMode.NO_BYPASS);
+            enableRot.set(Configs.CompatMode.NO_COMPAT);
             try {
                 Runnable callback = InvExtra.INSTANCE.swapInventoryIndexToHand(idx);
                 if (callback == null) {
@@ -371,7 +371,7 @@ public class PrinterRewrite extends BaseModule {
                 if (!state2) {
                     enableLegalLook.set(false);
                 }
-                enableRot.set(bypassMode);
+                enableRot.set(compatMode);
             }
         } else {
             putCanNotPlace(pos);

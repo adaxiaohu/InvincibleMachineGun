@@ -140,7 +140,7 @@ public class FireworkElytraFly extends Module {
     );
     public static FireworkElytraFly INSTANCE;
     public FireworkElytraFly() {
-        super(AddonTemplate.CATEGORY, "L鞘翅飞行", "来自leaveshack的烟花鞘翅飞行。历经一个通宵最终能在grim用了。飞的不快，有更好的选择。");
+        super(AddonTemplate.CATEGORY, "L鞘翅飞行", "飞的不快，有更好的选择。");
         INSTANCE = this;
     }
     public float yaw = rotationYaw;
@@ -240,7 +240,7 @@ public class FireworkElytraFly extends Module {
         pitch = getPitch(mc.player.getPitch());
         if (deBug.get()) info("Yaw: " + yaw + " Pitch: " + pitch);
         if (mode.get() == Mode.GrimDurability) {
-            if (GlobalSetting.INSTANCE.moveFix.get()) {
+            if (GlobalSetting.on() && GlobalSetting.INSTANCE.moveFix.get()) {
                 Rotation.snapAt(yaw, pitch);
             } else {
                 mc.getNetworkHandler().sendPacket(new PlayerMoveC2SPacket.Full(mc.player.getX(), mc.player.getY(), mc.player.getZ(), yaw, pitch, mc.player.isOnGround(), mc.player.horizontalCollision));

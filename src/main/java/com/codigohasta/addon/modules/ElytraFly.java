@@ -98,7 +98,7 @@ public class ElytraFly extends Module {
         .name("motion-stop").description("Stop all motion when not pressing keys (Rotation mode).").defaultValue(false)
         .visible(() -> mode.get() == Mode.Rotation).build());
 
-    // === Pitch (Grim Bypass) Settings ===
+    // === Pitch (Grim Compat) Settings ===
     private final Setting<Double> infiniteMaxSpeed = sgPitch.add(new DoubleSetting.Builder()
         .name("infinite-max-speed").description("Max speed for pitch oscillation.").defaultValue(150.0).min(50.0).max(170.0)
         .visible(() -> mode.get() == Mode.Pitch).build());
@@ -158,7 +158,7 @@ public class ElytraFly extends Module {
     private float prePitch;
 
     public ElytraFly() {
-        super(AddonTemplate.CATEGORY, "鞘翅飞行V4", "移植自AlienV4的完整鞘翅飞行，7种模式 + 烟花辅助。grim发包有点问题，效果不好");
+        super(AddonTemplate.CATEGORY, "鞘翅飞行V4", "移植自AlienV4的完整鞘翅飞行，7种模式 + 烟花辅助。发包有点问题，效果不好");
         INSTANCE = this;
     }
 

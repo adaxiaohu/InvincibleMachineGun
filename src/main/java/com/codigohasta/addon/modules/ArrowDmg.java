@@ -39,7 +39,7 @@ public class ArrowDmg extends Module {
     // ================= 基础高伤与环境检测设置 =================
     private final Setting<Double> strength = sgGeneral.add(new DoubleSetting.Builder()
         .name("力量")
-        .description("理论上最大支持10，似乎在paper服可以拉更大")
+        .description("1")
         .defaultValue(10.0)
         .min(0.1)
         .sliderMax(20)
@@ -100,30 +100,30 @@ public class ArrowDmg extends Module {
         .build()
     );
 
-    private final Setting<Boolean> totemBypass = sgTotem.add(new BoolSetting.Builder()
+    private final Setting<Boolean> totemCompat = sgTotem.add(new BoolSetting.Builder()
         .name("破图腾双发扳机")
         .description("释放时自动连射两箭。第一箭取基础力量破图腾，第二箭高伤在无敌帧内秒杀。")
         .defaultValue(false)
         .build()
     );
 
-    private final Setting<Double> bypassStrength = sgTotem.add(new DoubleSetting.Builder()
+    private final Setting<Double> compatStrength = sgTotem.add(new DoubleSetting.Builder()
         .name("第二箭力量")
         .description("第二箭的力量倍数（必须比基础力量高才能产生伤害差）,也就是第一箭力量要低于第二箭力量。")
         .defaultValue(20.0)
         .min(0.1)
         .sliderMax(30.0)
-        .visible(totemBypass::get)
+        .visible(totemCompat::get)
         .build()
     );
 
-    private final Setting<Integer> bypassDelay = sgTotem.add(new IntSetting.Builder()
+    private final Setting<Integer> compatDelay = sgTotem.add(new IntSetting.Builder()
         .name("第二箭延迟")
         .description("第一箭射出后，自动蓄力多少Tick再射第二箭（推荐 4）。")
         .defaultValue(4)
         .min(1)
         .sliderMax(10)
-        .visible(totemBypass::get)
+        .visible(totemCompat::get)
         .build()
     );
 
@@ -200,7 +200,7 @@ public class ArrowDmg extends Module {
     private boolean forcedPressed = false;
     private Entity currentTarget = null; 
     private boolean isSecondShot = false;
-    private int bypassTimer = -1;
+    private int compatTimer = -1;
 
     public ArrowDmg() {
         super(AddonTemplate.CATEGORY, "没敌机关枪", "32k弓，或者叫arrowDMG。使自己射出的弓箭，伤害变高，原理来自wurst。使得在1.21以上得到实现。");
@@ -214,18 +214,18 @@ public class ArrowDmg extends Module {
         }
         currentTarget = null;
         isSecondShot = false;
-        bypassTimer = -1;
+        compatTimer = -1;
     }
 
     @EventHandler
     private void onTick(TickEvent.Pre event) {
         // --- 图腾绕过 ---
-        if (totemBypass.get() && bypassTimer > 0) {
+        if (totemCompat.get() && compatTimer > 0) {
             mc.options.useKey.setPressed(true); // 强行按住右键，极速蓄力第二箭
-            bypassTimer--;
+            compatTimer--;
             
             // 倒计时结束，瞬间松开发射第二箭
-            if (bypassTimer == 0) {
+            if (compatTimer == 0) {
                 if (mc.player.isUsingItem() && isValidItem(mc.player.getActiveItem())) {
                     mc.interactionManager.stopUsingItem(mc.player); 
                 } else {
@@ -358,7 +358,7 @@ public class ArrowDmg extends Module {
         mc.getNetworkHandler().sendPacket(new ClientCommandC2SPacket(mc.player, ClientCommandC2SPacket.Mode.START_SPRINTING));
 
         double x = mc.player.getX(), y = mc.player.getY(), z = mc.player.getZ();
-        double currentStrength = (isSecondShot && totemBypass.get()) ? bypassStrength.get() : strength.get();
+        double currentStrength = (isSecondShot && totemCompat.get()) ? compatStrength.get() : strength.get();
         double adjustedStrength = (currentStrength / 10.0) * Math.sqrt(500.0);
         Vec3d lookVec = mc.player.getRotationVector().multiply(adjustedStrength);
 
@@ -387,11 +387,11 @@ public class ArrowDmg extends Module {
         isShooting = false;
 
         // --- 状态切换逻辑 ---
-        if (totemBypass.get()) {
+        if (totemCompat.get()) {
             if (!isSecondShot) {
                 // 第一箭刚射完，马上标记为第二箭并启动倒计时
                 isSecondShot = true;
-                bypassTimer = bypassDelay.get();
+                compatTimer = compatDelay.get();
             } else {
                 // 第二箭也射完了，恢复为平时的第一箭状态
                 isSecondShot = false;

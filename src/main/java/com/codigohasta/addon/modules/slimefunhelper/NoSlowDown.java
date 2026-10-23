@@ -2,6 +2,7 @@ package com.codigohasta.addon.modules.slimefunhelper;
 
 import java.util.*;
 import com.codigohasta.addon.utils.slimefunhelper.accessors.access.ClientPlayerAccess;
+import com.codigohasta.addon.utils.slimefunhelper.events.impl.MetadataUpdate;
 import com.codigohasta.addon.utils.slimefunhelper.accessors.access.PlayerInteractEntityC2SPacketAccess;
 import com.codigohasta.addon.utils.slimefunhelper.events.Event;
 import com.codigohasta.addon.utils.slimefunhelper.events.Listener;
@@ -102,34 +103,34 @@ public class NoSlowDown extends BaseModule implements LegalMovementManager.Movem
                     noSlowdown.add("fake-sneak-hotkey"), new MultiKeyBind(), noSlowdown.add("fake-sneak"))
             .build();
 
-    public final EnumRef<UseBypassMode> useItemBypass = builder(noSlowdown.add("use-item-bypass"), UseBypassMode.class)
-            .defaultValue(UseBypassMode.NO_BYPASS)
+    public final EnumRef<UseCompatMode> useItemCompat = builder(noSlowdown.add("use-item-compat"), UseCompatMode.class)
+            .defaultValue(UseCompatMode.NO_COMPAT)
             .build();
 
     public final IntRef swapDelay = builder(noSlowdown.add("use-item-swap-item-delay"), Integer.class)
-            .show(() -> useItemBypass.get().isIn(UseBypassMode.BYPASS_GRIM_LAZY, UseBypassMode.BYPASS_GRIM_LAZY_V3))
+            .show(() -> useItemCompat.get().isIn(UseCompatMode.COMPAT_GRIM_LAZY, UseCompatMode.COMPAT_GRIM_LAZY_V3))
             .defaultValue(1)
             .build();
 
     public final FlagRef noSprint = flagBuilder(noSlowdown.add("use-item-swap-no-sprint"))
-            .show(() -> useItemBypass.get().isIn(UseBypassMode.BYPASS_GRIM_LAZY_V3))
+            .show(() -> useItemCompat.get().isIn(UseCompatMode.COMPAT_GRIM_LAZY_V3))
             .build();
 
-    public final EnumRef<NoWebMode> blockInBypass = builder(noSlowdown.add("block-in-bypass"), NoWebMode.class)
-            .defaultValue(NoWebMode.NO_BYPASS)
+    public final EnumRef<NoWebMode> blockInCompat = builder(noSlowdown.add("block-in-compat"), NoWebMode.class)
+            .defaultValue(NoWebMode.NO_COMPAT)
             .build();
 
     public final FlagRef blockInKeepYVelocity = flagBuilder(noSlowdown.add("block-in-keep-y"))
-            .show(() -> blockInBypass.get().isIn(NoWebMode.GRIM_SPEED))
+            .show(() -> blockInCompat.get().isIn(NoWebMode.GRIM_SPEED))
             .build();
 
     public final FlagRef blockInMineWhenJump = flagBuilder(noSlowdown.add("block-in-mine-when-jump"))
-            .show(() -> blockInBypass.get().isIn(NoWebMode.GRIM_SPEED))
+            .show(() -> blockInCompat.get().isIn(NoWebMode.GRIM_SPEED))
             .build();
 
-    public final EnumRef<Configs.BypassMode> fakeSneakBypass = builder(
-                    noSlowdown.add("fake-sneak-mode"), Configs.BypassMode.class)
-            .defaultValue(Configs.BypassMode.NO_BYPASS)
+    public final EnumRef<Configs.CompatMode> fakeSneakCompat = builder(
+                    noSlowdown.add("fake-sneak-mode"), Configs.CompatMode.class)
+            .defaultValue(Configs.CompatMode.NO_COMPAT)
             .build();
 
     public final KeyBindRef fakeStatus = hotkey(fakeSneakStatusPath)
@@ -137,7 +138,7 @@ public class NoSlowDown extends BaseModule implements LegalMovementManager.Movem
             .registerHotkey(HotKeyUtils.wrapAsHandler(this::onSneakStatus))
             .build();
 
-    public final EnumRef<PacketSneakMode> fakeStatusBypass = builder(
+    public final EnumRef<PacketSneakMode> fakeStatusCompat = builder(
                     noSlowdown.add("fake-sneak-status-mode"), PacketSneakMode.class)
             .defaultValue(PacketSneakMode.BAD_PACKET)
             .build();
@@ -162,11 +163,11 @@ public class NoSlowDown extends BaseModule implements LegalMovementManager.Movem
         switch (preset) {
             case HACKING -> {
                 useItem.set(true);
-                useItemBypass.set(UseBypassMode.NO_BYPASS);
+                useItemCompat.set(UseCompatMode.NO_COMPAT);
             }
             case AC_GRIM, AC_GRIM_LEGACY -> {
                 useItem.set(true);
-                useItemBypass.set(UseBypassMode.BYPASS_GRIM_LAZY_V3);
+                useItemCompat.set(UseCompatMode.COMPAT_GRIM_LAZY_V3);
             }
             default -> {
                 useItem.set(false);
@@ -175,11 +176,11 @@ public class NoSlowDown extends BaseModule implements LegalMovementManager.Movem
         switch (preset) {
             case HACKING, VANILLA -> {
                 blockIn.set(true);
-                blockInBypass.set(NoWebMode.NO_BYPASS);
+                blockInCompat.set(NoWebMode.NO_COMPAT);
             }
             case AC_GRIM, AC_GRIM_LEGACY, AC_VULCAN, AC_MATRIX, AC_COMMON -> {
                 blockIn.set(true);
-                blockInBypass.set(NoWebMode.GRIM_SPEED);
+                blockInCompat.set(NoWebMode.GRIM_SPEED);
             }
             default -> {
                 blockIn.set(false);
@@ -196,7 +197,7 @@ public class NoSlowDown extends BaseModule implements LegalMovementManager.Movem
                 return;
             }
             BlockPos pos = slowMovement.getArgs(0);
-            switch (blockInBypass.get()) {
+            switch (blockInCompat.get()) {
                 case GRIM_SPEED -> {
                     if (blockInKeepYVelocity.get()) {
                         slowMovement.context(slowMovement.context().withAxis(Direction.Axis.Y, 1.0F));
@@ -239,7 +240,7 @@ public class NoSlowDown extends BaseModule implements LegalMovementManager.Movem
                         return;
                     }
                 }
-                case NO_BYPASS -> {
+                case NO_COMPAT -> {
                     slowMovement.cancel();
                     return;
                 }
@@ -267,7 +268,7 @@ public class NoSlowDown extends BaseModule implements LegalMovementManager.Movem
             // clone.sneak(lastInput.sneak()).sendPlayerSneakUpdatePacket();
             Debug.chat("[NoSlow] 取消当前伪造潜行状态");
         } else {
-            PacketSneakMode mode = fakeStatusBypass.get();
+            PacketSneakMode mode = fakeStatusCompat.get();
             if (mc.player.isSneaking()) {
                 var re = PlayerInputUtils.of(mc.player).sneak(false);
                 re.sendPlayerSneakUpdatePacket();
@@ -292,10 +293,10 @@ public class NoSlowDown extends BaseModule implements LegalMovementManager.Movem
                 }
                 case BAD_PACKET, INTERACT -> {
                     Entity entity;
-                    boolean canBypass;
+                    boolean canCompat;
                     if (mc.crosshairTarget instanceof EntityHitResult entityHitResult) {
                         entity = entityHitResult.getEntity();
-                        canBypass = true;
+                        canCompat = true;
                     } else {
 
                         List<Entity> entities = new ArrayList<>();
@@ -307,13 +308,13 @@ public class NoSlowDown extends BaseModule implements LegalMovementManager.Movem
                         entities.sort(Comparator.comparingDouble(s -> s.squaredDistanceTo(mc.player)));
                         if (!entities.isEmpty()) {
                             entity = entities.get(0);
-                            canBypass = false;
+                            canCompat = false;
                         } else {
                             entity = null;
-                            canBypass = false;
+                            canCompat = false;
                         }
                     }
-                    if (canBypass || mode == PacketSneakMode.BAD_PACKET) {
+                    if (canCompat || mode == PacketSneakMode.BAD_PACKET) {
                         int id = entity == null ? mc.player.getId() - 1 : entity.getId();
                         PlayerInputUtils.Input input = PlayerInputUtils.of(mc.player);
                         // to trigger plugin events
@@ -404,7 +405,7 @@ public class NoSlowDown extends BaseModule implements LegalMovementManager.Movem
 
     public boolean shouldNoSlowSneak() {
         return sneak.get()
-                && (!lastPredictWasSneakEdge || !fakeSneakBypass.get().hasAc());
+                && (!lastPredictWasSneakEdge || !fakeSneakCompat.get().hasAc());
     }
 
     public boolean shouldFakeSneakStatus() {
@@ -437,12 +438,12 @@ public class NoSlowDown extends BaseModule implements LegalMovementManager.Movem
         }
     }
 
-    public void onServerSyncSneak(Event<DataTracker.SerializedEntry<?>> event) {
+    public void onServerSyncSneak(Event<MetadataUpdate> event) {
         if (event.isCancelled()) {
             return;
         }
-        if (sneakStatus && event.getArgs(0) instanceof ClientPlayerEntity player && player == mc.player) {
-            var val = event.context();
+        if (sneakStatus && event.context().entity() instanceof ClientPlayerEntity player && player == mc.player) {
+            var val = event.context().metadata();
             if (val.id() == VDataFlag.ID_FLAGS) {
                 byte data = (byte) val.value();
                 boolean sneakFlag = (data & (1 << VDataFlag.SNEAKING_FLAG_INDEX)) != 0;
@@ -484,7 +485,7 @@ public class NoSlowDown extends BaseModule implements LegalMovementManager.Movem
         // may use MultiActionsC to resync inventory, wierd
         // MovTasks.getMovExtra().sendInputPacketsForInventoryAction();
         // save current server sprinting status
-        // use MultiActionsC to create ghost inventory and bypass useItem NoSlow
+        // use MultiActionsC to create ghost inventory and compat useItem NoSlow
         // pre, send sprint
         if (v3) {
             PlayerStateManager.INSTANCE.sendSprintStatus(true);
@@ -626,9 +627,9 @@ public class NoSlowDown extends BaseModule implements LegalMovementManager.Movem
     public boolean noSlowUseItemGrim() {
         if (mc.player.isUsingItem() && useItem.get()) {
 
-            return switch (useItemBypass.get()) {
-                case NO_BYPASS, BYPASS_GRIM_50 -> false;
-                case BYPASS_GRIM_LAZY -> {
+            return switch (useItemCompat.get()) {
+                case NO_COMPAT, COMPAT_GRIM_50 -> false;
+                case COMPAT_GRIM_LAZY -> {
                     if (preAttackUseTick) {
                         yield true;
                     }
@@ -656,7 +657,7 @@ public class NoSlowDown extends BaseModule implements LegalMovementManager.Movem
                         yield false;
                     }
                 }
-                case BYPASS_GRIM_LAZY_V3 -> {
+                case COMPAT_GRIM_LAZY_V3 -> {
                     if (!mc.player.hasVehicle()
                             && PlayerInputUtils.of(mc.player).hasWASDMovement()
                             && getActiveItemSpeedMultiplier() < 0.99F) {
@@ -677,10 +678,11 @@ public class NoSlowDown extends BaseModule implements LegalMovementManager.Movem
 
     boolean grimSlowedByItemFlag = false;
 
-    public void onEntityDataUpdate(Event<DataTracker.SerializedEntry<?>> eventEntityDataUpdate) {
-        if (useItem.get() && eventEntityDataUpdate.getArgs(0) == mc.player) {
-            if (eventEntityDataUpdate.context.id() == VDataFlag.ID_LIVING_FLAGS
-                    && eventEntityDataUpdate.context.value() instanceof Number number) {
+    public void onEntityDataUpdate(Event<MetadataUpdate> event) {
+        var eventEntityDataUpdate = event.context();
+        if (useItem.get() && eventEntityDataUpdate.entity() == mc.player) {
+            if (eventEntityDataUpdate.metadata().id() == VDataFlag.ID_LIVING_FLAGS
+                    && eventEntityDataUpdate.metadata().value() instanceof Number number) {
                 byte flagByte = number.byteValue();
                 boolean bl = (flagByte & (1 << VDataFlag.USING_ITEM_FLAG_INDEX)) > 0;
                 if (bl) {
@@ -741,7 +743,7 @@ public class NoSlowDown extends BaseModule implements LegalMovementManager.Movem
         }
         workNoSlowItemThisTick = false;
         if (useItem.get() && mc.player.isUsingItem()) {
-            if (useItemBypass.get() == UseBypassMode.BYPASS_GRIM_50) {
+            if (useItemCompat.get() == UseCompatMode.COMPAT_GRIM_50) {
                 PlayerInputUtils.Input input = PlayerInputUtils.of(args);
                 if (input.hasWASDMovement()) {
                     if (grimFlagNoSlowOnce) {
@@ -810,7 +812,7 @@ public class NoSlowDown extends BaseModule implements LegalMovementManager.Movem
             }
         }
         if (useItem.get()
-                && useItemBypass.get().isIn(UseBypassMode.BYPASS_GRIM_LAZY_V3)
+                && useItemCompat.get().isIn(UseCompatMode.COMPAT_GRIM_LAZY_V3)
                 && noSprint.get()
                 && grimSlowedByItemFlag) {
             if (!mc.player.hasVehicle()
@@ -875,32 +877,32 @@ public class NoSlowDown extends BaseModule implements LegalMovementManager.Movem
 
         @Override
         public String getConfigEnumType() {
-            return "packet_sneak_bypass_mode";
+            return "packet_sneak_compat_mode";
         }
     }
 
-    public static enum UseBypassMode implements ConfigEnum {
-        NO_BYPASS,
+    public static enum UseCompatMode implements ConfigEnum {
+        NO_COMPAT,
         // fixed in 2026.0701 grim commit
-        BYPASS_GRIM_LAZY,
+        COMPAT_GRIM_LAZY,
         // fixed in 2026.0701 grim commit
-        BYPASS_GRIM_LAZY_V3,
-        BYPASS_GRIM_50;
+        COMPAT_GRIM_LAZY_V3,
+        COMPAT_GRIM_50;
 
         @Override
         public String getConfigEnumType() {
-            return "use_item_noslow_bypass";
+            return "use_item_noslow_compat";
         }
     }
 
     public static enum NoWebMode implements ConfigEnum {
-        NO_BYPASS,
+        NO_COMPAT,
         GRIM_SPEED,
         GRIM_FAKE_MINE;
 
         @Override
         public String getConfigEnumType() {
-            return "no_web_slow_bypass";
+            return "no_web_slow_compat";
         }
     }
 }

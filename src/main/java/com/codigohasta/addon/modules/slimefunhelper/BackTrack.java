@@ -170,7 +170,7 @@ public class BackTrack extends BaseModule {
     public void onQueuePlayerPosition(Event<PacketStorage> event) {
         if (enable.get() && currentTarget != null) {
             var storage = event.context;
-            if (storage instanceof PacketManager.PacketStorageImpl impl) {
+            if (storage instanceof com.codigohasta.addon.utils.slimefunhelper.events.packets.PacketStorageImpl impl) {
                 var packet = impl.packet();
                 if (PacketManager.isAsyncOrNotTransactionS2CPacket(packet)) return;
                 if (packet instanceof EntityPositionSyncS2CPacket positionSync

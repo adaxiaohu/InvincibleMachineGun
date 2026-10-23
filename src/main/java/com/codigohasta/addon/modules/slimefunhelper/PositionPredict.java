@@ -113,7 +113,7 @@ public class PositionPredict extends BaseModule {
                     .predict(floor + 1, mode.ordinal(), ticksHistory);
             return floorPos.multiply(floor + 1 - ticksLater).add(roofPos.multiply(ticksLater - floor));
         }
-        public Vec3d predictWithExtraTicks(Entity entity,int ticks){return predict0(entity,ticksLater+ticks);}
+        public Vec3d predictWithExtraTicks(Entity entity,double ticks){return predict0(entity,ticksLater+ticks);}
     }
     public enum Mode implements ConfigEnum {NO_PREDICT,LINEAR,QUADRATIC,PREDICTOR_NV,PREDICTOR_ROTATION,PREDICTOR_ACCELERATE;public String getConfigEnumType(){return "predict_mode";}}
 public final FlagRef enableNoShield=flagBuilder(new ModulePath("position-predict.exact-tp-anti-shield")).build();

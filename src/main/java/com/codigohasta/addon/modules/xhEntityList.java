@@ -8,6 +8,7 @@ import meteordevelopment.meteorclient.renderer.text.TextRenderer;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.misc.Names;
+import meteordevelopment.meteorclient.utils.render.RenderUtils;
 import meteordevelopment.meteorclient.utils.render.color.Color;
 import meteordevelopment.meteorclient.utils.render.color.SettingColor;
 import meteordevelopment.orbit.EventHandler;
@@ -203,6 +204,16 @@ public class xhEntityList extends Module {
         .build()
     );
 
+    private final Setting<Boolean> showItemIcons = ui.add(new BoolSetting.Builder()
+        .name("物品图标")
+        .description("在每行显示该物品的图标与数量。图标排在列表靠屏幕内侧的一边。")
+        .defaultValue(false)
+        .build()
+    );
+
+    /** 图标与文字之间的间距（与文字同一套坐标）。 */
+    private static final double ICON_GAP = 2.0;
+
     private final Set<Integer> loggedEntities = new HashSet<>();
 
     public xhEntityList() {
@@ -309,35 +320,82 @@ public class xhEntityList extends Module {
         double scaleVal = scale.get();
         double scaledLineHeight = lineHeight.get() * scaleVal;
 
-        currentY = drawItems(mapItems1, currentY, items1Color.get(), screenWidth, scaleVal, scaledLineHeight);
-        currentY = drawItems(mapItems2, currentY, items2Color.get(), screenWidth, scaleVal, scaledLineHeight);
-        currentY = drawItems(mapItemsOther, currentY, defaultItemColor.get(), screenWidth, scaleVal, scaledLineHeight);
+        currentY = drawItems(event, mapItems1, currentY, items1Color.get(), screenWidth, scaleVal, scaledLineHeight);
+        currentY = drawItems(event, mapItems2, currentY, items2Color.get(), screenWidth, scaleVal, scaledLineHeight);
+        currentY = drawItems(event, mapItemsOther, currentY, defaultItemColor.get(), screenWidth, scaleVal, scaledLineHeight);
         
         currentY = drawPlayers(listPlayers, currentY, playerColor.get(), screenWidth, scaleVal, scaledLineHeight);
         drawEntities(mapEntities, currentY, entityColor.get(), screenWidth, scaleVal, scaledLineHeight);
     }
 
-    private double drawItems(Map<Item, ItemStat> map, double y, Color color, int width, double scale, double scaledLineHeight) {
+    private double drawItems(Render2DEvent event, Map<Item, ItemStat> map, double y, Color color, int width, double scale, double scaledLineHeight) {
         if (map.isEmpty()) return y;
+
+        boolean icons = showItemIcons.get();
+        boolean right = displaySide.get() == DisplaySide.Right;
+        // 图标大小跟着「行高」设置走
+        double iconSize = scaledLineHeight;
+        // disableGuiScale=true 时 drawItem 收的是帧缓冲像素，与文字同一套坐标；
+        // 该空间里物品方块占 16 个单位，所以缩放 = 目标大小 / 16。
+        float iconScale = (float) (iconSize / 16.0);
 
         TextRenderer renderer = TextRenderer.get();
         renderer.begin(scale);
 
+        // 先把每行文字量出来：图标要排成整齐的一列、贴着列表的外缘，
+        // 而不是跟着每行文字宽度参差不齐。
+        double[] widths = new double[map.size()];
+        double maxWidth = 0.0;
+        int index = 0;
         for (ItemStat stat : map.values()) {
-            String name = Names.get(stat.item);
-            String text;
-            if (showDistance.get()) {
-                text = String.format("%s x%d (%.1fm)", name, stat.count, stat.minDistance);
-            } else {
-                text = String.format("%s x%d", name, stat.count);
+            widths[index] = renderer.getWidth(lineText(stat)) * scale;
+            maxWidth = Math.max(maxWidth, widths[index]);
+            index++;
+        }
+
+        // 列表外缘：右对齐时是右边缘，左对齐时是左边缘（与改动前的文字位置一致）
+        double edge = right ? width - xOffset.get() : xOffset.get();
+        // 图标列贴在列表的屏幕内侧那一边：右对齐在左，左对齐在右
+        double iconX = right
+            ? edge - maxWidth - ICON_GAP - iconSize
+            : edge + maxWidth + ICON_GAP;
+
+        index = 0;
+        for (ItemStat stat : map.values()) {
+            String text = lineText(stat);
+            double textWidth = widths[index++];
+            double textX = right ? edge - textWidth : edge;
+
+            if (icons) {
+                // 不用原版角标：drawStackOverlay 是在 drawItem 的 scale 变换内部绘制的，
+                // 数字会跟着图标一起缩小。图标只有行高那么大时，数字就小到看不清了。
+                RenderUtils.drawItem(event.drawContext, stat.item.getDefaultStack(),
+                    (int) iconX, (int) y, iconScale, false, null, true);
+
+                // 数量改用与文字同一个 renderer、同一字号，画在图标背向文字的一侧，
+                // 既不遮图标，也不会像原版角标那样被缩小。
+                String count = String.valueOf(stat.count);
+                double countWidth = renderer.getWidth(count) * scale;
+                double countX = right
+                    ? iconX - ICON_GAP - countWidth
+                    : iconX + iconSize + ICON_GAP;
+                renderer.render(count, countX, y, color, true);
             }
-            
-            drawTextInternal(renderer, text, y, color, width, scale);
+
+            renderer.render(text, textX, y, color, true);
             y += scaledLineHeight;
         }
-        
+
         renderer.end();
         return y;
+    }
+
+    /** 一行物品文字：名称 x数量 (距离)。 */
+    private String lineText(ItemStat stat) {
+        String name = Names.get(stat.item);
+        return showDistance.get()
+            ? String.format("%s x%d (%.1fm)", name, stat.count, stat.minDistance)
+            : String.format("%s x%d", name, stat.count);
     }
 
     private double drawPlayers(List<PlayerStat> players, double y, Color color, int width, double scale, double scaledLineHeight) {

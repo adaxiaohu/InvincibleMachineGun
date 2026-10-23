@@ -7,7 +7,7 @@ public final class Configs {
     public static final String MOV_CONFIG="movement", COMBAT_CONFIG="combat", INV_CONFIG="inventory";
     public static final Predicate<Integer> INT_POSITIVE=v->v>0, INT_NONNEGATIVE=v->v>=0;
     public static Predicate<Double> doubleRange(double min,double max){return v->v>=min&&v<=max;}
-    public enum BypassMode implements ConfigEnum {NO_BYPASS,BYPASS_GRIM,BYPASS_VULCAN,BYPASS_MATRIX; public boolean hasAc(){return this!=NO_BYPASS;} public String getConfigEnumType(){return "bypass";}}
+    public enum CompatMode implements ConfigEnum {NO_COMPAT,COMPAT_GRIM,COMPAT_VULCAN,COMPAT_MATRIX; public boolean hasAc(){return this!=NO_COMPAT;} public String getConfigEnumType(){return "compat";}}
     public enum SetBackTriggerType implements ConfigEnum {SIMULATION,CRASH_PACKETS; public String getConfigEnumType(){return "setback";}}
 
     public enum LegalTargetingMode implements ConfigEnum {

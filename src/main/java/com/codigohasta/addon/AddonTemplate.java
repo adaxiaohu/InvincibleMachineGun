@@ -1,6 +1,7 @@
 package com.codigohasta.addon;
 
 import com.codigohasta.addon.commands.CommandExample;
+import com.codigohasta.addon.commands.ImgNotifyCommand;
 import com.codigohasta.addon.hud.HudExample;
 import com.codigohasta.addon.hud.TargetHud;
 // 导入所有模块
@@ -39,6 +40,19 @@ public class AddonTemplate extends MeteorAddon {
 
     public static final Category CATEGORY = new Category("IMG");
     public static final Category SF_CATEGORY = new Category("sfIMG");
+    /**
+     * HUD 模块专用分类。
+     *
+     * <p>本项目里「HUD」分两种，别混淆：
+     * <ul>
+     *     <li>{@link #HUD_GROUP} —— Meteor 原生 {@code HudElement} 的分组
+     *         （如 {@code HudExample}、{@code TargetHud}），由 {@code Hud.get().register(...)} 注册</li>
+     *     <li>{@link #IMG_HUD_CATEGORY} —— <b>本分类</b>，放继承 {@code Module} 的 HUD 类模块
+     *         （如 {@code SakuraTargetHud}），由 {@code Modules.add(...)} 注册</li>
+     * </ul>
+     * 以后新增的 HUD 模块统一放这里，便于查找。
+     */
+    public static final Category IMG_HUD_CATEGORY = new Category("IMG-hud");
     public static final HudGroup HUD_GROUP = new HudGroup("IMG");
 
     @Override
@@ -102,7 +116,7 @@ public class AddonTemplate extends MeteorAddon {
         modules.add(new SwordGap());
         modules.add(new TargetStrafe());
         modules.add(new TntBomber());
-        modules.add(new TpAnchor());
+        // modules.add(new TpAnchor());
         modules.add(new TpAura());
         // modules.add(new VelocityAlien());
         modules.add(new xhEntityList());
@@ -144,9 +158,9 @@ public class AddonTemplate extends MeteorAddon {
          modules.add(new AutoDoubleHand());
          modules.add(new CrystalMacro());
          modules.add(new AutoInvTotem());
-        // modules.add(new SonarBypass());
          modules.add(new KillFX());
-        // modules.add(new AlienSprint());
+        modules.add(new AlienSprint());
+        modules.add(new RoundRotation());
          modules.add(new CameraClip());
          modules.add(new MotionCamera());
          modules.add(new Panic());
@@ -188,9 +202,42 @@ public class AddonTemplate extends MeteorAddon {
          modules.add(new FurnaceUnclogger());
          modules.add(new EnglishUITranslation());
 
-         // BreakESP module - 挖掘显示 (必须放在AlienBreakManager初始化之前)
+         modules.add(new SakuraTargetHud());
+         modules.add(new ImgWatermarkHud());
+         modules.add(new PlayerListHud());
+         modules.add(new FpsHud());
+         modules.add(new PingHud());
+         modules.add(new CoordHud());
+         modules.add(new ArmorHud());
+         modules.add(new InventoryHud());
+         modules.add(new CooldownsHud());
+         modules.add(new PotionsHud());
+         modules.add(new ChestCounterHud());
+        modules.add(new NotificationsWidget());
+        modules.add(new TpsHud());
+        modules.add(new SpeedHud());
+        modules.add(new Notifier());
+        modules.add(new PvpResourcesHud());
+        modules.add(new FlightHud());
+        modules.add(new KeybindsHud());
+        modules.add(new CrosshairHud());
+
+        modules.add(new StandGui());
+
          modules.add(new BreakESP());
          new AlienBreakManager();
+         modules.add(new TpAnchorAura());
+         modules.add(new GAntiLag());
+         modules.add(new GLightTpAnchorAura());
+         modules.add(new GcoreGTrap());
+         modules.add(new GcoreWebAura());
+         modules.add(new GcoreTpCrystalAura());
+         modules.add(new GAntiExplosion());
+         modules.add(new GSuperVClip());
+         modules.add(new GTpbot());
+         modules.add(new GTpaura());
+         modules.add(new TPServerEquivalent());
+         modules.add(new GcoreTpDiagnostic());
 
         // English UI is enabled by default for every Minecraft language except
         // Simplified Chinese (zh_cn) and Traditional Chinese (zh_tw).
@@ -200,6 +247,7 @@ public class AddonTemplate extends MeteorAddon {
 
         // Commands
         Commands.add(new CommandExample());
+        Commands.add(new ImgNotifyCommand());
 
         // HUD
         Hud.get().register(HudExample.INFO);
@@ -207,12 +255,21 @@ public class AddonTemplate extends MeteorAddon {
 
         // 注册事件总线以接收 GameJoinEvent
         MeteorClient.EVENT_BUS.subscribe(this);
+        // 移动包预算计数器（2026-10-11）
+        MeteorClient.EVENT_BUS.subscribe(com.codigohasta.addon.utils.gcore.GcoreMoveBudget.INSTANCE);
+
+        //  IMG 目标位置预判2026-10-13
+        MeteorClient.EVENT_BUS.subscribe(com.codigohasta.addon.utils.img.ImgPositionPredict.INSTANCE);
+
+        //  每帧推进 Sakura 2D 层的帧号性能修复2026-10-07
+        MeteorClient.EVENT_BUS.subscribe(new com.codigohasta.addon.utils.sakura.render.SakuraFrameTicker());
     }
 
     @Override
     public void onRegisterCategories() {
         Modules.registerCategory(CATEGORY);
         Modules.registerCategory(SF_CATEGORY);
+        Modules.registerCategory(IMG_HUD_CATEGORY);
     }
 
     @Override

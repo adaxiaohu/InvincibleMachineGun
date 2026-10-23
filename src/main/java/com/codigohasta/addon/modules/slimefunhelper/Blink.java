@@ -5,6 +5,7 @@ import java.awt.*;
 import java.util.List;
 import java.util.OptionalInt;
 import com.codigohasta.addon.utils.slimefunhelper.accessors.access.ClientPlayerAccess;
+import com.codigohasta.addon.utils.slimefunhelper.events.impl.MetadataUpdate;
 import com.codigohasta.addon.utils.slimefunhelper.events.Event;
 import com.codigohasta.addon.utils.slimefunhelper.events.Listener;
 import com.codigohasta.addon.utils.slimefunhelper.events.PacketManager;
@@ -300,14 +301,14 @@ public class Blink extends BaseModule {
         }
     }
 
-    public void onFireworkOwner(Event<DataTracker.SerializedEntry<?>> firework) {
+    public void onFireworkOwner(Event<MetadataUpdate> firework) {
         if (enable.get()
                 && elytraSupport.get()
-                && firework.context().id() == VDataFlag.ID_FIREWORK_SHOOTER_ID
-                && firework.getArgs(0) instanceof FireworkRocketEntity fireworkEntity
+                && firework.context().metadata().id() == VDataFlag.ID_FIREWORK_SHOOTER_ID
+                && firework.context().entity() instanceof FireworkRocketEntity fireworkEntity
                 && mc.player != null
                 && mc.player.isGliding()
-                && firework.context().value() instanceof OptionalInt opint
+                && firework.context().metadata().value() instanceof OptionalInt opint
                 && opint.isPresent()
                 && opint.getAsInt() == mc.player.getId()) {
             flush();

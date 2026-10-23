@@ -33,6 +33,8 @@ public abstract class ClientPlayerMixin extends AbstractClientPlayerEntity imple
     @Unique private boolean sf$resyncInput;
     protected ClientPlayerMixin(ClientWorld world,GameProfile profile){super(world,profile);}
     public void resyncPos(){ticksSinceLastPositionPacketSent=100;}
+    /** Ported from upstream 1.1.7.2 ClientPlayerEntityEvents.setResyncMovementPacketTicks. */
+    public void setResyncMovementPacketTicks(int ticks){ticksSinceLastPositionPacketSent=ticks;}
     public void resyncRot(){lastYawClient=getYaw()+1;lastPitchClient=getPitch()+1;}
     public void resyncInput(){sf$resyncInput=true;}
     public void resyncOnGround(){lastOnGround=!isOnGround();}

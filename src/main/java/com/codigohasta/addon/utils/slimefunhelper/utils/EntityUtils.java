@@ -177,8 +177,8 @@ private static final net.minecraft.client.MinecraftClient mc=net.minecraft.clien
         return oldYaw + diff;
     }
     public static double getEffectiveGravity(ClientPlayerEntity player) {
-        boolean bl = player.getVelocity().y <= 0.0;
-        return bl && player.hasStatusEffect(StatusEffects.SLOW_FALLING)
+        boolean bl = PlayerStateManager.INSTANCE.lastKnownClientVelocity.y <= 0.0;
+        return (bl && player.hasStatusEffect(StatusEffects.SLOW_FALLING))
                 ? Math.min(player.getFinalGravity(), 0.01)
                 : player.getFinalGravity();
     }

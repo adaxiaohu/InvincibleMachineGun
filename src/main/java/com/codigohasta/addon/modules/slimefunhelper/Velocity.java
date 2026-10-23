@@ -52,7 +52,7 @@ public class Velocity extends BaseModule implements LegalMovementManager.Movemen
             builder(antiKb.add("mode"), Mode.class).defaultValue(Mode.NONE).build();
 
     public final FlagRef explosions =
-            flagBuilder(antiKb.add("bypass-explosions")).build();
+            flagBuilder(antiKb.add("compat-explosions")).build();
 
     public final FlagRef freezeIfWalk = flagBuilder(antiKb.add("grim-freeze-if-walk"))
             .show(() -> mode.get().isIn(Mode.GRIM_LEGACY_GROUND))
@@ -363,7 +363,7 @@ public class Velocity extends BaseModule implements LegalMovementManager.Movemen
         }
     }
     //    public void onPlayerSetBackPacket(Event<PlayerPositionLookS2CPacket> event){
-    //        if(mode.get() == Configs.BypassMode.BYPASS_GRIM){
+    //        if(mode.get() == Configs.CompatMode.COMPAT_GRIM){
     //            skipCount = 3;
     //        }
     //    }
@@ -433,7 +433,7 @@ public class Velocity extends BaseModule implements LegalMovementManager.Movemen
 
         @Override
         public String getConfigEnumType() {
-            return "velocity_bypass_mode";
+            return "velocity_compat_mode";
         }
     }
 

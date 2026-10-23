@@ -11,7 +11,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Pseudo
 @Mixin(targets = "com.nippaku_zanmu.trans_addon.modules.Translation", remap = false)
 public abstract class SfExternalTranslationMixin {
-    @Inject(method = "tran(Lcom/nippaku_zanmu/trans_addon/util/trans_engine/AbstractTransEngine;)V", at = @At("TAIL"))
+    @Inject(method = "tran(Lcom/nippaku_zanmu/trans_addon/util/trans_engine/AbstractTransEngine;)V", at = @At("TAIL"), require = 0)
     private void sfimg$restoreOwnedTranslations(CallbackInfo ci) {
         SfTranslations.refreshFromModule();
     }

@@ -44,17 +44,17 @@ public class Sprint extends BaseModule implements LegalMovementManager.MovementM
     // todo: attack entity cause fake sprint, keep the state, do not send any other packets, try later
     public final FlagRef fakeSprint = flagBuilder(sprint.add("fake-sprint")).build();
 
-    public final EnumRef<Configs.BypassMode> fakeSprintMode = builder(
-                    sprint.add("fake-sprint-mode"), Configs.BypassMode.class)
-            .defaultValue(Configs.BypassMode.NO_BYPASS)
+    public final EnumRef<Configs.CompatMode> fakeSprintMode = builder(
+                    sprint.add("fake-sprint-mode"), Configs.CompatMode.class)
+            .defaultValue(Configs.CompatMode.NO_COMPAT)
             .build();
 
     public final FlagRef directionalSprint =
             flagBuilder(sprint.add("all-direction-sprint")).build();
 
-    public final EnumRef<Configs.BypassMode> directionalSprintMode = builder(
-                    sprint.add("bypass-mode"), Configs.BypassMode.class)
-            .defaultValue(Configs.BypassMode.NO_BYPASS)
+    public final EnumRef<Configs.CompatMode> directionalSprintMode = builder(
+                    sprint.add("compat-mode"), Configs.CompatMode.class)
+            .defaultValue(Configs.CompatMode.NO_COMPAT)
             .build();
 
     @Override
@@ -141,7 +141,7 @@ public class Sprint extends BaseModule implements LegalMovementManager.MovementM
             }
             input.applyInput(player);
         }
-        if (directionalSprint.get() && directionalSprintMode.getValue() == Configs.BypassMode.NO_BYPASS) {
+        if (directionalSprint.get() && directionalSprintMode.getValue() == Configs.CompatMode.NO_COMPAT) {
             PlayerInputUtils.Input input = PlayerInputUtils.of(player);
             if (mayWorkSprint() && input.backward() && !input.forward()) {
                 // there is no rotation here
@@ -159,14 +159,14 @@ public class Sprint extends BaseModule implements LegalMovementManager.MovementM
         //                && (player.input.playerInput.backward() && !player.input.playerInput.forward())
         //                && player.isSprinting()) {
         //            PlayerInputUtils.Input input = PlayerInputUtils.of(player);
-        //            if (directionalSprintMode.getValue() == Configs.BypassMode.BYPASS_GRIM) {
+        //            if (directionalSprintMode.getValue() == Configs.CompatMode.COMPAT_GRIM) {
         //                // do not use mixin, modify the input
         //                // enableSprintDirectionalThisTick = false;
         //                workRotationThisTick = true;
         //                //                            float yaw = EntityUtils.rotationToYaw(walkingWay);
         //                //                        Debug.info(walkingWay);
         //                //                        Debug.info(yaw);
-        //                // turn around to bypass ,movingAround
+        //                // turn around to compat ,movingAround
         //
         //                PlayerStateManager.setPlayerYawSafe(player, player.getYaw() + 180);
         //                // rotate the input
@@ -229,18 +229,18 @@ public class Sprint extends BaseModule implements LegalMovementManager.MovementM
         ModulePreset preset = event.context().getValue();
         switch (preset) {
             case HACKING, VANILLA -> {
-                directionalSprintMode.set(Configs.BypassMode.NO_BYPASS);
+                directionalSprintMode.set(Configs.CompatMode.NO_COMPAT);
             }
             default -> {
-                directionalSprintMode.set(Configs.BypassMode.BYPASS_GRIM);
+                directionalSprintMode.set(Configs.CompatMode.COMPAT_GRIM);
             }
         }
         switch (preset) {
             case AC_GRIM, AC_GRIM_LEGACY -> {
-                fakeSprintMode.set(Configs.BypassMode.BYPASS_GRIM);
+                fakeSprintMode.set(Configs.CompatMode.COMPAT_GRIM);
             }
             default -> {
-                fakeSprintMode.set(Configs.BypassMode.NO_BYPASS);
+                fakeSprintMode.set(Configs.CompatMode.NO_COMPAT);
             }
         }
     }

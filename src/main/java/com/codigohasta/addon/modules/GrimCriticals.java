@@ -28,7 +28,7 @@ public class GrimCriticals extends Module {
     
     public enum Mode {
         Packet,
-        Bypass,
+        Compat,
         Grim,
         Strict,
         GrimV3
@@ -226,7 +226,7 @@ public class GrimCriticals extends Module {
                 break;
             }
             
-            case Bypass: {
+            case Compat: {
                 sendPosition(x, y + 0.11, z, false);
                 sendPosition(x, y + 0.1100013579, z, false);
                 sendPosition(x, y + 0.0000013579, z, false);

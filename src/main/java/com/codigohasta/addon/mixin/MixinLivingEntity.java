@@ -33,7 +33,7 @@ public class MixinLivingEntity {
 
     @WrapOperation(method = "jump", at = @At(value = "INVOKE", target = "Lnet/minecraft/entity/LivingEntity;getYaw()F"))
     private float wrapGetYaw(LivingEntity instance, Operation<Float> original) {
-        if (GlobalSetting.INSTANCE.moveFix.get()) {
+        if (GlobalSetting.on() && GlobalSetting.INSTANCE.moveFix.get()) {
             if (Rotation.rotation) {
                 return Rotation.targetYaw;
             }

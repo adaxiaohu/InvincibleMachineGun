@@ -5,6 +5,7 @@ import java.util.OptionalInt;
 import com.codigohasta.addon.utils.slimefunhelper.AutomaticInventoryActions;
 import com.codigohasta.addon.utils.slimefunhelper.accessors.access.ClientPlayerAccess;
 import com.codigohasta.addon.utils.slimefunhelper.accessors.access.HandledScreenAccess;
+import com.google.common.util.concurrent.Runnables;
 import com.codigohasta.addon.utils.slimefunhelper.accessors.hacks.PlayerInteractionAccess;
 import com.codigohasta.addon.utils.slimefunhelper.events.Event;
 import com.codigohasta.addon.utils.slimefunhelper.events.Listener;
@@ -161,7 +162,37 @@ public class InvExtra extends BaseModule {
                 }
             }
         }
-        return () -> {};
+        return Runnables.doNothing();
+    }
+
+    /** Ported from upstream 1.1.7.2 InvExtra.swapItemToHand. */
+    public Runnable swapItemToHand(int hand, boolean offhand,
+            com.codigohasta.addon.utils.slimefunhelper.hacks.utils.enums.GhostHandMode mode) {
+        if (offhand) {
+            return swapInventoryIndexToOffhand(hand);
+        }
+        if (hand == 40) {
+            return swapInventoryIndexToHand(40);
+        }
+        return switch (mode) {
+            case INV_SWAP, INV_CLICK -> swapInventoryIndexToHand(hand);
+            case HOT_BAR_ONLY -> swapInventoryHotBar(hand);
+        };
+    }
+
+    /** Ported from upstream 1.1.7.2 InvExtra.swapInventoryHotBar. */
+    private Runnable swapInventoryHotBar(int hand) {
+        if (hand < 0 || hand >= 9) return null;
+        int selected = InventoryUtils.getSelectedSlot();
+        if (selected == hand) {
+            return Runnables.doNothing();
+        }
+        PlayerInteractionAccess.of(mc.interactionManager).syncSelectedHotbar(hand);
+        syncAttr();
+        return () -> {
+            PlayerInteractionAccess.of(mc.interactionManager).syncSelectedHotbar(selected);
+            syncAttr();
+        };
     }
 
     public Runnable swapInventoryIndexToHand(int hand) {
@@ -199,11 +230,11 @@ public class InvExtra extends BaseModule {
             }
             // }
         }
-        return () -> {};
+        return Runnables.doNothing();
     }
 
     public Runnable swapInventoryIndexToOffhand(int hand) {
-        if (hand == 40) return () -> {};
+        if (hand == 40) return Runnables.doNothing();
         OptionalInt slotIndex = mc.player.currentScreenHandler.getSlotIndex(mc.player.getInventory(), hand);
         if (slotIndex.isPresent()) {
             int swapped = slotIndex.getAsInt();
@@ -263,7 +294,7 @@ public class InvExtra extends BaseModule {
     }
 
     public Runnable swapScreenSlots(int armorSlot, int targetSlot) {
-        if (armorSlot == targetSlot) return () -> {};
+        if (armorSlot == targetSlot) return Runnables.doNothing();
         var handler = ClientPlayerAccess.of(mc.player).getServerScreenHandler();
         var slots = handler.slots;
         if (slots.size() <= armorSlot || slots.size() <= targetSlot) {

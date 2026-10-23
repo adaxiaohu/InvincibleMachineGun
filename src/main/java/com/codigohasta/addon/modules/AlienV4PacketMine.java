@@ -95,7 +95,7 @@ public class AlienV4PacketMine extends Module {
         .name("Timing").description("Tick timing").defaultValue(TimingMode.All)
         .visible(() -> page.get() == Page.General).build());
     private final Setting<Boolean> grimDisabler = sgGeneral.add(new BoolSetting.Builder()
-        .name("GrimDisabler").description("Grim anticheat bypass").defaultValue(false)
+        .name("GrimDisabler").description("Grim 环境兼容").defaultValue(false)
         .visible(() -> page.get() == Page.General).build());
     private final Setting<Boolean> instant = sgGeneral.add(new BoolSetting.Builder()
         .name("Instant").description("Instant break mode").defaultValue(false)
@@ -171,12 +171,12 @@ public class AlienV4PacketMine extends Module {
     private final Setting<Boolean> allowOffhand = sgCheck.add(new BoolSetting.Builder()
         .name("AllowOffhand").description("Allow offhand use").defaultValue(true)
         .visible(() -> page.get() == Page.Check && usingPause.get()).build());
-    private final Setting<Boolean> bypassGround = sgCheck.add(new BoolSetting.Builder()
-        .name("BypassGround").description("Bypass ground slowdown").defaultValue(true)
+    private final Setting<Boolean> compatGround = sgCheck.add(new BoolSetting.Builder()
+        .name("CompatGround").description("Compatibility ground slowdown").defaultValue(true)
         .visible(() -> page.get() == Page.Check).build());
-    private final Setting<Integer> bypassTime = sgCheck.add(new IntSetting.Builder()
-        .name("BypassTime").description("Bypass time in ms").defaultValue(400).min(0).max(2000).sliderRange(0, 2000)
-        .visible(() -> bypassGround.get() && page.get() == Page.Check).build());
+    private final Setting<Integer> compatTime = sgCheck.add(new IntSetting.Builder()
+        .name("CompatTime").description("Compatibility time in ms").defaultValue(400).min(0).max(2000).sliderRange(0, 2000)
+        .visible(() -> compatGround.get() && page.get() == Page.Check).build());
     private final Setting<Boolean> pauseBind = sgCheck.add(new BoolSetting.Builder()
         .name("Pause").description("Pause mining").defaultValue(false)
         .visible(() -> page.get() == Page.Check).build());
@@ -767,13 +767,13 @@ public class AlienV4PacketMine extends Module {
         if (mc.player.isCreative()) return;
 
         if (event.packet instanceof PlayerMoveC2SPacket) {
-            if (bypassGround.get()
+            if (compatGround.get()
                 && !mc.player.getPose().name().equals("GLIDING")
                 && breakPos != null
                 && !isAir(breakPos)
-                && bypassTime.get() > 0
+                && compatTime.get() > 0
                 && MathHelper.sqrt((float) breakPos.toCenterPos().squaredDistanceTo(mc.player.getEyePos())) <= range.get().floatValue() + 2.0F) {
-                double breakTime = breakFinalTime - bypassTime.get();
+                double breakTime = breakFinalTime - compatTime.get();
                 if (breakTime <= 0 || mineTimer.passed((long) breakTime)) {
                     sendGroundPacket = true;
                     // We cannot modify the packet easily, so send a ground=true packet after

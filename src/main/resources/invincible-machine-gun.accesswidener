@@ -5,6 +5,9 @@ accessible field net/minecraft/particle/TintedParticleEffect color I
 accessible method net/minecraft/client/world/ClientWorld getPendingUpdateManager ()Lnet/minecraft/client/network/PendingUpdateManager;
 accessible method net/minecraft/client/world/ClientWorld getEntityLookup ()Lnet/minecraft/world/entity/EntityLookup;
 
+# EntityS2CPacket (upstream 1.1.7.2 reads the raw entity id when advancing the tracked position)
+accessible field net/minecraft/network/packet/s2c/play/EntityS2CPacket id I
+
 # MinecraftClient
 accessible field net/minecraft/client/MinecraftClient attackCooldown I
 accessible field net/minecraft/client/MinecraftClient disconnecting Z
@@ -114,6 +117,11 @@ accessible field net/minecraft/screen/ScreenHandler revision I
 accessible field net/minecraft/world/chunk/PalettedContainer data Lnet/minecraft/world/chunk/PalettedContainer$Data;
 accessible method net/minecraft/world/chunk/PalettedContainer$Data palette ()Lnet/minecraft/world/chunk/Palette;
 accessible field net/minecraft/client/network/PendingUpdateManager sequence I
+# PendingUpdateManagerMixin.getPendingBlockState (SequencedActionManager break prediction)
+accessible field net/minecraft/client/network/PendingUpdateManager blockPosToPendingUpdate Lit/unimi/dsi/fastutil/longs/Long2ObjectOpenHashMap;
+accessible class net/minecraft/client/network/PendingUpdateManager$PendingUpdate
+accessible field net/minecraft/client/network/PendingUpdateManager$PendingUpdate blockState Lnet/minecraft/block/BlockState;
+accessible field net/minecraft/client/network/PendingUpdateManager$PendingUpdate sequence I
 accessible method net/minecraft/item/BlockItem getPlacementState (Lnet/minecraft/item/ItemPlacementContext;)Lnet/minecraft/block/BlockState;
 accessible field net/minecraft/block/entity/BlockEntityType blocks Ljava/util/Set;
 accessible field net/minecraft/client/render/model/BakedModelManager missingModels Lnet/minecraft/client/render/model/ModelBaker$BlockItemModels;

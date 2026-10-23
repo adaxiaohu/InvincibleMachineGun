@@ -47,17 +47,17 @@ public class CombatExtra extends BaseModule {
 
     public final FlagRef noCooldown = flagBuilder(combat.add("cancel-interval")).build();
 
-    private boolean ridingBypass(Entity entity) {
+    private boolean ridingCompat(Entity entity) {
         return entity.hasVehicle();
     }
 
     public double getAttackAtTargetRange(Entity entity) {
-        double d = ridingBypass(mc.player) || ridingBypass(entity) ? boatAttackRange.get() : range.get();
+        double d = ridingCompat(mc.player) || ridingCompat(entity) ? boatAttackRange.get() : range.get();
         return mc.player.getAttributeValue(EntityAttributes.ENTITY_INTERACTION_RANGE) + d;
     }
 
     public double getAttackRange() {
-        double d = ridingBypass(mc.player) ? boatAttackRange.get() : range.get();
+        double d = ridingCompat(mc.player) ? boatAttackRange.get() : range.get();
         return mc.player.getAttributeValue(EntityAttributes.ENTITY_INTERACTION_RANGE) + d;
     }
 

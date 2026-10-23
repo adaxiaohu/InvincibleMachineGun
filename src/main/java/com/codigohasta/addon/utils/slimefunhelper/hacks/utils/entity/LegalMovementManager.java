@@ -345,7 +345,6 @@ public class LegalMovementManager {
             return delegate.get().postModify(movementManagerEvent, enabledThisTick);
         }
 
-
     }
 
     public static class ModifierPipeline implements MovementModifier {
@@ -355,20 +354,6 @@ public class LegalMovementManager {
         }
 
         private ClientPlayerEntity current;
-        private final List<MovementModifier> activeThisTick = new ArrayList<>();
-        private boolean shouldRun(MovementModifier modifier) {
-            MovementModifier delegate = modifier instanceof DelegateMovementModifier d ? d.delegate.get() : modifier;
-            if (!(delegate instanceof com.codigohasta.addon.utils.slimefunhelper.hacks.api.BaseModule module)) return true;
-            if (module instanceof com.codigohasta.addon.modules.slimefunhelper.NoFall) return true;
-            if (module instanceof com.codigohasta.addon.modules.slimefunhelper.FloatingUtils) return true;
-            if (module instanceof com.codigohasta.addon.modules.slimefunhelper.PlayerInputManager)
-                return module.isActive() || (com.codigohasta.addon.modules.slimefunhelper.PrinterRewrite.INSTANCE != null
-                        && com.codigohasta.addon.modules.slimefunhelper.PrinterRewrite.INSTANCE.isActive());
-            if (module instanceof com.codigohasta.addon.modules.slimefunhelper.ElytraFlight)
-                return module.isActive() || com.codigohasta.addon.modules.slimefunhelper.ElytraBot.INSTANCE.canControlFlight();
-            return module.isActive();
-        }
-
         private final int priority;
         private final List<Supplier<MovementModifier>> factories = new ArrayList<>();
         private final List<MovementModifier> pipeline = new ArrayList<>();
@@ -411,49 +396,47 @@ public class LegalMovementManager {
 
         @Override
         public void applyPreTickModify(Event<LegalMovementManager> movementManagerEvent) {
-            activeThisTick.clear();
-            for (var re : pipeline) if (shouldRun(re)) activeThisTick.add(re);
-            for (var re : activeThisTick) {
+            for (var re : pipeline) {
                 re.applyPreTickModify(movementManagerEvent);
             }
         }
 
         @Override
         public void applyAfterInputTick(Event<LegalMovementManager> movementManagerEvent) {
-            for (var re : activeThisTick) {
+            for (var re : pipeline) {
                 re.applyAfterInputTick(movementManagerEvent);
             }
         }
 
         public void applyBeforeTravelTick(Event<LegalMovementManager> movementManagerEvent, Event<Vec3d> moveEvent) {
-            for (var re : activeThisTick) {
+            for (var re : pipeline) {
                 re.applyBeforeTravelTick(movementManagerEvent, moveEvent);
             }
         }
 
         public void applyAfterTravelTick(Event<LegalMovementManager> movementManagerEvent, Event<Vec3d> moveEvent) {
-            for (var re : activeThisTick) {
+            for (var re : pipeline) {
                 re.applyAfterTravelTick(movementManagerEvent, moveEvent);
             }
         }
 
         @Override
         public void applyBeforeMovementPacketModify(Event<LegalMovementManager> movementManagerEvent) {
-            for (var re : activeThisTick) {
+            for (var re : pipeline) {
                 re.applyBeforeMovementPacketModify(movementManagerEvent);
             }
         }
 
         @Override
         public void applyBeforeInputPacketModify(Event<LegalMovementManager> movementManagerEvent) {
-            for (var re : activeThisTick) {
+            for (var re : pipeline) {
                 re.applyBeforeInputPacketModify(movementManagerEvent);
             }
         }
 
         @Override
         public boolean postModify(Event<LegalMovementManager> movementManagerEvent, boolean enabledThisTick) {
-            for (var re : activeThisTick) {
+            for (var re : pipeline) {
                 re.postModify(movementManagerEvent, enabledThisTick);
             }
             return true;

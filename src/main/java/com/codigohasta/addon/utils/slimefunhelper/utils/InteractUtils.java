@@ -119,6 +119,29 @@ public class InteractUtils {
         return actionResult;
     }
 
+    /** Ported from upstream 1.1.7.2 InteractUtils.simulateInteractItem. */
+    public static ActionResult simulateInteractItem(Hand hand) {
+        ItemStack itemStack = mc.player.getStackInHand(hand);
+        if (mc.player.getItemCooldownManager().isCoolingDown(itemStack)) {
+            return ActionResult.PASS;
+        }
+        ActionResult actionResult = itemStack.use(mc.world, mc.player, hand);
+        ItemStack itemStack2;
+        if (actionResult instanceof ActionResult.Success) {
+            ActionResult.Success success = (ActionResult.Success) actionResult;
+            itemStack2 = (ItemStack) Objects.requireNonNullElseGet(success.getNewHandStack(), () -> {
+                return mc.player.getStackInHand(hand);
+            });
+        } else {
+            itemStack2 = mc.player.getStackInHand(hand);
+        }
+
+        if (itemStack2 != itemStack) {
+            mc.player.setStackInHand(hand, itemStack2);
+        }
+        return actionResult;
+    }
+
     public static void swingHandIfSuccess(ActionResult actionResult3, Hand hand) {
         if (actionResult3 instanceof ActionResult.Success) {
             ActionResult.Success success3 = (ActionResult.Success) actionResult3;

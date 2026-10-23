@@ -42,6 +42,12 @@ dependencies {
     // Meteor Client
     modImplementation(libs.meteor.client)
 
+    // JSVG：把 assets/invincible_machine_gun/vector/*.svg 栅格化成贴图。
+    // CatLean 用的同一个库（bj.java 的 SVGLoader + SVGDocument.render）。
+    // 用 include(...) 把它打进 mod 的 META-INF/jars，玩家无需单独安装。
+    implementation(libs.jsvg)
+    include(libs.jsvg)
+
     // 【关键修复】 Baritone 依赖
     // 这行代码让你的项目能找到 BaritoneAPI，从而修复那几十个报错
     // 即使你是在 1.21.11，使用 1.21.4-SNAPSHOT 的 API 进行编译通常也是兼容的

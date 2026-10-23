@@ -125,7 +125,23 @@ public class SpearEnhance extends BaseModule {
 
     public static boolean isUsingSpear(PlayerEntity player) {
         // todo consider viaversion
-        return player != null && player.isUsingItem() && VItem.getInstance().isSpear(player.getActiveItem());
+        if (mc.player == player) {
+            return player.isUsingItem() && VItem.getInstance().isSpear(player.getActiveItem());
+        }
+        return isHoldingSpear(player);
+    }
+
+    /**
+     * Whether {@code player} merely holds a spear, without requiring them to be actively using it.
+     *
+     * <p>Split out in upstream 1.1.7.2 (SpearEnhance:137-141); the IMG port had folded this into
+     * {@link #isUsingSpear}. It is needed by the mace-fix aiming branch in ElytraBot, which picks
+     * a different aim point when the local player is holding a spear.
+     */
+    public static boolean isHoldingSpear(PlayerEntity player) {
+        return player != null
+                && (VItem.getInstance().isSpear(player.getMainHandStack())
+                        || VItem.getInstance().isSpear(player.getOffHandStack()));
     }
 
     public static ItemStack getSpear() {

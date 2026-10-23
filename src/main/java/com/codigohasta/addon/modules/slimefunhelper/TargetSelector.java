@@ -254,7 +254,7 @@ private static final double[] FALL_FLYING_EYE_HEIGHTS={0.4,1.62,1.27}, STANDING_
         List<Entity> targets = getAttackableEntities(nearby, tickPredict, combinedPredicate);
         // Debug.info(pos);
         // fixed: if player is targeting a faraway entity, then it should be privileged
-        // fixed: should not target entity at back of me, because some anticheat place fake players to test killarua;
+        // fixed: should not target entity at back of me, because some servers place fake players to test killarua;
         // use weighted value
         targets.sort(Comparator.comparingDouble(e -> {
             return getEntityWeight(e, mc.player);

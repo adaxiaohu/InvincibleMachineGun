@@ -22,5 +22,39 @@
   },
   "terminator": {
     "sounds": ["invincible_machine_gun:terminator"]
+  },
+
+  "enable": {
+    "sounds": ["invincible_machine_gun:enable"]
+  },
+  "disable": {
+    "sounds": ["invincible_machine_gun:disable"]
+  },
+  "armor_alert": {
+    "sounds": ["invincible_machine_gun:armor-alert"]
+  },
+  "chat_mention": {
+    "sounds": ["invincible_machine_gun:chat-mention"]
+  },
+  "found_stash": {
+    "sounds": ["invincible_machine_gun:found-stash"]
+  },
+  "lag": {
+    "sounds": ["invincible_machine_gun:lag"]
+  },
+  "lag_back": {
+    "sounds": ["invincible_machine_gun:lag-back"]
+  },
+  "range_in": {
+    "sounds": ["invincible_machine_gun:range-in"]
+  },
+  "range_out": {
+    "sounds": ["invincible_machine_gun:range-out"]
+  },
+  "totem_pop": {
+    "sounds": ["invincible_machine_gun:totem-pop"]
+  },
+  "he_poptotem": {
+    "sounds": ["invincible_machine_gun:he_poptotem"]
   }
 }

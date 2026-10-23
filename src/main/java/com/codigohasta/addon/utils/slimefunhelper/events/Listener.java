@@ -78,14 +78,28 @@ public final class Listener {
     public static Channel<Vec3d> getPlayerFluidVelocityPoint(){return PlayerFluidVelocityPoint;}
     private static final Channel<Integer> PlayerFallFlyingTick=new Channel<>();
     public static Channel<Integer> getPlayerFallFlyingTick(){return PlayerFallFlyingTick;}
-    private static final Channels<DataTracker.SerializedEntry<?>> EntityTrackDataUpdate=new Channels<>();
-    public static Channels<DataTracker.SerializedEntry<?>> getEntityTrackDataUpdate(){return EntityTrackDataUpdate;}
+    /** Ported from upstream 1.1.7.2 Listener: carries a {@code MetadataUpdate} payload. */
+    private static final Channels<com.codigohasta.addon.utils.slimefunhelper.events.impl.MetadataUpdate> EntityTrackDataUpdate=
+            new Channels<>(e -> e.context.entity().getType());
+    public static Channels<com.codigohasta.addon.utils.slimefunhelper.events.impl.MetadataUpdate> getEntityTrackDataUpdate(){return EntityTrackDataUpdate;}
     private static final Channel<Boolean> PlayerSwitchFallFlying=new Channel<>();
     public static Channel<Boolean> getPlayerSwitchFallFlying(){return PlayerSwitchFallFlying;}
     private static final EntityChannels EntityRemoveListener=new EntityChannels();
     public static EntityChannels getEntityRemoveListener(){return EntityRemoveListener;}
     private static final Channel<World> WorldSwitchPoint=new Channel<>();
     public static Channel<World> getWorldSwitchPoint(){return WorldSwitchPoint;}
+    /**
+     * Ported from upstream 1.1.7.2 Listener: fired on respawn and on game join, carrying the
+     * player. {@code ElytraExtra.onWorldSwitch} listens here (upstream signature).
+     */
+    private static final Channel<ClientPlayerEntity> playerRespawnPoint=new Channel<>();
+    public static Channel<ClientPlayerEntity> getPlayerRespawnPoint(){return playerRespawnPoint;}
+    /**
+     * Ported from upstream 1.1.7.2 Listener: fired at the head of {@code PlayerEntity.travel}.
+     * {@code ElytraOptimizeUtils.onPreElytraMovement} flushes the deferred snap-rotation packet here.
+     */
+    private static final Channel<Vec3d> playerTravelingTick=new Channel<>();
+    public static Channel<Vec3d> getPlayerTravelingTick(){return playerTravelingTick;}
     private static final Channel<ClientPlayerEntity> GameJoinPoint=new Channel<>();
     public static Channel<ClientPlayerEntity> getGameJoinPoint(){return GameJoinPoint;}
     private static final Channel<ClientPlayerEntity> PostGameTick=new Channel<>();
@@ -116,7 +130,7 @@ public final class Listener {
     public static PacketChannels getPacketPostScheduleSendPoint(){return PacketPostScheduleSendPoint;}
     private static final CustomChannels CustomListener=new CustomChannels();
     public static CustomChannels getCustomListener(){return CustomListener;}
-    public static void sendPacketNoEvents(Packet<?> packet){PacketManager.sendBypass(packet);}
+    public static void sendPacketNoEvents(Packet<?> packet){PacketManager.sendCompat(packet);}
 private static final Channel<net.minecraft.util.hit.HitResult> attackAction=new Channel<>();
 public static Channel<net.minecraft.util.hit.HitResult> getAttackAction(){return attackAction;}
 private static final Channel<ClientPlayerEntity> preGameTick=new Channel<>();
@@ -154,7 +168,7 @@ private static final Channel<java.util.Map<net.minecraft.util.math.BlockPos,net.
 public static Channel<java.util.Map<net.minecraft.util.math.BlockPos,net.minecraft.block.BlockState>> getWorldScannChunkResult(){return scanChunks;}
 private static final Channels<net.minecraft.block.BlockState> scanBlocks=new Channels<>();
 public static Channels<net.minecraft.block.BlockState> getWorldScannBlockResult(){return scanBlocks;}
-public static void sendPacketNoEvents(ClientConnection connection,Packet<?> packet){PacketManager.sendBypass(connection,packet);}
+public static void sendPacketNoEvents(ClientConnection connection,Packet<?> packet){PacketManager.sendCompat(connection,packet);}
 
     private static final Map<Class<?>, ArrayDeque<PacketCatcher>> preCatchers = new java.util.concurrent.ConcurrentHashMap<>();
     private static final Map<Class<?>, ArrayDeque<PacketCatcher>> postCatchers = new java.util.concurrent.ConcurrentHashMap<>();

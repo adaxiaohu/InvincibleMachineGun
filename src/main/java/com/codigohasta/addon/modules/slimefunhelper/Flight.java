@@ -226,7 +226,6 @@ public class Flight extends BaseModule implements LegalMovementManager.MovementM
         if (!isActive()) return;
         captureAbilities();
         ClientPlayerEntity player = movementManagerEvent.context.playerStatus.entity;
-        if (com.codigohasta.addon.utils.slimefunhelper.FlightImpulseGuard.preserving()) return;
         if (isActive()) {
             if (!player.getAbilities().allowFlying) {
                 player.getAbilities().allowFlying = true;

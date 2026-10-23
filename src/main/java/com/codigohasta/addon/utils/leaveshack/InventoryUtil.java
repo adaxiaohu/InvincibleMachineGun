@@ -43,7 +43,7 @@ public class InventoryUtil {
     @EventHandler
     public void onPacketSend(PacketEvent.Send event) {
         if (event.packet instanceof UpdateSelectedSlotC2SPacket packet) {
-            if (GlobalSetting.INSTANCE.noBadPackets.get() && packet.getSelectedSlot() == lastPacketSlot) {
+            if (GlobalSetting.on() && GlobalSetting.INSTANCE.noBadPackets.get() && packet.getSelectedSlot() == lastPacketSlot) {
                 event.cancel();
             }
             lastPacketSlot = packet.getSelectedSlot();
@@ -138,7 +138,7 @@ public class InventoryUtil {
         return mc.player.getInventory().getStack(i);
     }
     public static void switchToSlot(int slot) {
-        if (GlobalSetting.INSTANCE.clientSwitch.get()) ((InventoryAccessor)mc.player.getInventory()).setSelectedSlot(slot);
+        if (!GlobalSetting.on() || GlobalSetting.INSTANCE.clientSwitch.get()) ((InventoryAccessor)mc.player.getInventory()).setSelectedSlot(slot);
         sendPacket(new UpdateSelectedSlotC2SPacket(slot));
     }
     public enum MineSwitchMode {

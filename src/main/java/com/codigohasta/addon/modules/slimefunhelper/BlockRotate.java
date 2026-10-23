@@ -51,14 +51,14 @@ public class BlockRotate extends BaseModule {
     public final FlagRef enable =
             builder(blockRotate.add("enable"), Boolean.class).defaultValue(true).build();
 
-    public final EnumRef<Configs.BypassMode> bypassMode = builder(
-                    blockRotate.add("yaw-deceive-bypass-mode"), Configs.BypassMode.class)
-            .defaultValue(Configs.BypassMode.NO_BYPASS)
+    public final EnumRef<Configs.CompatMode> compatMode = builder(
+                    blockRotate.add("yaw-deceive-compat-mode"), Configs.CompatMode.class)
+            .defaultValue(Configs.CompatMode.NO_COMPAT)
             .build();
 
-    public final EnumRef<Configs.BypassMode> bypassMode2 = builder(
-                    blockRotate.add("rotate-bypass-mode"), Configs.BypassMode.class)
-            .defaultValue(Configs.BypassMode.NO_BYPASS)
+    public final EnumRef<Configs.CompatMode> compatMode2 = builder(
+                    blockRotate.add("rotate-compat-mode"), Configs.CompatMode.class)
+            .defaultValue(Configs.CompatMode.NO_COMPAT)
             .build();
 
     public final FlagRef enable3 = builder(tempSchematic.add("enable"), Boolean.class)
@@ -132,7 +132,7 @@ public class BlockRotate extends BaseModule {
         }
     }
 
-    // can not bypass
+    // can not compat
     public void onPreSendInteractBlockRotate(Event<PlayerInteractBlockC2SPacket> e) {
         if (e.isCancelled()) return;
         if (enable.get() && enableBlockRotateModify()) {
@@ -172,7 +172,7 @@ public class BlockRotate extends BaseModule {
                 }
                 if (deceivePy != null
                         && ViaFabricPlusHooks.getInstance().getCurrentVersion().isHigherOrEqualTo(21, 0)) {
-                    if (bypassMode.get() == Configs.BypassMode.BYPASS_GRIM) {
+                    if (compatMode.get() == Configs.CompatMode.COMPAT_GRIM) {
                         // to ensure the rotate is successfully done
                         // use a wrong sequence id to ensure that this packet cancelled by grimac
                         Listener.sendPacketNoEvents(new PlayerInteractBlockC2SPacket(
@@ -192,7 +192,7 @@ public class BlockRotate extends BaseModule {
                             deceivePy.getPitch(currentPy.x), deceivePy.getYaw(currentPy.y), true);
                 }
                 if (lookVec != null
-                        && (bypassMode2.get().hasAc()
+                        && (compatMode2.get().hasAc()
                                 || (deceivePy != null
                                         && ViaFabricPlusHooks.getInstance()
                                                 .getCurrentVersion()
@@ -343,12 +343,12 @@ public class BlockRotate extends BaseModule {
 
     public void onPresetLoad(Event<EventContainer<ModulePreset>> e) {
         switch (e.context.getValue()) {
-            case AC_GRIM, AC_GRIM_LEGACY -> bypassMode.set(Configs.BypassMode.BYPASS_GRIM);
-            default -> bypassMode.set(Configs.BypassMode.NO_BYPASS);
+            case AC_GRIM, AC_GRIM_LEGACY -> compatMode.set(Configs.CompatMode.COMPAT_GRIM);
+            default -> compatMode.set(Configs.CompatMode.NO_COMPAT);
         }
         switch (e.context.getValue()) {
-            case AC_GRIM, AC_GRIM_LEGACY -> bypassMode2.set(Configs.BypassMode.BYPASS_GRIM);
-            default -> bypassMode2.set(Configs.BypassMode.NO_BYPASS);
+            case AC_GRIM, AC_GRIM_LEGACY -> compatMode2.set(Configs.CompatMode.COMPAT_GRIM);
+            default -> compatMode2.set(Configs.CompatMode.NO_COMPAT);
         }
     }
 

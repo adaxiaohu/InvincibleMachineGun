@@ -67,9 +67,9 @@ public class AdaPacketMine extends Module {
     private final Setting<Double> speedConfig = sgGeneral.add(new DoubleSetting.Builder()
         .name("速度倍率").description("调整挖掘进度的速度").defaultValue(1.0).min(0.1).sliderRange(0.1, 1.0).build());
 
-    // --- 地面绕过 (Bypass Ground) ---
-    private final Setting<Boolean> bypassGround = sgGeneral.add(new BoolSetting.Builder()
-        .name("地面绕过 (Bypass)").description("在水中或空中全速挖掘 (Grim/NCP)").defaultValue(true)
+    // --- 地面兼容 (Compat Ground) ---
+    private final Setting<Boolean> compatGround = sgGeneral.add(new BoolSetting.Builder()
+        .name("地面兼容 (Compat)").description("在水中或空中全速挖掘 (Grim/NCP)").defaultValue(true)
         .visible(() -> modeConfig.get() == SpeedmineMode.PACKET).build());
 
     private final Setting<Boolean> instantConfig = sgGeneral.add(new BoolSetting.Builder()
@@ -86,9 +86,9 @@ public class AdaPacketMine extends Module {
         .name("自动旋转").description("挖掘时旋转视角朝向方块").defaultValue(false)
         .visible(() -> modeConfig.get() == SpeedmineMode.PACKET).build());
 
-    // --- Grim 反作弊设置 ---
+    // --- Grim 设置 ---
     private final Setting<Boolean> grimConfig = sgGeneral.add(new BoolSetting.Builder()
-        .name("Grim绕过").description("针对Grim反作弊优化发包顺序").defaultValue(true).build());
+        .name("Grim兼容").description("针对Grim优化发包顺序").defaultValue(true).build());
 
     private final Setting<Boolean> grimNewConfig = sgGeneral.add(new BoolSetting.Builder()
         .name("Grim-V3").description("针对新版Grim (V3/V4) 优化").defaultValue(true)
@@ -133,7 +133,7 @@ public class AdaPacketMine extends Module {
     private Field cachedSlotField = null;
 
     public AdaPacketMine() {
-        super(AddonTemplate.CATEGORY, "发包挖掘2", "抄的bep的包挖，ai抄过来效果不好");
+        super(AddonTemplate.CATEGORY, "发包挖掘2", "参考的bep的包挖，这里效果不好");
     }
 
     @Override
@@ -212,7 +212,7 @@ public class AdaPacketMine extends Module {
                     startMining(data);
                 }
 
-                // 伤害计算 (集成 Bypass Ground - 水下不减速)
+                // 伤害计算 (集成 Compat Ground - 水下不减速)
                 float damageDelta = calcBlockBreakingDelta(data.getState(), data.getPos());
                 data.damage(damageDelta);
 
@@ -336,7 +336,6 @@ public class AdaPacketMine extends Module {
         }
     }
 
-    // --- 渲染逻辑 (完全保留原始代码) ---
     @EventHandler
     public void onRender3D(Render3DEvent event) {
         if (modeConfig.get() != SpeedmineMode.PACKET || !render.get()) return;
@@ -405,7 +404,7 @@ public class AdaPacketMine extends Module {
         }
     }
 
-    // --- 核心操作方法 (集成 Bypass) ---
+    // --- 核心操作方法 (集成 Compat) ---
 
     public void clickMine(MiningData data) {
         if (miningQueue.size() <= (doubleBreakConfig.get() ? 2 : 1)) {
@@ -471,12 +470,12 @@ public class AdaPacketMine extends Module {
             swapBackTicks = 3;
         }
 
-        // --- Bypass Ground 关键逻辑 ---
+        // --- Compat Ground 关键逻辑 ---
         // 核心思路：发送一个 PlayerMoveC2SPacket.Full 包，告诉服务器我们在地面上 (onGround=true)
         boolean isFallFlying = mc.player.getPose().toString().equals("GLIDING");
         
-        // 只有当 Bypass 开启，且我们可能受到惩罚时(水下或空中)，才强制发送
-        if (bypassGround.get() && !isFallFlying && !data.getState().isAir()) {
+        // 只有当 Compat 开启，且我们可能受到惩罚时(水下或空中)，才强制发送
+        if (compatGround.get() && !isFallFlying && !data.getState().isAir()) {
             boolean inWater = mc.player.isSubmergedIn(FluidTags.WATER);
             boolean inAir = !mc.player.isOnGround();
             
@@ -548,7 +547,7 @@ public class AdaPacketMine extends Module {
         return null;
     }
 
-    // --- 伤害计算 (集成 Bypass Ground - 水下修复核心) ---
+    // --- 伤害计算 (集成 Compat Ground - 水下修复核心) ---
 
     private float calcBlockBreakingDelta(BlockState state, BlockPos pos) {
         if (swapConfig.get() == Swap.OFF) {
@@ -579,10 +578,10 @@ public class AdaPacketMine extends Module {
              speed *= 0.3f;
         }
 
-        // --- Bypass Ground 逻辑核心 ---
-        // 如果开启了 Bypass Ground，我们跳过所有的环境检查 (水下、空中)，
+        // --- Compat Ground 逻辑核心 ---
+        // 如果开启了 Compat Ground，我们跳过所有的环境检查 (水下、空中)，
         // 直接使用全速计算。这配合 stopMining 中的发包欺骗，能实现水下瞬挖。
-        if (!bypassGround.get()) {
+        if (!compatGround.get()) {
             if (mc.player.isSubmergedIn(FluidTags.WATER) && !hasAquaAffinity()) {
                 speed /= 5.0f;
             }

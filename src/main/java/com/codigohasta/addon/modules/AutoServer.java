@@ -38,24 +38,6 @@ import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/**
- * AutoServer
- *
- * 目标：
- * 1. 动态服务器 Profile，可在 Meteor 模块界面无限添加/删除。
- * 2. 每个 Profile 独立开关 AuthMeUI human_slider 自动验证。
- * 3. 以底层连接对象作为“物理会话”标识；Velocity 子服切换不会重复执行指令。
- * 4. 每个 Profile 可选按当前 Minecraft 用户名匹配，同一服务器可为不同账号保存不同密码。
- * 5. 兼容旧版固定 3 服务器配置与 AS2 动态配置，并自动迁移。
- *
- * AuthMeUI r1.2 登录 Dialog 约定：
- * - 密码 input key: password
- * - 滑块 input key: human_slider
- * - 登录 action: authmeui:action/login
- *
- * Dialog 自动验证直接使用 1.21.11 Yarn 的强类型 Dialog/Packet/NBT API。
- * 不使用运行时类名或反射，避免 Fabric/Loom 重映射后类名变化导致自动验证失效。
- */
 public class AutoServer extends Module {
     private static final String PROFILE_VERSION = "AS3";
     private static final String LEGACY_PROFILE_VERSION = "AS2";
@@ -97,18 +79,14 @@ public class AutoServer extends Module {
 
     private final Setting<Boolean> showFeedback = sgGeneral.add(new BoolSetting.Builder()
         .name("显示反馈")
-        .description("显示服务器匹配、自动验证和指令状态。密码内容不会写入反馈。")
+        .description("显示服务器。")
         .defaultValue(true)
         .build()
     );
 
-    /**
-     * 真正持久化动态 Profile 的 Setting。
-     * 界面由 getWidget() 自定义，因此这里隐藏原始编码列表。
-     */
     private final Setting<List<String>> profileStorage = sgGeneral.add(new StringListSetting.Builder()
         .name("动态服务器配置存储")
-        .description("AutoServer 内部数据，请使用下方服务器管理界面编辑。")
+        .description("111。")
         .defaultValue(List.of())
         .visible(() -> false)
         .build()
@@ -122,8 +100,7 @@ public class AutoServer extends Module {
         .build()
     );
 
-    // ================= 旧版 3 服务器配置（仅迁移，不显示） =================
-    // 保留相同 group/name，使旧 Meteor 配置可以被读取，然后迁移到 profileStorage。
+
     private final SettingGroup sgLegacy1 = settings.createGroup("服务器 1");
     private final Setting<Boolean> legacy1Enabled = sgLegacy1.add(new BoolSetting.Builder()
         .name("启用").defaultValue(true).visible(() -> false).build());
@@ -164,14 +141,14 @@ public class AutoServer extends Module {
         super(
             AddonTemplate.CATEGORY,
             "auto-server",
-            "动态服务器自动指令 + AuthMeUI 滑块自动验证；Velocity 子服切换不会重复执行。"
+            "自动登录"
         );
     }
 
     @Override
     public void onActivate() {
         resetSession(false);
-        loadProfiles(); // 同时触发一次旧配置迁移
+        loadProfiles();
     }
 
     @Override
@@ -183,10 +160,6 @@ public class AutoServer extends Module {
         disconnectedTicks = 0;
         commandsScheduledForSession = false;
     }
-
-    // ========================================================================
-    // 动态 Profile GUI
-    // ========================================================================
 
     @Override
     public WWidget getWidget(GuiTheme theme) {
@@ -200,7 +173,7 @@ public class AutoServer extends Module {
         root.clear();
 
         root.add(theme.horizontalSeparator("动态服务器配置")).expandX();
-        root.add(theme.label("每个服务器可独立按用户名匹配并开启自动验证码。自动指令可逐条无限添加，按界面顺序执行。"));
+        root.add(theme.label("加加加"));
         String currentUsername = getCurrentUsername();
         root.add(theme.label("当前客户端用户名: " + (currentUsername.isBlank() ? "<无法读取>" : currentUsername)));
 
@@ -254,29 +227,27 @@ public class AutoServer extends Module {
             };
 
             usernameRow.add(theme.label("当前用户名"));
-            WTextBox username = usernameRow.add(theme.textBox(profile.username, "例如 Steve")).expandX().widget();
+            WTextBox username = usernameRow.add(theme.textBox(profile.username, "例如")).expandX().widget();
             username.action = () -> {
                 profile.username = username.get().trim();
                 saveProfiles(profiles);
             };
 
-            // 第四行：验证码开关 + 密码
             WHorizontalList verificationRow = root.add(theme.horizontalList()).expandX().widget();
             WCheckbox autoVerify = verificationRow.add(theme.checkbox(profile.autoHumanVerification)).widget();
-            verificationRow.add(theme.label("AuthMeUI 自动验证"));
+            verificationRow.add(theme.label("过关"));
             autoVerify.action = () -> {
                 profile.autoHumanVerification = autoVerify.checked;
                 saveProfiles(profiles);
             };
 
             verificationRow.add(theme.label("密码"));
-            WTextBox password = verificationRow.add(theme.textBox(profile.password, "AuthMe 密码")).expandX().widget();
+            WTextBox password = verificationRow.add(theme.textBox(profile.password, "过关密码")).expandX().widget();
             password.action = () -> {
                 profile.password = password.get();
                 saveProfiles(profiles);
             };
 
-            // 第五部分：自动指令动态列表（每条一行，可无限添加/删除）
             root.add(theme.label("自动指令（按从上到下顺序执行）"));
 
             if (profile.commands.isEmpty()) {
@@ -337,10 +308,6 @@ public class AutoServer extends Module {
         };
     }
 
-    // ========================================================================
-    // Tick：只以底层连接对象变化作为“新物理会话”
-    // ========================================================================
-
     @EventHandler
     private void onTick(TickEvent.Pre event) {
         Object liveConnection = getLiveConnection();
@@ -351,7 +318,6 @@ public class AutoServer extends Module {
             if (liveConnection != activeConnection) {
                 beginSession(liveConnection);
             } else if (activeProfile == null) {
-                // 配置阶段可能先拿到连接、稍后 ServerInfo 才可用。
                 tryAttachProfileToCurrentSession();
             }
         } else if (activeConnection != null) {
@@ -417,7 +383,7 @@ public class AutoServer extends Module {
 
         List<String> commands = commandsForSession(activeProfile);
         if (commands.isEmpty()) {
-            if (showFeedback.get()) info("当前服务器没有需要执行的自动指令。");
+            if (showFeedback.get()) info("当前没有需要执行的自动指令。");
             return;
         }
 
@@ -440,17 +406,9 @@ public class AutoServer extends Module {
         }
     }
 
-    // ========================================================================
-    // 自动验证码：接收原版 ShowDialog 包后解析 human_slider 并直接提交 action
-    // ========================================================================
-
     @EventHandler
     private void onPacketReceive(PacketEvent.Receive event) {
-        // 必须使用强类型 instanceof。运行环境里 named 类名会被 Loom 重映射，
-        // 运行时类名字符串判断在生产 JAR 中不可靠。
         if (!(event.packet instanceof ShowDialogS2CPacket packet)) return;
-
-        // 配置阶段 Dialog 可能早于 ClientPlayNetworkHandler，因此优先使用事件自带 connection。
         if (event.connection != null && event.connection != activeConnection) {
             beginSession(event.connection);
         }
@@ -460,12 +418,12 @@ public class AutoServer extends Module {
         if (profile == null || !profile.enabled || !profile.autoHumanVerification) return;
 
         if (showFeedback.get()) {
-            info("检测到原版 Dialog，正在检查 AuthMeUI 人机验证。");
+            info("过关开始。");
         }
 
         String password = resolvePassword(profile);
         if (password.isBlank()) {
-            if (showFeedback.get()) warning("检测到 Dialog，但当前服务器 Profile 没有可用密码。已保留原 Dialog。");
+            if (showFeedback.get()) warning("检测到过关，没有可用密码。已保留过关。");
             return;
         }
 
@@ -473,7 +431,7 @@ public class AutoServer extends Module {
             DialogChallenge challenge = extractDialogChallenge(packet);
             if (challenge == null) {
                 if (showFeedback.get()) {
-                    info("Dialog 已收到，但未找到 password + human_slider 或无法解析目标区间，保留手动界面。");
+                    info("Dialog 已收到。解析不了");
                 }
                 return;
             }
@@ -495,22 +453,18 @@ public class AutoServer extends Module {
                 Optional.<NbtElement>of(payload)
             );
 
-            // 直接走收到 Dialog 的同一底层连接。这样配置阶段和游戏阶段都可提交。
-            // 强类型方法调用会由 Loom 正确重映射。
             event.connection.send(submitPacket);
-
-            // 已经等价提交了原 Dialog，取消原包，避免 GUI 一闪而过。
             event.setCancelled(true);
 
             if (showFeedback.get()) {
-                info("AuthMeUI 自动验证已提交: 目标 "
+                info("过关已提交: 目标 "
                     + formatNumber(challenge.targetMin) + "~" + formatNumber(challenge.targetMax)
                     + "，提交 " + formatNumber(answer));
             }
         } catch (Throwable t) {
             // 自动验证失败不能破坏正常登录：任何异常都让原 Dialog 正常显示。
             if (showFeedback.get()) {
-                warning("AuthMeUI 自动验证失败，已回退到手动 Dialog: " + t);
+                warning("过关失败，已回退到手动过 " + t);
             }
         }
     }
@@ -540,7 +494,7 @@ public class AutoServer extends Module {
         String label = sliderControl.label().getString();
         float[] target = parseTargetRange(label);
         if (target == null) {
-            if (showFeedback.get()) warning("找到 human_slider，但无法从标签解析目标区间: " + label);
+            if (showFeedback.get()) warning("找到了但是呢看不懂 " + label);
             return null;
         }
 
@@ -661,7 +615,6 @@ public class AutoServer extends Module {
         for (String command : profile.commands) {
             if (command == null || command.isBlank()) continue;
 
-            // 开启 Dialog 自动验证后，不再重复发送旧配置中的 /login 密码。
             if (automaticLoginWillHandlePassword && isLoginCommand(command)) continue;
             result.add(command.trim());
         }
@@ -672,7 +625,6 @@ public class AutoServer extends Module {
     private String resolvePassword(ServerProfile profile) {
         if (profile.password != null && !profile.password.isBlank()) return profile.password;
 
-        // 兼容旧配置：从 "login xxx" / "/login xxx" 中提取，但不会写日志。
         for (String command : profile.commands) {
             if (command == null) continue;
             Matcher matcher = LOGIN_COMMAND_PATTERN.matcher(command.trim());
@@ -691,10 +643,6 @@ public class AutoServer extends Module {
         return command;
     }
 
-    // ========================================================================
-    // Profile 匹配 / 持久化 / 旧配置迁移
-    // ========================================================================
-
     private ServerProfile findMatchingProfile(String currentAddress) {
         if (currentAddress == null || currentAddress.isBlank()) return null;
 
@@ -702,8 +650,6 @@ public class AutoServer extends Module {
         String currentUsername = getCurrentUsername();
         ServerProfile genericAddressMatch = null;
 
-        // 优先选择“地址 + 用户名”精确 Profile。这样同一个服务器可以为不同账号保存不同密码，
-        // 即使列表里同时存在一个不校验用户名的通用 Profile，也不会抢在专用账号 Profile 前面。
         for (ServerProfile profile : loadProfiles()) {
             if (!profile.enabled || !addressMatches(profile.address, normalizedAddress)) continue;
 
@@ -763,7 +709,7 @@ public class AutoServer extends Module {
 
         if (!profiles.isEmpty() || profileStorageInitialized.get()) return profiles;
 
-        // 第一次升级：把原固定 3 组转换成动态 Profile。
+
         profiles.add(legacyProfile("服务器 1", legacy1Enabled.get(), legacy1Ip.get(), legacy1Cmds.get()));
         profiles.add(legacyProfile("服务器 2", legacy2Enabled.get(), legacy2Ip.get(), legacy2Cmds.get()));
         profiles.add(legacyProfile("服务器 3", legacy3Enabled.get(), legacy3Ip.get(), legacy3Cmds.get()));
@@ -831,8 +777,6 @@ public class AutoServer extends Module {
                     commands
                 );
             }
-
-            // AS2 -> AS3 兼容：旧动态 Profile 没有用户名字段，按“任意账号”处理。
             if (parts.length == 7 && LEGACY_PROFILE_VERSION.equals(parts[0])) {
                 String commandBlob = unb64(parts[6]);
                 List<String> commands = decodeCommands(commandBlob);
@@ -900,9 +844,6 @@ public class AutoServer extends Module {
         return Float.toString(value);
     }
 
-    // ========================================================================
-    // 数据结构（全部保持在单个 Java 文件内）
-    // ========================================================================
 
     static final class ServerProfile {
         String name;

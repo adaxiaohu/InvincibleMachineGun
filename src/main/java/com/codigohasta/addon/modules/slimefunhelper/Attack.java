@@ -5,6 +5,8 @@ import com.google.common.collect.Streams;
 import java.util.*;
 import java.util.List;
 import com.codigohasta.addon.utils.slimefunhelper.accessors.access.ClientPlayerAccess;
+import com.codigohasta.addon.utils.slimefunhelper.managers.config.EnumRef;
+import com.codigohasta.addon.utils.slimefunhelper.hacks.utils.enums.GhostHandMode;
 import com.codigohasta.addon.utils.slimefunhelper.accessors.hacks.EntityInternalAccess;
 import com.codigohasta.addon.utils.slimefunhelper.events.Event;
 import com.codigohasta.addon.utils.slimefunhelper.events.Listener;
@@ -54,6 +56,11 @@ import org.jetbrains.annotations.Nullable;
 public class Attack extends BaseModule {
     public static Attack INSTANCE;
     public final ModulePath attack = makePath(Configs.COMBAT_CONFIG, "att-bot");
+    /** Ported from upstream 1.1.7.2 Attack.ghostHand. */
+    public final EnumRef<GhostHandMode> ghostHand = builder(attack.add("ghost-hand-mode"), GhostHandMode.class)
+            .defaultValue(GhostHandMode.INV_SWAP)
+            .build();
+
 
     public Attack() {
         super("Attack");
@@ -261,8 +268,9 @@ public class Attack extends BaseModule {
         return true; // player.getEyePos().subtract(target.getEyePos()).dotProduct(target.getRotationVector()) > 0;
     }
 
-    private static IndexEntry<ItemStack> findAntiShieldWeapon() {
-        return InventoryUtils.findPlayerItem((ex) -> VItem.getInstance().isAxe(ex), false, false);
+    private static IndexEntry<ItemStack> findAntiShieldWeapon(AttackSettings settings) {
+        return InventoryUtils.findPlayerItem(
+                (ex) -> VItem.getInstance().isAxe(ex), settings.ghostHandMode().getSearchSize(false), false, false);
     }
 
     public AttackSettings createAttackSettings() {
@@ -295,28 +303,34 @@ public class Attack extends BaseModule {
                 elytraSwitch,
                 criticalSprint,
                 maceVClip,
-                swingHand.get());
+                swingHand.get(),
+                ghostHand.get());
     }
 
     public static boolean shouldUseAntiShield(Entity target) {
+        return shouldUseAntiShield(target, INSTANCE.createAttackSettings());
+    }
+
+    private static boolean shouldUseAntiShield(Entity target, AttackSettings settings) {
         return target instanceof LivingEntity lv
                 && lv.isUsingItem()
                 && lv.getActiveItem().getItem() instanceof ShieldItem sh
                 && canEntityUseShieldBlockMe(lv, mc.player)
-                && findAntiShieldWeapon() != null;
+                && findAntiShieldWeapon(settings) != null;
     }
 
     public static IndexEntry<ItemStack> selectBestWeapon(AttackSettings attackSettings, @Nullable Entity target) {
         IndexEntry<ItemStack> invResult;
         if (attackSettings.antiShieldSwap()
                 && shouldUseAntiShield(target)
-                && (invResult = findAntiShieldWeapon()) != null) {
+                && (invResult = findAntiShieldWeapon(attackSettings)) != null) {
             return invResult;
         } else if (attackSettings.invSwap()
                 && !VItem.getInstance().isWeapon(mc.player.getStackInHand(Hand.MAIN_HAND))
                 && target instanceof LivingEntity lv
                 && (invResult = InventoryUtils.findBestPlayerItem(
                                 (ex) -> {
+                                    if (VItem.getInstance().isSpear(ex)) return null;
                                     if (VItem.getInstance().isWeapon(ex)) {
                                         Integer damageCost = VItem.getInstance().getAttackDurabilityCost(ex);
                                         return damageCost == null
@@ -327,6 +341,7 @@ public class Attack extends BaseModule {
                                     }
                                     return null;
                                 },
+                                attackSettings.ghostHandMode().getSearchSize(false),
                                 false,
                                 false))
                         != null) {
@@ -340,6 +355,7 @@ public class Attack extends BaseModule {
                                     }
                                     return null;
                                 },
+                                attackSettings.ghostHandMode().getSearchSize(false),
                                 false,
                                 false))
                         != null) {
@@ -349,6 +365,7 @@ public class Attack extends BaseModule {
                 && target instanceof LivingEntity
                 && (invResult = InventoryUtils.findBestPlayerItem(
                                 (ex) -> {
+                                    if (VItem.getInstance().isSpear(ex)) return null;
                                     if (ex.isOf(mc.player
                                             .getStackInHand(Hand.MAIN_HAND)
                                             .getItem())) {
@@ -357,6 +374,7 @@ public class Attack extends BaseModule {
                                     }
                                     return null;
                                 },
+                                attackSettings.ghostHandMode().getSearchSize(false),
                                 false,
                                 false))
                         != null) {
@@ -366,7 +384,6 @@ public class Attack extends BaseModule {
     }
 
     public static void attackWithSettings(PlayerEntity player, Entity target, AttackSettings attackSettings) {
-        if (!com.codigohasta.addon.utils.slimefunhelper.MaceAttackValidation.allow(target)) return;
         PlayerInputUtils.Input input = null;
         if (player.hasVehicle()) {
             input = PlayerInputUtils.of(mc.player);
@@ -379,7 +396,8 @@ public class Attack extends BaseModule {
             }
         }
         IndexEntry<ItemStack> invResult = selectBestWeapon(attackSettings, target);
-        Runnable callback = InvExtra.INSTANCE.swapInventoryIndexToHand(invResult.index());
+        Runnable callback =
+                InvExtra.INSTANCE.swapItemToHand(invResult.index(), false, attackSettings.ghostHandMode());
         attackWithCritic(player, target, attackSettings.criticalSprint(), attackSettings.swingHand());
         if (callback != null) {
             callback.run();
@@ -429,7 +447,12 @@ public class Attack extends BaseModule {
     public boolean willUseMaceAttack(boolean autoMace) {
         return mc.player.getMainHandStack().getItem() instanceof MaceItem mace
                 || (autoMace
-                        && InventoryUtils.findPlayerItem((ex) -> ex.getItem() == Items.MACE, false, false) != null);
+                        && InventoryUtils.findPlayerItem(
+                                        (ex) -> ex.getItem() == Items.MACE,
+                                        ghostHand.get().getSearchSize(false),
+                                        false,
+                                        false)
+                                != null);
     }
 
     private boolean processLegalAttack(Entity target, AttackSettings settings) {
@@ -481,7 +504,7 @@ public class Attack extends BaseModule {
                 // do here
                 if (!armorFly) {
                     // common elytra fly not supported yet
-                    swapElytraSlot = elytraExtra.findEmptyPlaceForElytra();
+                    swapElytraSlot = elytraExtra.findEmptySlotForElytra();
                     if (swapElytraSlot != -1) {
                         elytraExtra.switchSlotToArmor(swapElytraSlot);
                     }
@@ -495,7 +518,7 @@ public class Attack extends BaseModule {
             }
             boolean preAttack = false; // legalTargetingMode.get().isPreAttack();
             //                if(!useMaceAttack && preAttack) {
-            //                    // pieces of shit... may not bypass shit grim after one REACH flag, I dont know
+            //                    // pieces of shit... may not compat shit grim after one REACH flag, I dont know
             // why??
             //                    attackWithCritic(player, target, criticSprint);
             //                }
@@ -641,8 +664,8 @@ public class Attack extends BaseModule {
                                             mc.getNetworkHandler()
                                                     .sendPacket(new ClientCommandC2SPacket(
                                                             mc.player, ClientCommandC2SPacket.Mode.START_FALL_FLYING));
-                                            elytraExtra.switchSlotToArmor(elytraExtra.thisGlidingIsArmorFly);
-                                            elytraExtra.thisTickSwitchingIndex = -1;
+                                            elytraExtra.switchSlotToArmor(elytraExtra.armorGlideTransactionSlot);
+                                            elytraExtra.postTickSwapWithChestSlot = -1;
                                             EntityInternalAccess.of(mc.player)
                                                     .setDataFlag(VDataFlag.FALL_FLYING_FLAG_INDEX, true);
                                         }
@@ -1166,17 +1189,19 @@ public class Attack extends BaseModule {
             boolean elytraDelaySwitch,
             boolean criticalSprint,
             boolean maceVClip,
-            boolean swingHand) {
-public AttackSettings withUseTp(boolean v){return new AttackSettings(v,maceSwap,invSwap,selectWeapon,antiShieldSwap,useAttack,elytraDelaySwitch,criticalSprint,maceVClip,swingHand);}
-public AttackSettings withMaceSwap(boolean v){return new AttackSettings(useTp,v,invSwap,selectWeapon,antiShieldSwap,useAttack,elytraDelaySwitch,criticalSprint,maceVClip,swingHand);}
-public AttackSettings withInvSwap(boolean v){return new AttackSettings(useTp,maceSwap,v,selectWeapon,antiShieldSwap,useAttack,elytraDelaySwitch,criticalSprint,maceVClip,swingHand);}
-public AttackSettings withSelectWeapon(boolean v){return new AttackSettings(useTp,maceSwap,invSwap,v,antiShieldSwap,useAttack,elytraDelaySwitch,criticalSprint,maceVClip,swingHand);}
-public AttackSettings withAntiShieldSwap(boolean v){return new AttackSettings(useTp,maceSwap,invSwap,selectWeapon,v,useAttack,elytraDelaySwitch,criticalSprint,maceVClip,swingHand);}
-public AttackSettings withUseAttack(boolean v){return new AttackSettings(useTp,maceSwap,invSwap,selectWeapon,antiShieldSwap,v,elytraDelaySwitch,criticalSprint,maceVClip,swingHand);}
-public AttackSettings withElytraDelaySwitch(boolean v){return new AttackSettings(useTp,maceSwap,invSwap,selectWeapon,antiShieldSwap,useAttack,v,criticalSprint,maceVClip,swingHand);}
-public AttackSettings withCriticalSprint(boolean v){return new AttackSettings(useTp,maceSwap,invSwap,selectWeapon,antiShieldSwap,useAttack,elytraDelaySwitch,v,maceVClip,swingHand);}
-public AttackSettings withMaceVClip(boolean v){return new AttackSettings(useTp,maceSwap,invSwap,selectWeapon,antiShieldSwap,useAttack,elytraDelaySwitch,criticalSprint,v,swingHand);}
-public AttackSettings withSwingHand(boolean v){return new AttackSettings(useTp,maceSwap,invSwap,selectWeapon,antiShieldSwap,useAttack,elytraDelaySwitch,criticalSprint,maceVClip,v);}
+            boolean swingHand,
+            GhostHandMode ghostHandMode) {
+public AttackSettings withUseTp(boolean v){return new AttackSettings(v,maceSwap,invSwap,selectWeapon,antiShieldSwap,useAttack,elytraDelaySwitch,criticalSprint,maceVClip,swingHand,ghostHandMode);}
+public AttackSettings withMaceSwap(boolean v){return new AttackSettings(useTp,v,invSwap,selectWeapon,antiShieldSwap,useAttack,elytraDelaySwitch,criticalSprint,maceVClip,swingHand,ghostHandMode);}
+public AttackSettings withInvSwap(boolean v){return new AttackSettings(useTp,maceSwap,v,selectWeapon,antiShieldSwap,useAttack,elytraDelaySwitch,criticalSprint,maceVClip,swingHand,ghostHandMode);}
+public AttackSettings withSelectWeapon(boolean v){return new AttackSettings(useTp,maceSwap,invSwap,v,antiShieldSwap,useAttack,elytraDelaySwitch,criticalSprint,maceVClip,swingHand,ghostHandMode);}
+public AttackSettings withAntiShieldSwap(boolean v){return new AttackSettings(useTp,maceSwap,invSwap,selectWeapon,v,useAttack,elytraDelaySwitch,criticalSprint,maceVClip,swingHand,ghostHandMode);}
+public AttackSettings withUseAttack(boolean v){return new AttackSettings(useTp,maceSwap,invSwap,selectWeapon,antiShieldSwap,v,elytraDelaySwitch,criticalSprint,maceVClip,swingHand,ghostHandMode);}
+public AttackSettings withElytraDelaySwitch(boolean v){return new AttackSettings(useTp,maceSwap,invSwap,selectWeapon,antiShieldSwap,useAttack,v,criticalSprint,maceVClip,swingHand,ghostHandMode);}
+public AttackSettings withCriticalSprint(boolean v){return new AttackSettings(useTp,maceSwap,invSwap,selectWeapon,antiShieldSwap,useAttack,elytraDelaySwitch,v,maceVClip,swingHand,ghostHandMode);}
+public AttackSettings withMaceVClip(boolean v){return new AttackSettings(useTp,maceSwap,invSwap,selectWeapon,antiShieldSwap,useAttack,elytraDelaySwitch,criticalSprint,v,swingHand,ghostHandMode);}
+public AttackSettings withSwingHand(boolean v){return new AttackSettings(useTp,maceSwap,invSwap,selectWeapon,antiShieldSwap,useAttack,elytraDelaySwitch,criticalSprint,maceVClip,v,ghostHandMode);}
+        public AttackSettings withGhostHandMode(GhostHandMode v){return new AttackSettings(useTp,maceSwap,invSwap,selectWeapon,antiShieldSwap,useAttack,elytraDelaySwitch,criticalSprint,maceVClip,swingHand,v);}
         public boolean isVanilla() {
             return !useTp && !elytraDelaySwitch && !maceVClip && !useAttack;
         }

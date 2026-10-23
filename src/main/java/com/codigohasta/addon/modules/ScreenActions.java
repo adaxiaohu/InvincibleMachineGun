@@ -18,14 +18,6 @@ import net.minecraft.util.hit.EntityHitResult;
 import net.minecraft.util.hit.HitResult;
 import net.minecraft.util.math.BlockPos;
 
-/**
- * ScreenActions - 界面操作快捷键
- * 在 GUI 界面(背包/箱子/潜影盒等)打开时，按下自定义快捷键执行放置/破坏/交互/使用/攻击操作。
- * 全部使用直接发包。
- *
- * 按键检测：TickEvent.Pre + Keybind.isPressed() + 边缘检测
- * 此模式已在 AdaPacketMine.handleKeyToggles() 中验证有效
- */
 public class ScreenActions extends Module {
 
     public enum ActionType {
@@ -61,7 +53,7 @@ public class ScreenActions extends Module {
 
     public ScreenActions() {
         super(AddonTemplate.CATEGORY, "界面操作快捷键",
-            "在GUI界面(背包/箱子等)打开时，按下自定义快捷键执行放置/破坏/交互/使用/攻击操作。这个功能有助于在一些用cmi插件的右键打开潜影盒的服务器上可以刷物品");
+            "在GUI界面(背包/箱子等)打开时，按下自定义快捷键执行放置/破坏/交互/使用/攻击操作。有神秘效果");
 
         range = sgGeneral.add(new IntSetting.Builder()
             .name("操作距离")

@@ -1,0 +1,10 @@
+{
+  "providers": [
+    {
+      "type": "ttf",
+      "file": "invincible_machine_gun:sf_regular.ttf",
+      "size": 8.0,
+      "oversample": 2.0
+    }
+  ]
+}
