@@ -1,2 +1,27 @@
+SlimefunHelper
+==============
 
-SlimefunHelper 多数模块集成在 没敌机关枪了
+本项目（InvincibleMachineGun / 没敌机关枪）的部分模块改编自 SlimefunHelper。
+
+上游项目：SlimefunHelper
+原始命名空间：me.matl114
+原始许可证：CC0 1.0 Universal（Public Domain Dedication）
+许可证全文见：META-INF/licenses/SlimefunHelper-CC0-1.0.txt
+
+包含改编代码的包：
+  com.codigohasta.addon.modules.slimefunhelper
+  com.codigohasta.addon.utils.slimefunhelper
+  com.codigohasta.addon.mixin.slimefunhelper
+
+改编内容涉及移动、战斗、采矿、库存与打印、聊天与合成工具，
+以及其支撑的事件、数据包与状态管理代码。
+
+这些模块在本地维护，已适配：
+  - Meteor Client 的设置系统、生命周期与渲染器
+  - Minecraft 1.21.11 Yarn 映射
+  - 本项目既有的 Baritone 集成
+
+本项目不加载、也不依赖原始 SlimefunHelper 模块。
+
+CC0 1.0 允许在无附加条件的情况下使用、修改与再分发该作品。
+此处声明仅为溯源与致谢。
