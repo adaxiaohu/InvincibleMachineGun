@@ -1,5 +1,5 @@
 [versions]
-mod-version = "1.8.5"
+mod-version = "1.9.0"
 
 # Fabric (https://fabricmc.net/develop)
 minecraft = "1.21.11"
@@ -26,7 +26,7 @@ fabric-loader = { module = "net.fabricmc:fabric-loader", version.ref = "fabric-l
 # Meteor client
 meteor-client = { module = "meteordevelopment:meteor-client", version.ref = "meteor" }
 
-# JSVG（CatLean 的图标库用它把 vector/*.svg 栅格化；MIT、零传递依赖）
+# JSVG（图标库用它把 vector/*.svg 栅格化；MIT、零传递依赖）
 jsvg = { module = "com.github.weisj:jsvg", version.ref = "jsvg" }
 
 # Mods
