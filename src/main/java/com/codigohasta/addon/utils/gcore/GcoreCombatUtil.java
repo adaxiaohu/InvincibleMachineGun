@@ -116,18 +116,6 @@ public final class GcoreCombatUtil {
         return !stack.isEmpty() && stack.getItem() == Items.TOTEM_OF_UNDYING;
     }
 
-    /**
-     * ★ 是否应该对该目标启用「图腾绕过」（连续递增攻击）。
-     *
-     * <p>原实现是「开关打开就对所有目标连击」，对没有图腾的目标纯属浪费
-     * （多发好几套伪造包，还更容易被反作弊盯上）。
-     *
-     * <p>判据（任一成立才连击）：
-     * <ol>
-     *     <li>目标<b>手上</b>持有图腾 → 需要打穿</li>
-     *     <li>目标<b>刚刚</b>消耗过图腾 → 它可能还会补，且此时血只剩 1</li>
-     * </ol>
-     */
     public static boolean shouldCompatTotem(LivingEntity target) {
         if (target == null) {
             return false;

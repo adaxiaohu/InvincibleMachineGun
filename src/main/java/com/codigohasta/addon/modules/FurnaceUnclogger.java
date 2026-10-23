@@ -311,7 +311,6 @@ public class FurnaceUnclogger extends Module {
         }
     }
 
-
     @EventHandler
     private void onInteractBlock(InteractBlockEvent event) {
         if (mc.player == null || mc.world == null || openingAutomatically) return;
@@ -560,7 +559,6 @@ public class FurnaceUnclogger extends Module {
         }
 
         // QUICK_MOVE 在背包空间不足时可能只移动一部分。
-        // THROW 正常情况下会一次清空；如果服务器/反作弊拒绝，则重试。
         if (cleanAttempts < maxRetries.get()) {
             stage = Stage.PickingUp;
             timer = actionDelay.get();
@@ -829,7 +827,6 @@ public class FurnaceUnclogger extends Module {
             return title;
         }
     }
-
 
     public enum RenderMode {
         Both("填充和边框", ShapeMode.Both),

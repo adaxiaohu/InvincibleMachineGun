@@ -23,7 +23,7 @@ import com.codigohasta.addon.mixin.InventoryAccessor;
 
 public class ScaffoldPlusLeaves extends Module {
     public ScaffoldPlusLeaves() {
-        super(AddonTemplate.CATEGORY, "L搭路2", "来自leaveshack的自动搭路，grim能搭但是反作弊标记一堆。");
+        super(AddonTemplate.CATEGORY, "L搭路2", "自动搭路，grim能搭但是会被标记。");
     }
     private final SettingGroup sgGeneral = this.settings.getDefaultGroup();
     private final SettingGroup sgRender = settings.createGroup("Render");

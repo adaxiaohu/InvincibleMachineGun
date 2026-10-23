@@ -93,7 +93,7 @@ public class AutoChestAura extends Module {
     private boolean isPending = false; // 是否处于“已点击但未完成”的状态
 
     public AutoChestAura() {
-        super(AddonTemplate.CATEGORY, "自动开箱子光环", "高速自动开箱，添加ChestTraker列表用。不知道能不能绕反作弊");
+        super(AddonTemplate.CATEGORY, "自动开箱子光环", "高速自动开箱，添加ChestTraker列表用。兼容性未测试");
     }
 
     @Override

@@ -78,7 +78,7 @@ public class TpBowAura extends Module {
     // =================[ TP Settings ] =================
     private final Setting<Double> moveDistance = sgTp.add(new DoubleSetting.Builder()
         .name("移动步长 (防拉回)")
-        .description("计算滞留包时每次切片的最大距离，用于欺骗反作弊速度检测。")
+        .description("计算滞留包时每次切片的最大距离。")
         .defaultValue(8.0)
         .min(1.0)
         .sliderMax(20.0)

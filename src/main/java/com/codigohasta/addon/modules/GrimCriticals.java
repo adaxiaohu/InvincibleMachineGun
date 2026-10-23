@@ -197,7 +197,7 @@ public class GrimCriticals extends Module {
                 // 修复 2: 手动发送攻击包，确保 [跳起 -> 落下 -> 攻击] 的顺序绝对正确
                 mc.player.networkHandler.sendPacket(PlayerInteractEntityC2SPacket.attack(target, mc.player.isSneaking()));
                 
-                this.postUpdateGround = true; // 下一 tick 修正地面状态防止被反作弊拉回
+                this.postUpdateGround = true; // 下一 tick 修正地面状态防止被拉回
                 this.lastAttackTime = System.currentTimeMillis();
                 break;
             }

@@ -159,8 +159,8 @@ A personal addon for the Meteor client that adds various entertainment modules. 
 
 **近战战斗模块**
 - SilentAura - 静默杀戮光环，无声攻击
-- AdvancedCriticals - 高级暴击系统 (Alien V4 MaceSpoof 移植版)
-- GrimCriticals - GrimAC 风格暴击系统
+- AdvancedCriticals - 高级暴击系统
+- GrimCriticals - 暴击系统
 - TotemSmash - 图腾破坏者，快速摧毁不死图腾
 - TeleportCriticals - 传送暴击，结合瞬移的暴击系统
 - TpAura - 如来神掌，从天而降的掌法
@@ -171,7 +171,7 @@ A personal addon for the Meteor client that adds various entertainment modules. 
 - AnchorGod - 锚点之神，利用重生锚进行战斗
 - AutoCrystalPlus - 自动水晶增强版，智能放置和引爆水晶
 - MaceDMGPlus - 降龙十八掌，锤子伤害增强系统
-- xhGrimAura - 高度定制的 GrimAC 杀戮光环
+- xhGrimAura - 高度定制的杀戮光环
 - MacePathAura - 寻路版降龙十八掌，智能绕路 + 重锤秒杀
 - MaceBreakerPro - 没敌打断，飞机大炮式盾牌打断
 - SmartTPAura - 智能传送光环，集成 LB/Jigsaw 灵魂的终极百米瞬移
@@ -203,7 +203,7 @@ A personal addon for the Meteor client that adds various entertainment modules. 
 - AntiAntiXray - 反反矿透 Pro Max，智能防误用矿透系统
 - MineESP - 挖掘提示，高亮显示其他玩家正在挖掘的方块
 - OreVeinESP - 矿脉扫描，高性能矿脉扫描与 Baritone 联动
-- xhPacketMinePlus - 发包挖掘增强版，Bypass Ground Optimized
+- xhPacketMinePlus - 发包挖掘增强版，空中挖掘优化
 - AutoDeoxidizer - 自动除锈，铜块除锈系统
 
 ### 聊天与社交类模块 (Chat & Social)
@@ -247,7 +247,7 @@ A personal addon for the Meteor client that adds various entertainment modules. 
 - MusicPlayer - 音乐播放器，全自动点歌机
 - VanishDetector - 消失检测器，检测玩家消失
 - AdvancedFakePlayer - 高级假人，能受击的假人
-- AntiSignGUI - 告示牌 GUI，绕过告示牌限制
+- AntiSignGUI - 告示牌 GUI 辅助
 - CreativeLavaMountain - 创造模式熔岩山，快速建造熔岩山
 - RTsearch - 实时搜索，实时搜索功能
 - xhEntityList - 实体列表，显示实体信息

@@ -28,7 +28,7 @@ public class MaceBreakerPro extends Module {
     private final Setting<Boolean> autoReturn = sgGeneral.add(new BoolSetting.Builder().name("攻击后切回").description("完成后切回最初的武器。").defaultValue(true).build());
 
     public MaceBreakerPro() {
-        super(AddonTemplate.CATEGORY, "没敌打断", "飞机大炮式。就是一个秒切模块，不能绕过反作弊");
+        super(AddonTemplate.CATEGORY, "没敌打断", "飞机大炮式。就是一个秒切模块，兼容性有限");
     }
 
     @EventHandler

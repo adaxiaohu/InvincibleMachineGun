@@ -201,11 +201,10 @@ public class MaceDMGPlus extends Module {
     // --- 新增：空气检查开关 ---
     private final Setting<Boolean> airCheck = sgExploit.add(new BoolSetting.Builder()
         .name("空气检查 (防回弹)")
-        .description("开启：检查头顶是否有空气（稳健，防反作弊）。关闭：无视地形强制发包（暴力，可在2格高使用）。")
+        .description("开启：检查头顶是否有空气（稳健）。关闭：无视地形强制发包（暴力，可在2格高使用）。")
         .defaultValue(true)
         .build()
     );
-
 
     public enum OverBudgetMode {
         LowerHeight("降低高度继续", "把伪造高度降到本 tick 装得下的最大值没用"),
@@ -766,7 +765,6 @@ public class MaceDMGPlus extends Module {
         int blocks;
         // --- 逻辑分流：空气检查 vs 没敌模式 ---
         if (airCheck.get()) {
-            //  检查头顶空气，防止反作弊回弹
             blocks = getMaxHeightAbovePlayer();
             BlockPos isopenair1 = mc.player.getBlockPos().add(0, blocks, 0);
             BlockPos isopenair2 = mc.player.getBlockPos().add(0, blocks + 1, 0);
@@ -781,7 +779,6 @@ public class MaceDMGPlus extends Module {
             // 没敌模式，直接使用设定值，无视地形
             blocks = maxPower.get() ? 170 : fallHeight.get();
         }
-
 
         if (!airCheck.get() && dynamicHeight.get() && mc.world != null) {
             double maxMace = blocks;
@@ -946,7 +943,6 @@ public class MaceDMGPlus extends Module {
         if (preventDeath.get()) {
             mc.player.fallDistance = 0;
         }
-
 
     }
 

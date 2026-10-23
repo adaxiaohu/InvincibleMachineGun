@@ -57,7 +57,7 @@ public class KnockbackDirection extends Module {
     private boolean isInternalAttack = false;
 
     public KnockbackDirection() {
-        super(AddonTemplate.CATEGORY, "knockback-direction", "控制击退方向，反作弊服务器不会绕过。原理就是这样的，转头attack");
+        super(AddonTemplate.CATEGORY, "knockback-direction", "控制击退方向。原理就是这样的，转头attack");
     }
 
     // --- 滚轮调整偏移量 ---

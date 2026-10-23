@@ -13,7 +13,7 @@ import net.minecraft.network.packet.c2s.play.UpdateSelectedSlotC2SPacket;
 
 public class adaAttributeSwap extends Module {
     public adaAttributeSwap() {
-        super(AddonTemplate.CATEGORY, "矛冲刺", "自动属性交换，可以自动换成矛冲刺，可以优化一下成指定某个快捷键按下时候触发。没有测试是否能在反作弊环境使用");
+        super(AddonTemplate.CATEGORY, "矛冲刺", "自动属性交换，可以自动换成矛冲刺，可以优化一下成指定某个快捷键按下时候触发。没有测试是否能在严格服务器上使用");
     }
 
     private final SettingGroup sgGeneral = settings.getDefaultGroup();
