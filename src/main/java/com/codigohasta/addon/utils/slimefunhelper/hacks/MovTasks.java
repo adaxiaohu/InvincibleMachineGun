@@ -35,7 +35,6 @@ import org.apache.commons.lang3.mutable.MutableObject;
 public final class MovTasks {
 private static final net.minecraft.client.MinecraftClient mc=net.minecraft.client.MinecraftClient.getInstance();
     public static boolean hasHorizontalCollision(Entity entity,Vec3d move){
-        // Ported from upstream 1.1.7.2: passengers never register a horizontal collision, and
         // the comparison uses MathHelper.approximatelyEquals against a server-mode simulation.
         if (entity.hasPassengers()) {
             return false;
@@ -56,7 +55,6 @@ private static final net.minecraft.client.MinecraftClient mc=net.minecraft.clien
     public static FloatingUtils getFloatingUtils(){return FloatingUtils.INSTANCE;}
     public static NoFall getNoFall(){return meteordevelopment.meteorclient.systems.modules.Modules.get().get(NoFall.class);}
     public static boolean isCollidingWithEnvironment(Entity entity){
-        // Ported from upstream 1.1.7.2: uses CollisionUtil.getCollisionsForBlocksOrWorldBorder
         // with COLLISION_FLAG_CHECK_BORDER instead of vanilla isSpaceEmpty, so the result matches
         // the server's collision set (world border included).
         final List<Box> collisionsBB = new java.util.ArrayList<>();

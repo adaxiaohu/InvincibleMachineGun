@@ -31,7 +31,7 @@ public class TargetStrafe extends Module {
     }
 
     public TargetStrafe() {
-        super(AddonTemplate.CATEGORY, "目标绕圈", "自动围绕目标移动，进行风筝走位。抄袭的meteorv2，没用的功能");
+        super(AddonTemplate.CATEGORY, "目标绕圈", "自动围绕目标移动，进行风筝走位。没用的功能");
     }
 
     private final SettingGroup sgGeneral = settings.getDefaultGroup();

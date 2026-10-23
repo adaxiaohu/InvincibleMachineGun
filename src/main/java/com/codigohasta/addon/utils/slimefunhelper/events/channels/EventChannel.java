@@ -2,7 +2,6 @@ package com.codigohasta.addon.utils.slimefunhelper.events.channels;
 
 import com.codigohasta.addon.utils.slimefunhelper.events.Event;
 
-/** Ported from upstream 1.1.7.2 {@code me.matl114.events.channels.EventChannel}. */
 public class EventChannel<T> extends ListenerPoint<Event<T>> {
     private static final Object[] VALUES = new Object[0];
 

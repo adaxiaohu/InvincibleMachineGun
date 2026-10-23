@@ -115,7 +115,7 @@ public class TpBowAura extends Module {
     private final List<Vec3d> renderPath = new ArrayList<>();
 
     public TpBowAura() {
-        super(AddonTemplate.CATEGORY, "明枪暗箭", "一瞬间传送到目标身边用弓射箭打他。娱乐功能，抄袭了gcore，裤子条纹");
+        super(AddonTemplate.CATEGORY, "明枪暗箭", "一瞬间传送到目标身边用弓射箭打他。娱乐功能");
     }
 
     @Override

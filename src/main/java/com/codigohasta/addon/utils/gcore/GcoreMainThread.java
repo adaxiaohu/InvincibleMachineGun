@@ -6,31 +6,6 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
-/**
- * 「把一段逻辑送回客户端主线程执行并等它跑完」的小桥。
- *
- * <h2>为什么需要它（方案 2 的直接后果）</h2>
- * TP 锚的规划跑在**虚拟线程**上（见 {@code TpAnchorAura.doAura}），这是源的设计
- * ——一次 TP 要跑成千上万次碰撞采样，放主线程会掉帧。
- *
- * <p>旧实现之所以能在虚拟线程里安全地推进整个流程，是因为它**只碰影子背包**
- * （{@code GcoreItemManager.SimulationPlayerInventory}）——一份自己的副本。
- * 代价是副本会与真实背包漂移（真实翻车点：空手时 {@code ItemStack.EMPTY}
- * 单例导致切回错误的槽）。
- *
- * <p>方案 2 改成**直接操作真实背包**（{@code interactionManager.clickSlot}），
- * 于是「虚拟线程」与「真实背包」第一次相遇。真实背包 / {@code ScreenHandler} /
- * 发包都**只能主线程碰**，否则与渲染线程竞争。所以：
- * <blockquote>
- * 规划留在虚拟线程，<b>执行段交回主线程</b>。
- * </blockquote>
- *
- * <h2>为什么可以直接阻塞等待</h2>
- * 调用方是**虚拟线程**。虚拟线程阻塞时会从载体线程（carrier）上卸载，
- * 不会占住 ForkJoinPool 的工作线程，所以 {@link CountDownLatch#await()} 是廉价且安全的。
- * 反过来，如果调用方是平台线程（或在主线程上），则会变成真阻塞 —— 因此本类在
- * 主线程调用时**直接就地执行**，绝不排队等待（否则必然死锁）。
- */
 public final class GcoreMainThread {
 
     /**

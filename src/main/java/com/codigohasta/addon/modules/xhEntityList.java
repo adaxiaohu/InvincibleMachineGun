@@ -217,7 +217,7 @@ public class xhEntityList extends Module {
     private final Set<Integer> loggedEntities = new HashSet<>();
 
     public xhEntityList() {
-        super(AddonTemplate.CATEGORY, "实体列表栏", "在屏幕上显示周围实体和掉落物的统计列表。抄袭的lotus的模块，并且在基础上做了一些更改");
+        super(AddonTemplate.CATEGORY, "实体列表栏", "在屏幕上显示周围实体和掉落物的统计列表。");
     }
 
     @Override

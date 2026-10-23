@@ -11,38 +11,11 @@ import net.minecraft.util.math.Vec3d;
 import java.util.Map;
 import java.util.function.BiConsumer;
 
-/**
- * TP 引擎。
- *
- * <p>移植自 {@code dev.godden.core.Utils.TpUtil}（GCore）。
- * 源是 Kotlin `object`，Java 里改为静态方法。
- *
- * <p>这是**整个 TP 锚的核心**，7 个 TP 模块（锚/水晶/弓/活塞/活塞水晶/CEV/自带）
- * 共用它。一次传送的完整流程：
- * <ol>
- *     <li>{@link #findVClipVecToMove} —— 找「出去」时的垂直穿墙点</li>
- *     <li>{@link #findVClipVecToMove} —— 找「回来」时的垂直穿墙点</li>
- *     <li>算包数预算，超过 {@code LimitPacket} 就放弃</li>
- *     <li>重复发「起点」包填充时间窗口</li>
- *     <li>发「出去点」与「目标点」包</li>
- *     <li>在目标点执行传入的 {@code action}（放锚/点火/攻击）</li>
- *     <li>按 {@code back} 决定「传回原位」还是「真的留在那」</li>
- * </ol>
- *
- * <p><b>不触发服务端拉回的原理</b>：默认 {@code back = true} 时，
- * **全程只发移动包、不调 {@code player.setPosition()}** ——
- * 服务端处理完这一批包后玩家仍在原点，与客户端一致，所以没有拉回的理由。
- */
 public final class GcoreTpUtil {
 
     private GcoreTpUtil() {
     }
 
-    /**
-     * 便捷版：从 {@link GcoreTpOption} 读参数。
-     *
-     * <p>对应源里模块直接调用的那个重载。
-     */
     public static void doTpMove(GcoreTpOption tpOption, Vec3d fromVec, Vec3d toVec,
                                 Map<BlockPos, BlockState> extraPosMap,
                                 BiConsumer<MovePacketCounter, Vec3d> action) {
@@ -60,12 +33,6 @@ public final class GcoreTpUtil {
             tpOption.getServerStepMult());
     }
 
-    /**
-     * 完整版。
-     *
-     * <p>参数展开对应源的 {@code doTpMove$default} 默认值：
-     * {@code vClipSearchStep = 1.8}、{@code extraPosMap = bufferMap}。
-     */
     public static void doTpMove(GcoreTpOption.TpVClipFindType type, Vec3d fromVec, Vec3d toVec,
                                 double moveDistance, double vClipSearchStep, boolean back,
                                 boolean allowIntoVoid, int limitPacket, boolean printWhenTooManyPacket,
@@ -121,14 +88,11 @@ public final class GcoreTpUtil {
         //   「该高度上 checkCanMove(拱顶水平段) 可通」，正是拱门需要的性质。
         //
         //   ★ 整段拱门与「摔落申报」都收在同一个开关下：网关关闭时
-        //     必须**逐字退回源行为**（单跳 + onGround 照源），否则
         //     TPServerEquivalent 就不再是「可开关的实验性修复」，
-        //     无法与源行为做 A/B 对照。
         boolean arch = GcoreServerEquivMove.shouldUseForCurrentThread();
         Vec3d goArchVec = arch ? new Vec3d(toVec.x, goVClipVec.y, toVec.z) : goVClipVec;
         Vec3d backArchVec = arch ? new Vec3d(fromVec.x, backVClipVec.y, fromVec.z) : backVClipVec;
 
-        // ★ 包数预算：源的公式是 max(a, b, c) - 1 + 4。
         //   注意 c 用 fromVec -> toVec（不是 toVec -> toVec），源在这里是正确的
         //   （acid 的同类实现有 c 恒为 0 的 bug，GCore 没有）。
         //
@@ -203,13 +167,10 @@ public final class GcoreTpUtil {
 
         // ★★ 关于 onGround：源调用的是 `sendC04$default(..., false, 8, null)` ——
         //   最后一个 int 是 Kotlin 默认参数掩码，`n & 8` 为真时
-        //   **把传入的 false 覆盖成 true**（字节码：`iconst_1; istore 7`）。
         //   所以源实际发出的**所有** TP 包都声明「在地面」。
         //
-        //   ⛔ 但**不能照抄这个 true**：服务端在收到 onGround=true 的包时，
         //      若 fallDistance 已累积，会**当场结算摔落伤害**
         //      （见 GamePacketListenerImpl 第 1705 行 doCheckFallDamage）。
-        //      拱门下降段有 2.8~4.1 格，照抄 true 就会掉血。
         //      正确做法是全程 false + 末尾补一个抬高包清债，见 clearFallDebt()。
         //
         //   （历史上曾把「直线被墙挡住就真站到 TP 点」归因于传 false 触发飞行校验 ——
@@ -228,7 +189,6 @@ public final class GcoreTpUtil {
             counter.sendC04(goArchVec.x, goArchVec.y, goArchVec.z, false);
             counter.sendC04(toVec.x, toVec.y, toVec.z, false);
         } else {
-            // 网关关闭 → 逐字退回源行为：单跳 + onGround 照源（true）。
             counter.sendC04(goVClipVec.x, goVClipVec.y, goVClipVec.z);
             counter.sendC04(toVec.x, toVec.y, toVec.z);
         }
@@ -292,25 +252,6 @@ public final class GcoreTpUtil {
         counter.sendC04(at.x, at.y + 9E-8, at.z, false);
     }
 
-    /**
-     * 找一个可以从 {@code fromVec} 出发、到达 {@code toVec} 的垂直穿墙点。
-     *
-     * <p>从 {@code step = 0} 开始，每次加 {@code searchStep}，最多扫到 200 格：
-     * <ul>
-     *     <li>{@code ALL}：每个 step 先试上方，再试下方</li>
-     *     <li>{@code OnlyUp}：只试上方，找不到就整体结束</li>
-     *     <li>{@code OnlyDown}：只试下方，找不到就整体结束</li>
-     * </ul>
-     *
-     * <p>两个必要条件是**都要满足**（比 acid 严谨的地方）：
-     * <ol>
-     *     <li>{@code checkNoPosCollie(candidate)} —— 候选点本身不卡方块</li>
-     *     <li>{@code checkCanMove(candidate, toVec)} —— 而且能连通到目标</li>
-     * </ol>
-     *
-     * <p>{@code voidY} 判定：主世界是 -64，其余维度是 0
-     * （源用 {@code DimensionEffects.SkyType} 判断）。
-     */
     public static Vec3d findVClipVecToMove(Vec3d fromVec, Vec3d toVec, double searchStep,
                                            boolean allowIntoVoid, GcoreTpOption.TpVClipFindType type,
                                            Map<BlockPos, BlockState> extraPosMap) {
@@ -328,7 +269,6 @@ public final class GcoreTpUtil {
 
         double step = 0.0;
 
-        // ★ 版本适配（1.20.4 → 1.21.11）：源用的是
         //     clientWorld.getDimensionEffects().getSkyType()
         //     voidY = (skyType == NORMAL) ? -64 : 0
         //   `DimensionEffects` 在 1.21.11 已被移除。
@@ -336,10 +276,8 @@ public final class GcoreTpUtil {
         //   所以改用 `world.getBottomY()` —— 语义完全等价，且对自定义维度更准确。
         int voidY = MinecraftClient.getInstance().world.getBottomY();
 
-        // ★ 必须用带标签的循环，因为源里 `continue block5` 与 `break` 语义不同：
         //     continue block5 -> 跳回 while 条件（**跳过 step += searchStep**）
         //     break           -> 只跳出 switch，之后仍会执行 step += searchStep
-        //   Java 的经典 switch 语句与源结构一一对应，所以照抄。
         block5:
         while (step <= 200.0) {
             switch (type) {
@@ -390,28 +328,6 @@ public final class GcoreTpUtil {
             GcoreBlockUtil.getBufferMap());
     }
 
-    /**
-     * 拱门形搜索 —— 找「同一个高度上，水平段能走通」的拱顶 y。
-     *
-     * <p><b>为什么必须有这个</b>：源 GCore 搜的是「一个 y，使
-     * {@code checkCanMove((from.x, y, from.z) → toVec)} 成立」，
-     * 即**一条对角跳**。而服务端 {@code player.move()} 逐轴移动（先 Y 后水平），
-     * 对角跳被拆开后水平那一半仍然直撞墙 → {@code movedWrongly} → 回拉。
-     *
-     * <p>实测（档案 4.20，黑曜石篮子场景）：
-     * <pre>
-     * 纯水平穿墙   dxz2 = 7.85 / 5.29 / 3.25   ❌ 被挡
-     * 一条对角跳   dxz2 = 7.85 / 5.29 / 3.25   ❌ 同样被挡（这就是源的做法）
-     * 拱门形三段   每段 dxz2 = 0.0000          ✅ 服务端全程放行
-     * </pre>
-     *
-     * <p>本方法返回**拱顶起点** {@code (from.x, apexY, from.z)}；
-     * 调用方据此构造拱顶终点 {@code (to.x, apexY, to.z)}，
-     * 于是路径成为 <b>竖直升 → 水平横移 → 竖直降</b> 的拱门。
-     *
-     * <p>三段全部用服务端等价判定（{@link GcoreBlockUtil#checkCanMove}）验证，
-     * 所以只要本方法返回非 null，三段都保证服务端会放行。
-     */
     public static Vec3d findArchVecToMove(Vec3d fromVec, Vec3d toVec, double searchStep,
                                           boolean allowIntoVoid, GcoreTpOption.TpVClipFindType type,
                                           Map<BlockPos, BlockState> extraPosMap) {
@@ -420,7 +336,6 @@ public final class GcoreTpUtil {
 
         double step = 0.0;
         while (step <= 200.0) {
-            // 与源一致的方向选择：ALL 先上后下；OnlyUp 只上；OnlyDown 只下。
             boolean tryUp = type != GcoreTpOption.TpVClipFindType.OnlyDown;
             boolean tryDown = type != GcoreTpOption.TpVClipFindType.OnlyUp;
 
@@ -458,7 +373,6 @@ public final class GcoreTpUtil {
     private static Vec3d tryArchApex(Vec3d fromVec, Vec3d toVec, double apexY, int voidY,
                                      boolean allowIntoVoid, Map<BlockPos, BlockState> extraPosMap,
                                      GcorePlayerUtil.PlayerState state) {
-        // 与源相同的虚空保护：起点已低于世界底部时不再往上/下探
         if (allowIntoVoid && fromVec.y <= (double) voidY) {
             return null;
         }
@@ -528,18 +442,6 @@ public final class GcoreTpUtil {
             fromVec, toVec, extraPosMap, state, player.getStepHeight(), false);
     }
 
-    /**
-     * 发一个「位置 + 是否在地面」的移动包。
-     *
-     * <p>注意：输出的 {@code onGround} 恒为 true —— 源调用点传 {@code false}
-     * 但 Kotlin 默认参数掩码把它覆盖成 {@code true}（{@code n & 8}）。
-     * 移植后用 {@link MovePacketCounter#sendC04} 统一处理。
-     *
-     * <p><b>版本适配（1.20.4 → 1.21.11）</b>：1.21.11 的
-     * {@code PositionAndOnGround} 构造器新增第 5 个参数
-     * {@code horizontalCollision}（是否发生水平碰撞，已查映射确认）。
-     * 源里没有这个概念，这里传 {@code false}（未碰撞）作为中性值。
-     */
     public static void sendMovePacket(double x, double y, double z, boolean onGround) {
         MinecraftClient.getInstance().getNetworkHandler()
             .sendPacket(new PlayerMoveC2SPacket.PositionAndOnGround(x, y, z, onGround, false));
@@ -552,45 +454,10 @@ public final class GcoreTpUtil {
 
     // ═══════════════════════ 找「能打到目标的站位」═══════════════════════
 
-    /** {@link #findVecToAttack} 的扫描半径（源里硬编码 7，无设置项）。 */
     public static final int FIND_VEC_SCAN_BORDER = 7;
     /** {@link #findVecToAttack} 的虚空 Y 门槛（源 370-412 行，与其它地方一致）。 */
     private static final double FIND_VEC_VOID_Y = -64.0;
 
-    /**
-     * 在目标周围找一个「站得住、又打得到它」的位置。
-     *
-     * <p>移植自源 {@code TpUtil.findVecToAttack}（源 370-412 行，44 行）。
-     * 这是 {@code ModuleGTpaura} 唯一缺失的依赖。
-     *
-     * <pre>
-     * cx = floor(targetVec.x); cy = floor(targetVec.y); cz = floor(targetVec.z);
-     * scanBorder = 7;                                     // ★ 硬编码
-     * for (xf = cx-7; xf &lt;= cx+7; xf++)
-     *   for (yf = cy-7; yf &lt;= cy+7; yf++)
-     *     for (zf = cz-7; zf &lt;= cz+7; zf++) {
-     *         if (yf &gt; -64) {                             // ★ 虚空门槛
-     *             vec = (xf + 0.5, yf + 0.0, zf + 0.5);
-     *             if (checkNoPosCollie(vec)
-     *                 &amp;&amp; checkCanHit(vec, 1.62, targetVec, targetEyeY, 6.0, 3.0))
-     *                 return vec;                      // ★ 第一个命中的就返回（无排序）
-     *         }
-     *     }
-     * return null;
-     * </pre>
-     *
-     * <p><b>★ 四个硬编码参数照抄，不要改成模块设置</b>：
-     * 扫描半径 {@code 7}、攻击者眼高 {@code 1.62}、
-     * 命中距离 {@code 6.0}、穿墙距离 {@code 3.0}。
-     * 源里它们都不是设置项 —— 改成可调会偏离源行为。
-     *
-     * <p><b>★ 与 {@code getSafePosToAttackCrystal} 的区别</b>：那个会算爆炸自伤并排序取最优；
-     * 这个**只看能不能打到**，命中即返回 —— 因为近战攻击没有自伤问题。
-     *
-     * @param targetVec   目标位置（实体脚部中心）
-     * @param targetEyeY  目标的眼高（模块传 {@code target.getStandingEyeHeight()}）
-     * @return 可攻击站位；找不到返回 {@code null}
-     */
     public static Vec3d findVecToAttack(Vec3d targetVec, double targetEyeY) {
         int cx = (int) Math.floor(targetVec.x);
         int cy = (int) Math.floor(targetVec.y);
@@ -669,7 +536,6 @@ public final class GcoreTpUtil {
                 .sendPacket(new PlayerMoveC2SPacket.PositionAndOnGround(x, y, z, onGround, false));
         }
 
-        /** 见 {@link #sendC04}，{@code onGround} 取源的实际值 true。 */
         public void sendC04(double x, double y, double z) {
             sendC04(x, y, z, true);
         }

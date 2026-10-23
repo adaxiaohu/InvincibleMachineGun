@@ -89,7 +89,6 @@ public class GAntiLag extends Module {
             .sliderRange(1, 20)
             .build());
 
-
         this.dedupSameTick = this.sgGeneral.add(new BoolSetting.Builder()
             .name("同刻只响应一次")
             .description("同一个tick内只对第一个回拉包做反拉")
@@ -161,7 +160,6 @@ public class GAntiLag extends Module {
 
         //  版本适配（1.20.4 → 1.21.11）：
         //   `PlayerPositionLookS2CPacket` 在 1.21.11 变成了 record，
-        //   源的 getX()/getY()/getZ()（method_11734/11735/11738）已不存在。
         //   新路径：packet.change() → EntityPosition → position() → Vec3d
         Vec3d serverPos = packet.change().position();
         Vec3d playerPos = this.mc.player.getEntityPos();

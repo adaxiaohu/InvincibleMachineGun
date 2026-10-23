@@ -19,6 +19,5 @@ public interface ClientPlayerAccess {
 default com.codigohasta.addon.utils.slimefunhelper.hacks.utils.entity.LegalMovementManager getLegalMovementManager(){return com.codigohasta.addon.utils.slimefunhelper.SlimefunRuntime.getMovement();}
 default void resyncSneak(){resyncInput();}
 void setLastRot(float pitch,float yaw);
-/** Ported from upstream 1.1.7.2 ClientPlayerEntityAccess. */
 void setResyncMovementPacketTicks(int ticks);
 }

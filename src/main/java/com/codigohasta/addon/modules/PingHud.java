@@ -8,7 +8,7 @@ public class PingHud extends AbstractRowHud {
     private static final int UNKNOWN = -1;
 
     public PingHud() {
-        super("ping-hud", "延迟 HUD（模仿 CatLean 的 ping-widget）。", 815, 474, 0.9);
+        super("ping-hud", "延迟 HUD。", 815, 474, 0.9);
     }
 
     @Override

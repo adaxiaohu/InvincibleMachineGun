@@ -10,80 +10,8 @@ import java.util.Objects;
 import java.util.OptionalInt;
 import java.util.function.IntPredicate;
 
-/**
- * 切物品工具 —— **真实背包版**（方案 2，取代影子背包）。
- *
- * <p>移植自 {@code dev.godden.core.Utils.NewItemUtil}（GCore），但**发包层已重写**：
- * 用户明确要求「参考 sfIMG 的鬼手切换（鞘翅追人/鞘翅增强那套）」，于是这里照
- * {@code modules/slimefunhelper/InvExtra} 的成熟做法重做。
- *
- * <h2>为什么不再用影子背包</h2>
- * 源实现维护一份 36 格副本（{@code ItemManager.SimulationPlayerInventory}），
- * 每次切换都靠 {@code operation()} **手工模拟**槽位互换。只要模拟与真实有一丝出入，
- * 二者就**永久分歧**。真实翻车点（用户实测「空手时 swap 失效」）：
- * <pre>
- * // 旧收尾：用「原手持**物品**」反查「原来哪只**手**」
- * findItem(range, i -&gt; simulationInv.getSlotByIndex(i) == originalItemStack);
- * </pre>
- * 空手时 {@code originalItemStack == ItemStack.EMPTY}，而 {@code EMPTY} 是**全局单例**
- * —— 每个空槽都指向它，于是命中**第一个空槽**而不是真正的手。随后
- * {@code swapTo} 走 {@code slot <= 8} 分支发 {@code UpdateSelectedSlotC2SPacket}
- * （服务端换了手持槽），而 {@code operation()} 对 {@code SwapInv} 的该分支是 no-op
- * —— 影子与真实从此分歧，后续所有 SWAP 的 button 都用错。
- *
- * <h2>新做法（与 InvExtra 同源）</h2>
- * <ol>
- *     <li><b>真相来源 = 真实客户端背包</b>，不再有副本，因此不存在分歧。</li>
- *     <li><b>切换用 {@code interactionManager.clickSlot(..., SWAP, ...)}</b> ——
- *         它会**就地改动本地背包**（{@code ClientPlayerInteractionManager} 里
- *         {@code screenHandler.onSlotClick(...)}），客户端与服务端自动一致，
- *         不需要任何手工模拟。</li>
- *     <li><b>还原靠「对称 SWAP」而不是「找回原物品」</b>：同一个
- *         {@code clickSlot} 再点一次即可复位（SWAP 是对合运算）。返回一个
- *         {@code Runnable} 让调用方在动作后执行 —— 于是旧代码那个易错的
- *         「切回原手持槽」步骤**整个消失**。</li>
- * </ol>
- *
- * <h2>怎么正确找到所需物品（用户特别问的点）</h2>
- * <ol>
- *     <li><b>按物品「类型」找，绝不按「实例」找</b>：
- *         {@code stack.getItem() == Items.RESPAWN_ANCHOR}。
- *         空手的 {@code getItem()} 是 {@code Items.AIR}，因此空手/满手**都不受影响**
- *         —— 这才是免疫 {@code ItemStack.EMPTY} 单例陷阱的根本。</li>
- *     <li><b>找到后记住「槽号」，还原时不再查找</b>。</li>
- *     <li><b>尊重 {@link GcoreEnumType.ItemMode} 给出的查找范围</b>
- *         （HotBar 0..8 / Inv、SwapInv 0..35 / None 仅选中槽）。</li>
- *     <li><b>处理三种边界</b>：命中槽 == 当前选中槽 → 无需交换；
- *         找不到 → 不动作（可按 {@code Print} 提示）；槽位解析失败 → 返回
- *         {@code null}，由调用方跳过。</li>
- * </ol>
- *
- * <p><b>★ 与源的差异（如实记录）</b>：
- * <ul>
- *     <li>{@code ItemMode.Inv} 原用 {@code PickFromInventoryC2SPacket}，该包在
- *         1.21.11 **已被移除**，故与 {@code SwapInv} 统一为 SWAP。</li>
- *     <li>{@code ItemMode.HotBar} 原语义是「直接切选中槽」（发
- *         {@code UpdateSelectedSlotC2SPacket}），现也统一为 SWAP —— 因为
- *         {@code UpdateSelectedSlot} 正是旧实现分歧的来源，而 SWAP 是
- *         sfIMG 线上**已验证可用**的那条路径。对用户可见的结果（物品到手并生效）
- *         完全一致；查找范围仍严格按 mode 走。</li>
- *     <li>{@code SwapInv} 与 {@code Inv} 的实现现在**完全收敛为同一条路径**。</li>
- * </ul>
- *
- * <p><b>★ 线程约束（重要）</b>：本类所有方法都会**触碰真实背包 / 发包**，
- * 因此**只能在客户端主线程调用**。TP 锚的规划跑在虚拟线程上，所以调用点必须
- * 把「执行段」交回主线程（见 {@code TpAnchorAura} 的 {@code mc.execute}）。
- */
 public final class GcoreNewItemUtil {
 
-    /**
-     * 找不到物品时的提示前缀。
-     *
-     * <p>取值与源常量完全一致（从 class 文件常量池读出）：
-     * <pre>
-     * public static final String notFindItemText = "\u00a77can't find item \u00a72";
-     * </pre>
-     */
     private static final String NOT_FIND_ITEM_TEXT = "\u00a77can't find item \u00a72";
 
     /** 主背包总格数（0..8 快捷栏，9..35 主区）。与 {@code getMainStacks()} 长度一致。 */
@@ -171,13 +99,6 @@ public final class GcoreNewItemUtil {
         return slot;
     }
 
-    /**
-     * 在范围内找第一个满足条件的槽。
-     *
-     * <p>{@code GcoreIntRange} 是闭区间；源的 {@code getFirst()/getLast()} 对应
-     * 本实现里 min/max 归一化后的两端（源里 HotBar/Inv/SwapInv 的区间本来就是
-     * 升序，所以语义一致）。
-     */
     public static int findItem(GcoreIntRange range, IntPredicate invoke) {
         int first = Math.min(range.getStart(), range.getStep());
         int last = Math.max(range.getStart(), range.getStep());

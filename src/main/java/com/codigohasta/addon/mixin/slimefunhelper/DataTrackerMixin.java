@@ -14,12 +14,6 @@ import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.ModifyVariable;
 
-/**
- * Ported from upstream 1.1.7.2 {@code me.matl114.mixins.events.DataTrackerEvents}.
- *
- * <p>The payload is a {@link MetadataUpdate} (entity + entry) rather than IMG's previous
- * bare {@code SerializedEntry} + {@code extraArgs(0)} convention.
- */
 @Mixin(DataTracker.class)
 public abstract class DataTrackerMixin {
     @Shadow

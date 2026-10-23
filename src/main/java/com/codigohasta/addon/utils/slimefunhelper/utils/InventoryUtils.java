@@ -37,7 +37,6 @@ private static final net.minecraft.client.MinecraftClient mc=net.minecraft.clien
             Predicate<ItemStack> predicate, boolean doNotFSearchWhenOpenOtherScreen, boolean acceptEmpty) {
         return findPlayerItem(predicate, doNotFSearchWhenOpenOtherScreen, acceptEmpty, true);
     }
-    /** Ported from upstream 1.1.7.2 InventoryUtils: bounded search (e.g. hotbar-only). */
     public static IndexEntry<ItemStack> findPlayerItem(
             Predicate<ItemStack> predicate, int size, boolean doNotFSearchWhenOpenOtherScreen, boolean acceptEmpty) {
         return findPlayerItem(predicate, size, doNotFSearchWhenOpenOtherScreen, acceptEmpty, true, false);
@@ -144,7 +143,6 @@ private static final net.minecraft.client.MinecraftClient mc=net.minecraft.clien
                 doNotFSearchWhenOpenOtherScreen,
                 acceptEmpty);
     }
-    /** Ported from upstream 1.1.7.2 InventoryUtils: bounded search (e.g. hotbar-only). */
     public static IndexEntry<ItemStack> findBestPlayerItem(
             Function<ItemStack, Double> maxFunction,
             int size,
@@ -168,7 +166,6 @@ private static final net.minecraft.client.MinecraftClient mc=net.minecraft.clien
                 maxFunction, getPlayerInvSize(), doNotFSearchWhenOpenOtherScreen, acceptEmpty, true);
     }
 
-    /** Ported from upstream 1.1.7.2 InventoryUtils: adds the search bound and hand-priority flag. */
     public static IndexEntry<ItemStack> findBestPlayerInventory(
             Function<IndexEntry<ItemStack>, Double> maxFunction,
             int searchTo,
@@ -256,7 +253,6 @@ private static final net.minecraft.client.MinecraftClient mc=net.minecraft.clien
         return findPlayerInventory(
                 predicate, getPlayerInvSize(), doNotFSearchWhenOpenOtherScreen, acceptEmpty, true, false);
     }
-    /** Ported from upstream 1.1.7.2 InventoryUtils: bounded search (e.g. hotbar-only). */
     public static IndexEntry<ItemStack> findPlayerInventory(
             Predicate<IndexEntry<ItemStack>> predicate,
             int searchTo,

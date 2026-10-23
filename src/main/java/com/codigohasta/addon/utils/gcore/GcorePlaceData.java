@@ -3,18 +3,6 @@ package com.codigohasta.addon.utils.gcore;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Direction;
 
-/**
- * 放置数据：放哪个方块、朝哪个面、目标是哪一格。
- *
- * <p>移植自 {@code dev.godden.core.Utils.ClassUtil.PlaceData}（GCore）。
- *
- * <p>字段名与源一一对应：
- * <ul>
- *     <li>{@code placePos} —— 被点击的（承载面）方块坐标</li>
- *     <li>{@code placeFacing} —— 点击的面朝向</li>
- *     <li>{@code targetPos} —— 方块实际落在哪一格</li>
- * </ul>
- */
 public final class GcorePlaceData {
 
     private final BlockPos placePos;

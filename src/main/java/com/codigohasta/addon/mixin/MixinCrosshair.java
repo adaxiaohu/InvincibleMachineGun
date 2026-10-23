@@ -11,31 +11,6 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-/**
- * 取消原版准星，交给 {@link CrosshairHud} 自绘。
- *
- * <h2>为什么必须用 mixin（✅ 取证）</h2>
- *
- * <p>Meteor 的 {@code events/render} 里<b>没有准星事件</b>（已核对：
- * 只有 {@code Render2DEvent / Render3DEvent / ApplyTransformationEvent …}）。
- * 而 CatLean 是靠它自己的 {@code CrosshairRenderEvent} + {@code GuiMixin.renderCrosshair}：
- * <pre>
- *   // CatLean 的 mixins/render/GuiMixin（字节码确证）
- *   public void renderCrosshair(...) {
- *       if (CrosshairRenderEvent.call()) {   // 有 widget 接管
- *           callbackInfo.cancel();            // ★ 取消原版准星
- *       }
- *   }
- * </pre>
- * 本项目照同一机制，但直接用 {@code Modules.get().get(CrosshairHud.class).isActive()} 判断，
- * 不需要额外的事件类。
- *
- * <h2>注入点</h2>
- * <p>{@code InGameHud.renderCrosshair(DrawContext, RenderTickCounter)} —— 该方法在
- * MC 1.21.11 里是 <b>private</b>（已用 javap 确认），所以方法名要写全：
- * mixin 对 private 方法同样可注入（走 refmap）。
- * {@code cancellable = true} + {@code ci.cancel()} 即跳过原版绘制。
- */
 @Mixin(InGameHud.class)
 public class MixinCrosshair {
 

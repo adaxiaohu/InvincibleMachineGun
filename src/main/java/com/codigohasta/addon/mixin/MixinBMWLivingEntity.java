@@ -14,16 +14,6 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-/**
- * 对应 LB MixinLivingEntity:
- *
- * 在 jump() 执行后直接修正疾跑加速速度方向。
- * 保存 jump() 前的速度，jump() 返回后检测 X/Z 方向的速度增量（即疾跑加速），
- * 将其替换为 WASD 方向对应的加速向量。
- *
- * 只使用 @Inject HEAD/RETURN，无字节码级 INVOKE 注入点，
- * 因此与任何模组（包括 Baritone 的 @Redirect）都不冲突。
- */
 @Mixin(value = LivingEntity.class, priority = 1500)
 public class MixinBMWLivingEntity {
 

@@ -3,7 +3,6 @@ package com.codigohasta.addon.utils.slimefunhelper.hacks.utils.enums;
 import com.codigohasta.addon.utils.slimefunhelper.managers.config.ConfigEnum;
 import com.codigohasta.addon.utils.slimefunhelper.utils.InventoryUtils;
 
-/** Ported from upstream 1.1.7.2 {@code me.matl114.hacks.utils.enums.GhostHandMode}. */
 public enum GhostHandMode implements ConfigEnum {
     INV_SWAP(InventoryUtils.getPlayerInvSize()),
     HOT_BAR_ONLY(9),

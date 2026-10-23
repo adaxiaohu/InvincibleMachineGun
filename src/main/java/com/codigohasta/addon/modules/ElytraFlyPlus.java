@@ -13,7 +13,7 @@ import net.minecraft.util.math.Vec3d;
 public class ElytraFlyPlus extends Module {
     public ElytraFlyPlus() {
         
-        super(AddonTemplate.CATEGORY, "elytra-fly-plus", "抄袭的blackout的平飞");
+        super(AddonTemplate.CATEGORY, "elytra-fly-plus", "平飞模式");
     }
 
     private final SettingGroup sgGeneral = settings.getDefaultGroup();

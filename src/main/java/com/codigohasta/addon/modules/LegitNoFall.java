@@ -70,7 +70,7 @@ public class LegitNoFall extends Module {
     private int lastSelect = -1;
 
     public LegitNoFall() {
-        super(AddonTemplate.CATEGORY, "LegitNoFall", "抄袭自leavehack，不一定好用");
+        super(AddonTemplate.CATEGORY, "LegitNoFall", "不一定好用");
     }
 
     @Override

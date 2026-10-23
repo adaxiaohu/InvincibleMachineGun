@@ -2,41 +2,11 @@ package com.codigohasta.addon.utils.standgui;
 
 import org.lwjgl.glfw.GLFW;
 
-/**
- * 两套键位 → 语义动作的映射。
- *
- * <h2>为什么两套键位共用一套动作</h2>
- * <p>用户 B1：无小键盘时用 {@code F4} 呼出、方向键上下左右、回车确定、退格返回、
- * 右Ctrl 下翻、右Shift 上翻。这些键与小键盘键**语义完全等价**，只是码不同。
- * 所以动作在 {@link StandGuiInput}，这里只做「码 → 动作」分派。
- *
- * <h2>★ 原版键位冲突（已核实 1.21.11 字节码）</h2>
- * <pre>
- *   chatKey      = key.chat      =  84  (T)   打开聊天
- *   commandKey   = key.command   =  47  (/)   打开指令
- *   inventoryKey = key.inventory =  69  (E)   打开背包
- *   回车(257) / 小键盘回车(335)  → 无任何原版默认绑定
- * </pre>
- * <p>所以：
- * <ul>
- *   <li>{@code T} / {@code /} 我们完全不碰，聊天与指令输入不受影响；</li>
- *   <li>{@code E} 在菜单打开时被吞掉（不打开背包）—— 与用户最初的「e 返回」设计一致，
- *       若要放行只需把 {@link #BACK} 里的 E 去掉；</li>
- *   <li>回车可以用作「确定」，因为原版没绑它。</li>
- * </ul>
- *
- * <h2>★ 右 Shift 会盖掉 Meteor 的 ClickGUI 键</h2>
- * <p>Meteor 的 {@code KeyBinds.OPEN_GUI} 默认绑 {@code GLFW_KEY_RIGHT_SHIFT}。
- * 菜单打开时我们把它用于「上翻分类」并 cancel，因此**菜单开着时打不开 Meteor GUI**。
- * 用户已明确接受（本轮"冲突1 能接受"）。
- * 菜单关闭时我们**不注册**这个键，所以 ClickGUI 正常。
- */
 public final class StandGuiKeys {
 
     private StandGuiKeys() {}
 
     // ═══════════ 小键盘方案 ═══════════
-    // 数值已用 javap 核对 lwjgl-glfw-3.3.1：KP_0=320 … KP_9=329，KP_ADD=334
 
     public static final int NP_TOGGLE = GLFW.GLFW_KEY_KP_ADD;          // 334
     public static final int NP_UP     = GLFW.GLFW_KEY_KP_8;            // 328

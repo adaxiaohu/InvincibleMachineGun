@@ -11,7 +11,7 @@ public class ChestCounterHud extends AbstractRowHud {
     private static final int RADIUS = 32;
 
     public ChestCounterHud() {
-        super("chest-counter-hud", "箱子计数 HUD（模仿 CatLean 的 chest-counter-widget）。",
+        super("chest-counter-hud", "箱子计数 HUD。",
             651, 490, 0.9);
     }
 

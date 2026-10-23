@@ -17,42 +17,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 
-/**
- * TP 锚的核心搜索算法。
- *
- * <p>移植自 {@code dev.godden.core.Utils.TpAnchorUtil}（GCore，859 行）。
- * 源是 Kotlin `object`，Java 里改为静态方法。
- *
- * <p><b>四层搜索</b>：
- * <ol>
- *     <li>{@link #getAnchorPosList} —— 在目标周围 13³ 网格找放锚点，算对目标的伤害，
- *         <b>按伤害降序</b></li>
- *     <li>{@link #getTpAnchorData} —— 找「我传送到哪」，算自伤，<b>按自伤升序</b>；
- *         核心判据 {@code damageToSelf < anchorData.getDamage()}（换血划算）</li>
- *     <li>{@link #touchCheck} —— 眼到方块中心 ≤ 6（{@code 36.0} 硬编码）</li>
- *     <li>{@link #getTpAnchorProtectPos} —— 只扫玩家周围 10 个格子，找放保护方块</li>
- * </ol>
- *
- * <p><b>★ 两套算法（务必分清）</b>：
- * <pre>
- * getTpAnchorDataFinal      → getTpAnchorData       （完整版，ModuleGTpAnchorAura 用）
- * getLightTpAnchorDataFinal → getLightTpAnchorData  （Light 版，ModuleGLightTpAnchorAura 用）
- * </pre>
- * 两者**共用** {@link #getAnchorPosList}（找锚位）与
- * {@link #getTpAnchorProtectPos}（找保护方块），但**第 2 层「找 TP 点」完全不同**：
- *
- * <table border="1">
- *   <caption>字节码特征（javap 逐方法统计）</caption>
- *   <tr><th></th><th>HashMap</th><th>checkCanMove</th><th>能否穿墙</th></tr>
- *   <tr><td>{@code getTpAnchorData}</td><td>0</td><td>0</td><td>✅（模块用 doTpMove）</td></tr>
- *   <tr><td>{@code getLightTpAnchorData}</td><td>8</td><td>6</td><td>❌（要求有通路）</td></tr>
- * </table>
- *
- * <p><b>★ 关于 {@code colliedBlockMap}</b>：**只有 Light 版有**这个局部
- * {@code HashMap}，用于「放锚/放保护方块后，检查玩家还能不能走到 TP 点」。
- * 完整版没有可达性检查 —— 因为它的立意就是「瞬移过去」，要求「能走过去」自相矛盾。
- * 每次检查前 put、检查后 clear（源就是这么写的），保持原样。
- */
 public final class GcoreTpAnchorUtil {
 
     /** 眼高常量（源硬编码）。 */
@@ -129,28 +93,6 @@ public final class GcoreTpAnchorUtil {
 
     // ═══════════════════ 第 1 层：找锚位置 ═══════════════════
 
-    /**
-     * 在目标周围 {@code ±scanBorder} 网格里找所有可放锚（或已有点火）的位置。
-     *
-     * <p>逐行对应源 {@code getAnchorPosList}：
-     * <pre>
-     * entities = TickUpdate.getWorldEntitiesList(); entities.add(target)
-     * 遍历 ±scanBorder：
-     *   anchorPos = (x, y, z); expVec = (x+0.5, y+0.5, z+0.5)
-     *   情况 A: allowPlaceAnchor &amp;&amp; canPlaceAtPos(anchorPos, entities)
-     *           dmg = getExpDamage(expVec, target, targetVec, null, null, AnchorUtils.getExplosion())
-     *           if (dmg >= minDamageToTarget) 加 Type.Place
-     *           continue
-     *   情况 B: 该格已是重生锚
-     *           dmg = getExpDamage(expVec, target, targetVec, provider, null, AnchorUtils.getExplosion())
-     *           provider = pos -&gt; pos == anchorPos ? AIR : world.getBlockState(pos)
-     *           if (dmg >= minDamageToTarget) 加 Type.Ignite
-     * 按 damage 降序排序
-     * </pre>
-     *
-     * <p><b>排序方向来自 jar 字节码</b>（{@code getAnchorPosList$2}）：
-     * {@code compareValues(-a.damage, -b.damage)} —— 取负即降序。
-     */
     public static ArrayList<GcoreAnchorPlaceData> getAnchorPosList(
             Entity target, Vec3d targetVec, int scanBorder,
             float minDamageToTarget, boolean allowPlaceAnchor) {
@@ -205,7 +147,6 @@ public final class GcoreTpAnchorUtil {
             }
         }
 
-        // ★ 伤害降序（字节码证据：compareValues(-a, -b)）
         posDataList.sort(Comparator.comparingDouble(
             (GcoreAnchorPlaceData d) -> -d.getAnchorData().getDamage()));
         return posDataList;
@@ -213,21 +154,6 @@ public final class GcoreTpAnchorUtil {
 
     // ═══════════════════ 第 2 层：找 TP 点 ═══════════════════
 
-    /**
-     * 为给定锚方案找「我传送到哪」。
-     *
-     * <p>逐行对应源 {@code getTpAnchorData}（309-458 行）。核心判据：
-     * <pre>
-     * if (damageToSelf &gt;= anchorData.getDamage()) continue;   // 换血划算
-     * </pre>
-     * 以及两个性能优化：
-     * <ul>
-     *     <li>{@code damageToSelf == 0} → 立刻返回（不搜完 2197 个点）</li>
-     *     <li>{@code damageToSelf <= maxDamageToSelf} 才收集</li>
-     * </ul>
-     *
-     * <p><b>排序方向来自 jar 字节码</b>（{@code getTpAnchorData$2}）：自伤升序。
-     */
     public static GcoreTpAnchorPlaceData getTpAnchorData(
             GcoreAnchorPlaceData anchorData, GcoreEnumType.BlockPlaceVersion version,
             Entity target, Vec3d targetVec, Entity placer, int scanBorder,
@@ -344,44 +270,12 @@ public final class GcoreTpAnchorUtil {
             }
         }
 
-        // ★ 自伤升序（字节码证据：compareValues(a, b) 不取负）
         findDataList.sort(Comparator.comparingDouble(GcoreTpAnchorPlaceData::selfDamage));
         return findDataList.isEmpty() ? null : findDataList.get(0);
     }
 
     // ═══════════════════ Light 版：第 2 层 ═══════════════════
 
-    /**
-     * Light 版「找 TP 点」。
-     *
-     * <p>移植自源 {@code getLightTpAnchorData}（110-303 行）。
-     *
-     * <p><b>★ 与 {@link #getTpAnchorData} 的本质区别（字节码证据）</b>：
-     * 用 javap 逐方法统计特征得：
-     * <pre>
-     * getLightTpAnchorData  HashMap=8  checkCanMove=6   ← 有可达性检查
-     * getTpAnchorData       HashMap=0  checkCanMove=0   ← 没有
-     * </pre>
-     * 也就是说：
-     * <ul>
-     *     <li>Light 版**多了**「放锚后还能不能双向走到 TP 点」的检查
-     *         （{@code checkCanMove(placerVec, tpVec)} 与反向）——
-     *         用 {@code colliedBlockMap} 模拟「锚/保护方块已放上去」</li>
-     *     <li>因为要检查，它必须**显式接收 {@code placerVec}** ——
-     *         源 {@code getTpAnchorData} 的签名里根本没有这个参数，
-     *         物理上不可能调用 {@code checkCanMove}</li>
-     *     <li>代价：要求两点间有**可行走通路** → 不能穿墙，
-     *         所以 Light 版只能用于「能走过去」的场景</li>
-     * </ul>
-     *
-     * <p>三处检查的位置与源逐一对应：
-     * <ol>
-     *     <li>{@code damageToSelf == 0} 分支 → 检查通过才 return</li>
-     *     <li>{@code damageToSelf <= maxDamageToSelf} 分支 → 检查通过才收集</li>
-     *     <li>带保护方块的分支 → 检查通过才收集</li>
-     * </ol>
-     * 每次检查后 {@code clear()} —— 源就是这样（先 put 后清）。
-     */
     public static GcoreTpAnchorPlaceData getLightTpAnchorData(
             GcoreAnchorPlaceData anchorData, GcoreEnumType.BlockPlaceVersion version,
             Entity target, Vec3d targetVec, Entity placer, Vec3d placerVec,
@@ -519,22 +413,6 @@ public final class GcoreTpAnchorUtil {
         return findDataList.isEmpty() ? null : findDataList.get(0);
     }
 
-    /**
-     * 「放锚后还能不能双向走到 TP 点」检查（**Light 版专用**）。
-     *
-     * <p>源在 {@code getLightTpAnchorData} 的 {@code damageToSelf == 0} 与
-     * {@code <= maxDamageToSelf} 两个分支里都做了同样的检查：
-     * <pre>
-     * if (!allowClickAfterPlace) colliedBlockMap.put(anchorPos, RESPAWN_ANCHOR)
-     * if (!checkCanMove(placerVec, tpVec, map) || !checkCanMove(tpVec, placerVec, map)) { map.clear(); continue; }
-     * map.clear();
-     * </pre>
-     * 这里抽成方法以避免重复（行为完全一致）。
-     *
-     * <p><b>参数是 {@code placerVec}（Vec3d）而不是 {@code placer}（Entity）</b> ——
-     * 因为源就是这么传的：它用的是模块显式传入的
-     * {@code player.getPos()}，而不是 {@code placer.getEntityPos()}。
-     */
     private static boolean canReachBothWays(Vec3d placerVec, Vec3d tpVec, BlockPos anchorPos,
                                             boolean allowClickAfterPlace,
                                             Map<BlockPos, BlockState> colliedBlockMap) {
@@ -571,26 +449,6 @@ public final class GcoreTpAnchorUtil {
 
     // ═══════════════════ 第 4 层：保护方块 ═══════════════════
 
-    /**
-     * 找一个放保护方块（黑曜石）的位置。
-     *
-     * <p>逐行对应源 {@code getTpAnchorProtectPos}（562-722 行）。
-     *
-     * <p><b>候选只有 10 个格子</b>（玩家周围，不是 13³）：
-     * <pre>
-     * (x,y-1,z) (x,y+2,z) (x+1,y,z) (x-1,y,z) (x+1,y+1,z)
-     * (x-1,y+1,z) (x,y,z+1) (x,y,z-1) (x,y+1,z+1) (x,y+1,z-1)
-     * </pre>
-     * 其中 {@code x = floor(clickerVec.x)} 等。
-     *
-     * <p>对每个候选：跳过与锚重合的 → {@code touchCheck} 通过 →
-     * {@code canPlaceAtPos} 通过 → 找放置面 →
-     * 检查「放了保护方块后目标还吃多少伤害」（要 ≥ 原伤害，即保护方块没把伤害也挡掉）→
-     * 再检查自己吃多少伤害。
-     *
-     * <p><b>排序</b>：源用 {@code minWithOrNull} + 自伤升序比较器 ——
-     * 即取自伤最小的（{@code dataList.sort(...); get(0)} 等价）。
-     */
     public static GcoreAnchorProtectData getTpAnchorProtectPos(
             GcoreAnchorData anchorData, GcoreEnumType.BlockPlaceVersion version,
             Entity target, Vec3d targetVec, Entity clicker, Vec3d clickerVec,
@@ -610,7 +468,6 @@ public final class GcoreTpAnchorUtil {
         double clickRangeSq = clickRange * clickRange;
         Vec3d clickerEyeVec = clickerVec.add(0.0, EYE_Y, 0.0);
 
-        // 源里这个 touchCheck 用 clickerVec（不是 tpVec）
         java.util.function.Predicate<BlockPos> touchCheck = pos -> {
             double disToPosCenter = clickerVec.squaredDistanceTo(
                 pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5);
@@ -686,13 +543,6 @@ public final class GcoreTpAnchorUtil {
 
     // ═══════════════════ 点火安全点（供将来扩展）═══════════════════
 
-    /**
-     * 找一个「安全点燃锚」的位置。
-     *
-     * <p>移植自源 {@code getSafePosToIgniteAnchor}（728-808 行）。
-     * TP 锚主路径**不调用它**（那是 {@code ModuleGLightTpAnchorAura} 用的），
-     * 但为保持算法完整一并移植。
-     */
     public static GcoreAnchorData getSafePosToIgniteAnchor(BlockPos anchorPos, Entity target,
                                                            int scanBorder, double clickRange) {
         double clickRangeSq = clickRange * clickRange;

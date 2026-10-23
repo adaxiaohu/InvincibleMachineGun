@@ -7,12 +7,6 @@ import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Box;
 import net.minecraft.util.math.Vec3d;
 
-/**
- * Box / BlockPos / BlockState 小工具。
- *
- * <p>移植自 {@code dev.godden.core.Utils.ExtensionUtilKt}（GCore）。
- * Kotlin 扩展函数改为静态方法。
- */
 public final class GcoreExtensionUtilKt {
 
     private GcoreExtensionUtilKt() {

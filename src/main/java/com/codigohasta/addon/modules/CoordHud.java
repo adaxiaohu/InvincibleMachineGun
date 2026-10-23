@@ -18,7 +18,7 @@ public class CoordHud extends AbstractRowHud {
         .defaultValue(false).build());
 
     public CoordHud() {
-        super("coord-hud", "坐标 HUD（模仿 CatLean 的 coord-widget）。", 812, 438, 0.9);
+        super("coord-hud", "坐标 HUD。", 812, 438, 0.9);
     }
 
     @Override

@@ -657,7 +657,6 @@ public class MathUtils {
         }
     }
 
-    /** Ported from upstream 1.1.7.2 {@code MathUtils.AcceleratePredictor2}. */
     public static class AcceleratePredictor2 {
         private final Vec3d[] pointList;
         private final IntSupplier supplier;

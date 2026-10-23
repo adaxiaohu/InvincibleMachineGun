@@ -3,10 +3,6 @@ package com.codigohasta.addon.utils.slimefunhelper.events.impl;
 import net.minecraft.item.ItemStack;
 import net.minecraft.util.math.BlockPos;
 
-/**
- * Ported from upstream 1.1.7.2 {@code me.matl114.events.impl.BlockBreak}
- * (Lombok accessors written explicitly).
- */
 public class BlockBreak implements SequencedAction {
     BlockPos blockPos;
     Stage stage;

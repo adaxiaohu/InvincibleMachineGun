@@ -8,41 +8,6 @@ import net.minecraft.util.math.Vec3d;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * 按 slimefunhelper 的 <b>token（令牌）模型</b>发送移动包序列，支持<b>跨 tick 续传</b>。
- *
- * <p>移植自 {@code slimefunhelper.MovTasks.createMovingPacketsForMovSequence}
- * （源 294-516 行）＋ {@code scheduleFarawayMoveInternal}（源 572-601 行）＋
- * {@code MovingContext}（源 859-876 行）。
- *
- * <h2>为什么需要它</h2>
- * 服务端 {@code ServerGamePacketListenerImpl.handleMovePlayer} 对<b>同一个 tick</b> 内的
- * 位移做【累加】判定（{@code firstGoodX/Y/Z} 每 tick 才由 {@code tickPlayer()} 重置）：
- * <pre>
- *   i = receivedMovePacketCount - knownMovePacketCount;   // 本 tick 已收包数
- *   if (i &gt; max(allowedPlayerTicks, 5)) i = 1;            // ★ 超限 → i 归 1（阈值塌回 100）
- *   if (!hasRot &amp;&amp; !(d7 &gt; 0)) allowedPlayerTicks = 20;    // 无位移包 → 重置额度
- *   else                       allowedPlayerTicks--;
- *   阈值 = max(100, (movedTooQuicklyMultiplier · i · speed)²)   // 本服 = 100·i²
- *   拒绝: d7 - d6 &gt; 阈值  →  teleport(服务端当前位置) 拉回
- * </pre>
- *
- * <p>其中 {@code d7} 相对本 tick 起点，所以「第 k 个包要走到高度 h」必须满足
- * {@code h ≤ 10 · i}。要一次跳很高，就必须先用<b>无位移的空包</b>把 {@code i} 顶上去
- * —— 这就是 slimefunhelper 的「gain tokens」（源 333-382 行）。
- *
- * <h2>为什么还要跨 tick</h2>
- * 空包能把 {@code allowedPlayerTicks} 重置为 20，但 {@code i} 会一直被计入，
- * 所以「垫包 + 位移包」总数不能超过 20。超过时 slimefunhelper <b>不硬发</b>，
- * 而是把剩余动作 {@code Tasks.scheduleDelayed(..., 1)} 排到下一 tick，并
- * {@code context.resetTick()} 重置本 tick 状态（源 585-600 行的逻辑）。
- *
- * <p>本类把「排到下一 tick」简化为「返回剩余列表，由调用方在下一 tick 继续」——
- * 因为 Meteor 模块本来就有 {@code onTick} 钩子，不需要额外的调度器。
- *
- * <h2>★ 线程约束</h2>
- * 所有方法都会触碰真实玩家并发包，<b>只能在客户端主线程调用</b>。
- */
 public final class GcoreMoveSequenceUtil {
 
     private GcoreMoveSequenceUtil() {
@@ -491,22 +456,6 @@ public final class GcoreMoveSequenceUtil {
         return s * maxIndex;
     }
 
-    /**
-     * ② 发一个位移包（对应源 385-505 行的一次循环）。
-     *
-     * <p><b>★ 与源的区别</b>：源的守卫是
-     * {@code Math.min(ExtraTokenNeeded, tokenNow) >= Math.max(5, tokenLimit)} ——
-     * 它同样把 {@code tokenNow} 当成服务端下标，**没有加上别人已发的包**。
-     * 这里改成直接按「服务端视角的真实下标」判定，判据更直白也更容易核对：
-     * <ol>
-     *     <li>下标必须在预算内 —— 否则服务端 1495 行把 {@code i} 归 1，
-     *         阈值塌回 100，本包必被拒（还会连带把玩家拉回）；</li>
-     *     <li>该下标的阈值必须容得下这段位移（{@code 位移 ≤ 9.9 × 下标}）。</li>
-     * </ol>
-     *
-     * @return {@code true} = 已发出；{@code false} = 装不下，
-     *         调用方应把<b>本包及其后</b>留到下一 tick（源 433-454 行）
-     */
     public static boolean sendOne(Context ctx, Vec3d to) {
         MinecraftClient mc = MinecraftClient.getInstance();
         if (mc.player == null || mc.getNetworkHandler() == null) {
@@ -536,71 +485,6 @@ public final class GcoreMoveSequenceUtil {
         return true;
     }
 
-    /**
-     * 发一个「垫包」：把服务端 {@code allowedPlayerTicks} 重置为 20。
-     *
-     * <h2>⛔ 2026-10-14 的「垫包必须带坐标」结论，已于 2026-10-15 撤回</h2>
-     *
-     * <p><b>撤回理由</b>：实测（{@code docs/gcore/diag/delta-check.txt}）显示
-     * 「每个服务端 tick 的第 1 个我们的包」其 {@code d7fg == 0} 占 <b>94.7%</b>，
-     * 即客户端 {@code tickFirstGood} 与服务端 {@code firstGood} <b>本就一致</b> ——
-     * 所以 {@code PositionAndOnGround(clientFirstGood)} 当时也能重置，
-     * 旧结论（「带坐标才修复了回弹」）缺乏依据。
-     *
-     * <p>现在按 slimefunhelper 的原始做法（见下方方法体）。以下旧分析保留作史料。
-     *
-     * <h2>（旧）2026-10-14 的说法：垫包必须带坐标</h2>
-     *
-     * <p><b>原来（错的）</b>：发 {@code OnGroundOnly(false, …)}。
-     *
-     * <p><b>为什么错</b>：{@code OnGroundOnly}（服务端名 {@code StatusOnly}）的构造器
-     * 字节码把 {@code hasPos} 设为 <b>false</b>（{@code iconst_0}）：
-     * <pre>
-     *   public StatusOnly(boolean, boolean);
-     *       ...
-     *       8: iconst_0     // ★ hasPos = false
-     *       9: iconst_0     // ★ hasRot = false
-     * </pre>
-     * 而服务端 {@code ServerGamePacketListenerImpl:1454} 是
-     * <pre>
-     *   double d = clampHorizontal(packet.getX(this.player.getX()));   // ★ default = 玩家当前坐标
-     * </pre>
-     * 而 {@code getX(double)} 的字节码：
-     * <pre>
-     *   public double getX(double defaultX);
-     *       1: getfield  hasPos:Z
-     *       4: ifeq        14
-     *       7: getfield  x:D
-     *      11: goto        15
-     *      14: dload_1              // ★ hasPos=false ⇒ 返回 defaultX（玩家当前坐标）
-     * </pre>
-     * ⇒ 垫包的 {@code d7 = |玩家当前位置 − firstGood|²}。
-     *
-     * <p><b>后果</b>：服务端 {@code :1500} 的重置条件是
-     * {@code if (!packet.hasRot && !(d7 > 0.0)) allowedPlayerTicks = 20;}
-     * —— 一旦玩家位置偏离本 tick 起点 {@code firstGood}（被 teleport、或被原版包推动），
-     * 垫包 {@code d7 > 0} ⇒ <b>走 {@code :1503} 递减、不重置</b>
-     * ⇒ {@code allowedPlayerTicks} 一路衰减（实测 8~19，**从未到 20**）
-     * ⇒ {@code :1495} 判 {@code i > max(allowed,5)} ⇒ <b>塌陷、{@code i} 归 1</b>
-     * ⇒ 阈值塌回 {@code max(100,(10·1)²)=100}
-     * ⇒ 连 30 格的位移包都被拒 ⇒ {@code :1534 teleport()} 把客户端拉到半空 = <b>回弹</b>。
-     *
-     * <p><b>修法</b>：改用 {@code PositionAndOnGround}（服务端名 {@code Pos}，
-     * 构造器是 {@code iconst_1} ⇒ {@code hasPos=true}），坐标填<b>本 tick 起点</b>
-     * {@code ctx.tickFirstGood}。
-     * <pre>
-     *   d = 包里的坐标 = firstGood
-     *   ⇒ d3 = d - firstGoodX = 0（水平/竖直都为 0）
-     *   ⇒ d7 = 0
-     *   ⇒ !(d7 > 0.0) 成立 ⇒ ★ 走 :1501 重置 allowedPlayerTicks = 20 ✓
-     * </pre>
-     *
-     * <p>⚠️ 虽然它「带坐标」属于有位移包，但坐标 == {@code firstGood} ⇒ {@code d7 == 0}
-     * ⇒ 服务端仍按「无位移」处理。这是本次修复的关键洞察。
-     *
-     * <p>证据：{@code docs/gcore/如来神掌-回弹与渲染形状-完整根因.md}、
-     * {@code docs/gcore/diag/tpaura-verify-collapse.txt}（1177/1177 塌陷行皆 d7>100）。
-     */
     private static void sendDummy(MinecraftClient mc, ClientPlayerEntity player, Context ctx) {
         // ★★★ 2026-10-15：照 slimefunhelper 的原始做法（MovTasks.java:412）
         //     packets.get(emptyMoveCnt).add(VPacket.newOnGroundOnly(currentOnGround, false));
@@ -611,11 +495,8 @@ public final class GcoreMoveSequenceUtil {
         //       ⇒ 只要玩家还在 tick 起点，三项全 0 ⇒ d7=0 ⇒ ★ 重置 allowedPlayerTicks=20
         //
         //   依据（均已离线核实，非推测）：
-        //     · 服务端 d7 公式：paper-1.21.11.jar 字节码偏移 350-427
         //     · 重置条件：偏移 536-559（d7>0 ⇒ 递减；否则 =20）
-        //     · getX(default) 语义：minecraft-merged yarn jar 字节码（ifeq → dload_1）
         //     · OnGroundOnly 构造器：iconst_0/iconst_0（changePosition/changeLook = false）
-        //   sf 全程用它、且工作正常 ⇒ 照抄。
         mc.getNetworkHandler().sendPacket(new PlayerMoveC2SPacket.OnGroundOnly(
             false, player.horizontalCollision));
     }
@@ -628,61 +509,6 @@ public final class GcoreMoveSequenceUtil {
 
     // ─────────────────────── 清摔落债务（照 gcore，不用 slimefunhelper） ───────────────────────
 
-    /**
-     * 清掉本次伪造位移在服务端累积的 {@code fallDistance}。
-     *
-     * <p><b>移植自 gcore {@code GcoreTpUtil.clearFallDebt}（源 196-229 行）</b>
-     * —— 这是本项目 gcore 侧既有的做法，**不依赖 slimefunhelper 的
-     * {@code NoFall}/{@code setForceNoFall} 管线**，因此更可靠。
-     *
-     * <p><b>服务端机制</b>（{@code ServerGamePacketListenerImpl}）：
-     * <pre>
-     * d4 = packet.y - lastGoodY;
-     * boolean flag = d4 &gt; 0.0;                     // 本包是否向上
-     * this.player.doCheckFallDamage(..., packet.isOnGround());   // ★ 结算点
-     * if (flag) this.player.resetFallDistance();   // ★ 只在一路向上时清零
-     * </pre>
-     * {@code Entity.checkFallDamage(y, onGround, ...)}：
-     * <pre>
-     * if (y &lt; 0)  fallDistance -= y;               // 下降 → 累积
-     * if (onGround) { if (fallDistance &gt; 0) 造伤害; fallDistance = 0; }
-     * </pre>
-     *
-     * <p>⇒ 只要有一个包申报 {@code onGround=true} 且 {@code fallDistance > 0}，
-     * 服务端就当场结算摔落伤害。所以：
-     * <ol>
-     *     <li>所有伪造位移包一律申报 {@code onGround=false}（本类已经如此）→ 只累积不结算；</li>
-     *     <li>末尾补发一个<b>抬高 {@code 9E-8} 且 {@code onGround=false}</b> 的包 →
-     *         {@code d4 > 0} → 服务端 {@code resetFallDistance()}，债务清零。</li>
-     * </ol>
-     *
-     * <p>与 {@code NoFall} 的 {@code NoFallLazy} 手法一致（同样是
-     * {@code lastServerY + DELTA_Y}、{@code onGround=false}），常量也取自
-     * {@code MovTasks.DELTA_Y = 9E-8}。区别是本方法<b>自带收尾</b>，
-     * 不依赖 {@code NoFall} 模块是否在跑。
-     *
-     * <p><b>★★ 2026-10-11 修正（我的离线验收脚本抓出来的真实 bug）</b>：
-     * 服务端的 {@code flag} 是
-     * <pre>
-     *   d4   = packet.y - lastGoodY
-     *   flag = d4 &gt; 0.0
-     * </pre>
-     * 而 {@code lastGoodY} 在每次成功移动后被更新为<b>服务端玩家的真实 Y</b>
-     * （{@code :1706 lastGoodY = player.getY()}）。
-     *
-     * <p>所以「{@code at.y + DELTA_Y}」**只有在 {@code at.y} 不低于最后一个已发包的 y 时**
-     * 才会让 {@code d4 > 0}。反例（我实测踩到）：
-     * <pre>
-     *   MaceDMGPlus 先发 y=235，再发 y=65.25（落回 + 0.25）
-     *   ⇒ lastGoodY = 65.25
-     *   ⇒ 若再发 65.0 + 9E-8，d4 = -0.25 &lt; 0  ⇒ **flag=false，债务清不掉**
-     * </pre>
-     *
-     * <p><b>契约</b>：调用方必须传入「**不低于最后一个已发位移包的 y**」的位置。
-     * 通常就是那最后一个包的目标位置（例如落回点、或 {@code previouspos.y + 0.25}）。
-     *
-     * @param at 补包的位置；其 {@code y} 必须 ≥ 最后一个已发位移包的 y
-     */
     public static void clearFallDebt(Vec3d at) {
         if (at == null) {
             return;

@@ -27,52 +27,7 @@ import net.minecraft.util.Identifier;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * 「多元素面板 HUD」的公共基类（护甲 / 背包 / 冷却 / 药水 等）。
- *
- * <p>与 {@link AbstractRowHud} 的分工：那个管「图标 + 一行文字」的<b>单行</b>小组件；
- * 本类管「多个面板 + 物品图标 + 进度条 + 多行列表」的<b>复合</b>组件。两者并存。
- *
- * <h2>三遍提交（顺序不能改）</h2>
- *
- * <p>这是 CatLean 的原始架构（{@code CatHudRenderer} 的做法），也是本项目
- * {@code PlayerListHud} 已经实机验证过的模式：
- * <pre>
- *   1. 面板 / 形状（GL：模糊 → 底色 → 进度条）
- *   2. 文字（SakuraTextRenderer.begin() … end()）
- *   3. 物品图标（RenderUtils.drawItem）
- * </pre>
- *
- * <p><b>为什么物品必须在最后</b>：物品图标是原版渲染管线画的独立四边形，
- * 不受 SakuraTextRenderer 的 begin/end 约束；若先画图标再画文字，
- * 同行的文字会被图标盖住（CatHud 的 {@code endFrame} 就是刻意把物品放在最后）。
- *
- * <h2>物品图标的坐标语义（照抄已验证路径）</h2>
- *
- * <p>{@code RenderUtils.drawItem(ctx, stack, (int)x, (int)y, size/16f, drawCount, null, false)}。
- * {@code Render2DEvent} 在 {@code unscaledProjection} 下派发，该参数按 GUI 缩放换算，
- * 因此与 NanoVG 的逻辑坐标一致 —— 这条路径在 {@code SakuraTargetHud} 上已实机验证。
- *
- * <h2>几何常量</h2>
- *
- * <p>多行列表的行高与偏移取自 CatLean 的 {@code gf.q()}（可缩放行）：
- * 行高 16、宽 = 文字宽 + 24、图标 10×10 @ x+2、文字 @ x+18。
- *
- * <p><b>★ 为什么设置与事件可以放在基类里</b>（两条前提都已验证）：
- * <ol>
- *   <li><b>事件</b>：Orbit 的 {@code EventBus.getListeners()} 递归 {@code getSuperclass()}，
- *       所以基类的 {@code @EventHandler} 生效（先例：{@code FullscreenShaderModule}）。</li>
- *   <li><b>翻译</b>：{@code JsonEnglishTranslationManager.findFieldName} 沿
- *       {@code getSuperclass()} 上溯到 {@code Module.class}，故基类声明的 Setting
- *       也能被反射定位；JSON 键 =「子类模块名 + 字段名」。</li>
- * </ol>
- *
- * <p><b>⚠️ 本类必须放 {@code utils/} 而非 {@code modules/}</b>：
- * {@code check_i18n.py} 会把 {@code modules/} 下每个 .java 当模块、要求它有 JSON 条目。
- */
 public abstract class AbstractPanelHud extends Module {
-
-    // ═══════════ 几何常量（照 CatLean gf.q 的可缩放行）═══════════
 
     /** 列表行高（{@code gf.q} 画面板用的 16.0F）。 */
     protected static final float ROW_HEIGHT = 16f;
@@ -126,7 +81,7 @@ public abstract class AbstractPanelHud extends Module {
         .defaultValue(true).build());
     private final Setting<Boolean> panelBorder = sgLook.add(new BoolSetting.Builder()
         .name("面板描边")
-        .description("在面板边缘画一圈细描边。CatLean 的面板是「填充 + 描边」两层"
+        .description("在面板边缘画一圈细描边。面板是「填充 + 描边」两层"
             + "（见其 rect.fsh 的 uBorderWidth/uBorderColor），描边让面板在深色背景上不糊边。")
         .defaultValue(true).build());
 
@@ -427,7 +382,6 @@ public abstract class AbstractPanelHud extends Module {
                     new java.awt.Color(pc.r, pc.g, pc.b, Math.max(0, a)),
                     blurStrength.get().floatValue(), 0.9f * p[4], true);
             }
-            // 描边（照 CatLean 的「填充 + 描边」两层；其 rect.fsh 与本项目的逐行一致）
             Color borderCol = panelBorder.get() ? derivedBorderColor(pc, p[4]) : null;
             float bw = panelBorder.get() ? BORDER_WIDTH * scale : 0f;
             Shader2DUtil.drawRoundedRect(p[0], p[1], p[2], p[3], radius,
@@ -517,7 +471,6 @@ public abstract class AbstractPanelHud extends Module {
         // ★ 图层问题的历史（连修两次才对，记录清楚免得再踩）★
         //
         //   1.21.11 的 GUI 是【延迟渲染 + 分类队列】。GuiRenderer 的 prepare 顺序
-        //   （已从字节码核对，行号即调用点）：
         //       prepareSimpleElements(299) → prepareTextElements(600)
         //       → prepareItemElements(609) → prepareSpecialElements(693)
         //   即【物品整体排在所有文字之后】。
@@ -546,15 +499,6 @@ public abstract class AbstractPanelHud extends Module {
         }
     }
 
-    /**
-     * 把覆盖层文字包成带<b>定制字体</b>的 {@link Text}。
-     *
-     * <p>字体 id {@code invincible_machine_gun:cat} 由资源文件
-     * {@code assets/invincible_machine_gun/font/cat.json} 定义（ttf provider，
-     * 指向 {@code regular_medium.otf}）。MC 的 {@code FontManager} 扫描
-     * {@code ResourceFinder.json("font")} 即 {@code assets/<ns>/font/*.json}
-     * （已从字节码核对 FINDER 的构造）。
-     */
     private static Text overlayText(Object raw) {
         return overlayText(raw, false);
     }

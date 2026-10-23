@@ -14,38 +14,6 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-/**
- * 注入 {@code Input.tick()} —— 父类版本。
- *
- * <h2>★★ 1.21.11 类结构陷阱（这是「按 A 却读到 F=false」的根因）</h2>
- * <table border="1">
- *   <tr><th>类</th><th>intermediary</th><th>mappings 里有无 {@code tick}</th></tr>
- *   <tr><td>{@code client.input.Input}</td><td>class_744</td><td>✅ {@code method_3129}</td></tr>
- *   <tr><td>{@code client.input.KeyboardInput}</td><td>class_743</td><td>❌ <b>无</b>（yarn 漏标，字节码里实际有）</td></tr>
- * </table>
- *
- * <p>若只写 {@code @Mixin(KeyboardInput.class) + method="tick"}，
- * refmap 会生成 {@code class_743;method_3129()} —— 但该方法属于 class_744，
- * <b>在 class_743 里不存在</b> ⇒ 注入被跳过且<b>不报错</b>。
- *
- * <p>因此这里注入父类 {@code Input}，同时 {@link MixinKeyboardInputChild}
- * 注入子类 {@code KeyboardInput}，两边都 {@code require = 0}，靠
- * {@code AlienRotationUtil.inputCompensated} 去重。
- *
- * <h2>AlienV4 原实现</h2>
- * <pre>
- * // MixinKeyboardInput.java:15-26
- * &#64;Inject(method = "tick", at = &#64;At(value = "FIELD",
- *         target = "Lnet/minecraft/client/input/KeyboardInput;sneaking:Z",
- *         shift = Shift.AFTER, opcode = Opcodes.PUTFIELD), cancellable = true)
- *
- * // RotationManager.java:253-270  onKeyInput
- * mc.player.input.movementSideways = Math.round(mS * cos - mF * sin);
- * mc.player.input.movementForward  = Math.round(mF * cos + mS * sin);
- * </pre>
- * 1.21.11 里那两个 float 已换成 {@code playerInput}（record）+ {@code movementVector}，
- * 两者都要重算 —— 见 {@link AlienSprint#onInputTick()}。
- */
 @Mixin(Input.class)
 public abstract class MixinKeyboardInput {
 

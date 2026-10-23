@@ -158,7 +158,7 @@ public class ElytraFly extends Module {
     private float prePitch;
 
     public ElytraFly() {
-        super(AddonTemplate.CATEGORY, "鞘翅飞行V4", "移植自AlienV4的完整鞘翅飞行，7种模式 + 烟花辅助。发包有点问题，效果不好");
+        super(AddonTemplate.CATEGORY, "鞘翅飞行V4", "完整鞘翅飞行，7种模式 + 烟花辅助。发包有点问题，效果不好");
         INSTANCE = this;
     }
 

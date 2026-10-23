@@ -43,7 +43,7 @@ dependencies {
     modImplementation(libs.meteor.client)
 
     // JSVG：把 assets/invincible_machine_gun/vector/*.svg 栅格化成贴图。
-    // CatLean 用的同一个库（bj.java 的 SVGLoader + SVGDocument.render）。
+    // 用的同一个库（SVGLoader + SVGDocument.render）。
     // 用 include(...) 把它打进 mod 的 META-INF/jars，玩家无需单独安装。
     implementation(libs.jsvg)
     include(libs.jsvg)

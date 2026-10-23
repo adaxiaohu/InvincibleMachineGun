@@ -144,20 +144,6 @@ public final class GcoreCombatUtil {
         return entity == null ? 0 : entity.timeUntilRegen;
     }
 
-    /**
-     * ★ 智能无敌帧：这一击现在打，能不能吃到<b>全额</b>伤害？
-     *
-     * <p>服务端 {@code LivingEntity.damage} 的规则（字节码已核）：
-     * <pre>
-     * if (timeUntilRegen &gt; 10 &amp;&amp; !BYPASSES_COOLDOWN) {
-     *     if (damage &lt;= lastDamageTaken) return false;   // 整击丢弃
-     *     applyDamage(damage - lastDamageTaken);         // 只结算差额
-     * }
-     * </pre>
-     * 因此 {@code timeUntilRegen <= 10} 时必定给全额。
-     *
-     * @return 若现在打能拿全额则 true
-     */
     public static boolean canDealFullDamage(Entity entity) {
         return invulnerableTicks(entity) <= FULL_DAMAGE_REGEN_THRESHOLD;
     }

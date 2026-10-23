@@ -2618,7 +2618,7 @@
         },
         "findVecToAttack": {
           "title": "Find Attack Position",
-          "description": "When the spot under the target cannot be stood on, searches nearby for a position that is both standable and within attack reach. Ported from gcore's TpUtil.findVecToAttack (scan radius 7, using checkNoPosCollie + checkCanHit dual-range). When off, falls back to the old behaviour (small offsets of dy 0..2 / dx,dz -1..1 around the target position)."
+          "description": "When the spot under the target cannot be stood on, searches nearby for a position that is both standable and within attack reach. TpUtil.findVecToAttack (scan radius 7, using checkNoPosCollie + checkCanHit dual-range). When off, falls back to the old behaviour (small offsets of dy 0..2 / dx,dz -1..1 around the target position)."
         },
         "returnPos": {
           "title": "Return Pos",
@@ -8493,7 +8493,7 @@
     },
     "ImgWatermarkHud": {
       "title": "Watermark",
-      "description": "Watermark HUD (layout modelled on CatLean): double-layer player head plus plugin name/version, player name and server address panels.",
+      "description": "Watermark HUD: double-layer player head plus plugin name/version, player name and server address panels.",
       "groups": {
         "sgGeneral": "General",
         "sgName": "Name Color"
@@ -8663,7 +8663,7 @@
     },
     "SakuraTargetHud": {
       "title": "Sakura Target HUD",
-      "description": "Target display ported from Sakura: rounded panel with a rotating lock marker.",
+      "description": "Target display: rounded panel with a rotating lock marker.",
       "groups": {
         "sgHud": "General",
         "sgShadow": "Shadow",
@@ -9095,7 +9095,7 @@
     },
     "PlayerListHud": {
       "title": "Player List",
-      "description": "Player list HUD modeled after CatLean: avatar, name, health, distance and ping per row.",
+      "description": "Player list HUD: avatar, name, health, distance and ping per row.",
       "groups": {
         "sgGeneral": "General",
         "sgLayout": "Layout",
@@ -9175,7 +9175,7 @@
         ],
         "titleHeight": {
           "title": "Title Panel Height",
-          "description": "Height of the title panel. CatLean uses 16, slightly taller than the 13 row panels."
+          "description": "Height of the title panel."
         },
         "fontSize": [
           "Font Size",
@@ -9183,7 +9183,7 @@
         ],
         "iconSize": {
           "title": "Icon Size",
-          "description": "Side length of the small person icon in the title (CatLean uses 10)."
+          "description": "Side length of the small person icon in the title."
         },
         "dividers": {
           "title": "Dividers",
@@ -9191,11 +9191,11 @@
         },
         "dividerWidth": {
           "title": "Divider Width",
-          "description": "Width of the divider lines (CatLean uses 0.5)."
+          "description": "Width of the divider lines."
         },
         "dividerHeight": {
           "title": "Divider Height",
-          "description": "Height of the divider lines (CatLean uses 8.5)."
+          "description": "Height of the divider lines."
         },
         "dividerColor": {
           "title": "Divider Color",
@@ -9215,7 +9215,7 @@
         ],
         "panelBorder": {
           "title": "Panel Border",
-          "description": "Draw a thin border around the panel edge. CatLean's panels are fill + border (see uBorderWidth/uBorderColor in its rect.fsh); the border keeps panels from blurring into dark backgrounds."
+          "description": "Draw a thin border around the panel edge. Panels are fill + border; the border keeps panels from blurring into dark backgrounds."
         }
       }
     },
@@ -9307,7 +9307,7 @@
     },
     "FpsHud": {
       "title": "FPS",
-      "description": "Frame rate HUD (mimics CatLean's fps-widget).",
+      "description": "Frame rate HUD.",
       "groups": {
         "sgGeneral": "General",
         "sgLook": "Appearance"
@@ -9367,13 +9367,13 @@
         },
         "panelBorder": {
           "title": "Panel Border",
-          "description": "Draw a thin border around the panel edge. CatLean's panels are fill + border (see uBorderWidth/uBorderColor in its rect.fsh); the border keeps panels from blurring into dark backgrounds."
+          "description": "Draw a thin border around the panel edge. Panels are fill + border; the border keeps panels from blurring into dark backgrounds."
         }
       }
     },
     "PingHud": {
       "title": "Ping",
-      "description": "Latency HUD (mimics CatLean's ping-widget). Read from the tab-list data; shows -- when unavailable, since 0ms is a valid latency.",
+      "description": "Latency HUD. Read from the tab-list data; shows -- when unavailable, since 0ms is a valid latency.",
       "groups": {
         "sgGeneral": "General",
         "sgLook": "Appearance"
@@ -9433,13 +9433,13 @@
         },
         "panelBorder": {
           "title": "Panel Border",
-          "description": "Draw a thin border around the panel edge. CatLean's panels are fill + border (see uBorderWidth/uBorderColor in its rect.fsh); the border keeps panels from blurring into dark backgrounds."
+          "description": "Draw a thin border around the panel edge. Panels are fill + border; the border keeps panels from blurring into dark backgrounds."
         }
       }
     },
     "CoordHud": {
       "title": "Coordinates",
-      "description": "Coordinate HUD (mimics CatLean's coord-widget). The bracketed pair is the matching position in the other dimension (Overworld /8, Nether x8).",
+      "description": "Coordinate HUD. The bracketed pair is the matching position in the other dimension (Overworld /8, Nether x8).",
       "groups": {
         "sgGeneral": "General",
         "sgLook": "Appearance"
@@ -9507,13 +9507,13 @@
         },
         "panelBorder": {
           "title": "Panel Border",
-          "description": "Draw a thin border around the panel edge. CatLean's panels are fill + border (see uBorderWidth/uBorderColor in its rect.fsh); the border keeps panels from blurring into dark backgrounds."
+          "description": "Draw a thin border around the panel edge. Panels are fill + border; the border keeps panels from blurring into dark backgrounds."
         }
       }
     },
     "ArmorHud": {
       "title": "Armor",
-      "description": "Armor durability HUD (mimics CatLean's armor-widget). Fixed 81x22 panel with four 16x16 icons and a durability bar under each.",
+      "description": "Armor durability HUD. Fixed 81x22 panel with four 16x16 icons and a durability bar under each.",
       "texts": {
         "title": "Armor"
       },
@@ -9573,7 +9573,7 @@
         },
         "panelBorder": {
           "title": "Panel Border",
-          "description": "Draw a thin border around the panel edge. CatLean's panels are fill + border (see uBorderWidth/uBorderColor in its rect.fsh); the border keeps panels from blurring into dark backgrounds."
+          "description": "Draw a thin border around the panel edge. Panels are fill + border; the border keeps panels from blurring into dark backgrounds."
         },
         "lowColor": {
           "title": "Low Durability Color",
@@ -9585,11 +9585,11 @@
         },
         "breathe": {
           "title": "Breathing Effect",
-          "description": "Subtle brightness breathing over time (CatLean look). CatLean cycles between two theme colors; this version breathes on brightness so the green=good / red=bad meaning is preserved."
+          "description": "Subtle brightness breathing over time, so the green=good / red=bad meaning is preserved."
         },
         "breatheSpeed": {
           "title": "Breathing Speed",
-          "description": "Breathing rate. CatLean phase is (time/14) mod 854."
+          "description": "Breathing rate."
         },
         "breatheDepth": {
           "title": "Breathing Depth",
@@ -9607,7 +9607,7 @@
     },
     "InventoryHud": {
       "title": "Inventory",
-      "description": "Inventory HUD (mimics CatLean's inventory-widget). A title panel plus three 9-slot rows showing the main inventory (slots 9-35).",
+      "description": "Inventory HUD. A title panel plus three 9-slot rows showing the main inventory (slots 9-35).",
       "texts": {
         "title": "Inventory"
       },
@@ -9670,13 +9670,13 @@
         },
         "panelBorder": {
           "title": "Panel Border",
-          "description": "Draw a thin border around the panel edge. CatLean's panels are fill + border (see uBorderWidth/uBorderColor in its rect.fsh); the border keeps panels from blurring into dark backgrounds."
+          "description": "Draw a thin border around the panel edge. Panels are fill + border; the border keeps panels from blurring into dark backgrounds."
         }
       }
     },
     "CooldownsHud": {
       "title": "Cooldowns",
-      "description": "Item cooldown HUD (mimics CatLean's cooldowns-widget). One row per cooldown group; duplicates of the same group are merged.",
+      "description": "Item cooldown HUD. One row per cooldown group; duplicates of the same group are merged.",
       "texts": {
         "title": "Cooldowns"
       },
@@ -9735,13 +9735,13 @@
         },
         "panelBorder": {
           "title": "Panel Border",
-          "description": "Draw a thin border around the panel edge. CatLean's panels are fill + border (see uBorderWidth/uBorderColor in its rect.fsh); the border keeps panels from blurring into dark backgrounds."
+          "description": "Draw a thin border around the panel edge. Panels are fill + border; the border keeps panels from blurring into dark backgrounds."
         }
       }
     },
     "PotionsHud": {
       "title": "Potions",
-      "description": "Status effect HUD (mimics CatLean's potions-widget). One row per effect: name, roman-numeral level, and remaining time.",
+      "description": "Status effect HUD. One row per effect: name, roman-numeral level, and remaining time.",
       "texts": {
         "title": "Potions"
       },
@@ -9800,13 +9800,13 @@
         },
         "panelBorder": {
           "title": "Panel Border",
-          "description": "Draw a thin border around the panel edge. CatLean's panels are fill + border (see uBorderWidth/uBorderColor in its rect.fsh); the border keeps panels from blurring into dark backgrounds."
+          "description": "Draw a thin border around the panel edge. Panels are fill + border; the border keeps panels from blurring into dark backgrounds."
         }
       }
     },
     "ChestCounterHud": {
       "title": "Chest Counter",
-      "description": "Chest counter HUD (mimics CatLean's chest-counter-widget). Counts chest block entities nearby; a double chest counts as two, single chests are excluded.",
+      "description": "Chest counter HUD. Counts chest block entities nearby; a double chest counts as two, single chests are excluded.",
       "groups": {
         "sgGeneral": "General",
         "sgLook": "Appearance"
@@ -9866,13 +9866,13 @@
         },
         "panelBorder": {
           "title": "Panel Border",
-          "description": "Draw a thin border around the panel edge. CatLean's panels are fill + border (see uBorderWidth/uBorderColor in its rect.fsh); the border keeps panels from blurring into dark backgrounds."
+          "description": "Draw a thin border around the panel edge. Panels are fill + border; the border keeps panels from blurring into dark backgrounds."
         }
       }
     },
     "NotificationsWidget": {
       "title": "Notifications Widget",
-      "description": "Notification HUD (ported from CatLean's sg notification system).",
+      "description": "Notification HUD.",
       "texts": {
         "title": "Notifications"
       },
@@ -9895,7 +9895,7 @@
         },
         "stackUp": {
           "title": "Stack Up",
-          "description": "CatLean stacks upward (row step 16). Disable to stack downward."
+          "description": "Stacks upward. Disable to stack downward."
         },
         "maxVisible": {
           "title": "Max Visible",
@@ -9955,7 +9955,7 @@
         },
         "sounds": {
           "title": "Sounds",
-          "description": "Play a sound when a module is enabled/disabled (CatLean only sounds enable/disable notifications)."
+          "description": "Play a sound when a module is enabled/disabled."
         },
         "soundVolume": {
           "title": "Sound Volume",
@@ -9965,7 +9965,7 @@
     },
     "SpeedHud": {
       "title": "Speed HUD",
-      "description": "Speed HUD (ported from CatLean's speed-widget).",
+      "description": "Speed HUD.",
       "texts": {
         "title": "Speed"
       },
@@ -10037,13 +10037,13 @@
         },
         "horizontalOnly": {
           "title": "Horizontal Only",
-          "description": "Use horizontal speed only (CatLean behaviour). Disable to include vertical."
+          "description": "Use horizontal speed only. Disable to include vertical."
         }
       }
     },
     "TpsHud": {
       "title": "TPS HUD",
-      "description": "TPS HUD (ported from CatLean's tps-widget).",
+      "description": "TPS HUD.",
       "texts": {
         "title": "TPS"
       },
@@ -10112,7 +10112,7 @@
     },
     "Notifier": {
       "title": "Notifier",
-      "description": "Notifier (ported from CatLean's notifier module).",
+      "description": "Notifier.",
       "texts": {
         "title": "Notifier"
       },
@@ -10141,7 +10141,7 @@
         },
         "chineseText": {
           "title": "Chinese Text",
-          "description": "On = Chinese; Off = English (CatLean wording)."
+          "description": "On = Chinese; Off = English."
         },
         "lowArmor": {
           "title": "Low Armor",
@@ -10165,11 +10165,11 @@
         },
         "alertColorA": {
           "title": "Banner Color A",
-          "description": "Start color of the blink (CatLean uses red)."
+          "description": "Start color of the blink."
         },
         "alertColorB": {
           "title": "Banner Color B",
-          "description": "End color of the blink (CatLean uses yellow)."
+          "description": "End color of the blink."
         },
         "pastEffects": {
           "title": "Past Effects",
@@ -10257,7 +10257,7 @@
         },
         "ftCompat": {
           "title": "FT Compat",
-          "description": "CatLean's ft-compat. NOTE: the exact timing logic was not recovered from the sources; this build only provides the toggle and a notice."
+          "description": "Totem-pop compat notification. This build only provides the toggle and a notice."
         },
         "old": {
           "title": "Pre 1.21",
@@ -10265,7 +10265,7 @@
         },
         "onlyDon": {
           "title": "Only Whitelisted",
-          "description": "Only notify for whitelisted players. (CatLean checks its own server API for donators; this build uses a local whitelist instead.)"
+          "description": "Only notify for whitelisted players."
         },
         "donWhitelist": {
           "title": "Whitelist",
@@ -10275,7 +10275,7 @@
     },
     "PvpResourcesHud": {
       "title": "Pvp Resources HUD",
-      "description": "PvP resources HUD (ported from CatLean's pvp-resources-widget).",
+      "description": "PvP resources HUD.",
       "texts": {
         "title": "PvP Resources"
       },
@@ -10371,7 +10371,7 @@
     },
     "FlightHud": {
       "title": "Flight HUD",
-      "description": "Flight instrument HUD (ported from CatLean's flight-widget).",
+      "description": "Flight instrument HUD.",
       "texts": {
         "title": "Flight"
       },
@@ -10451,7 +10451,7 @@
     },
     "KeybindsHud": {
       "title": "Keybinds HUD",
-      "description": "Keybinds HUD (ported from CatLean's keybinds-widget).",
+      "description": "Keybinds HUD.",
       "texts": {
         "title": "Keybinds"
       },
@@ -10519,7 +10519,7 @@
     },
     "CrosshairHud": {
       "title": "Crosshair HUD",
-      "description": "Custom crosshair (inspired by CatLean's crosshair; shape designed in-house).",
+      "description": "Custom crosshair.",
       "texts": {
         "title": "Crosshair"
       },

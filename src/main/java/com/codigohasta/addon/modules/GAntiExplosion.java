@@ -41,9 +41,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
 public class GAntiExplosion extends Module {
 
-    /** 内部 ID：{@link GcoreServerEquivMove} 的注册键；与源模块名一致。 */
     private static final String MODULE_NAME = "GAntiExplosion";
-
 
     private final SettingGroup sgCrystal = this.settings.createGroup("反水晶");
     private final SettingGroup sgAnchor = this.settings.createGroup("反锚");
@@ -224,7 +222,6 @@ public class GAntiExplosion extends Module {
             }
         });
     }
-
 
     private static void executeOnMainThread(Runnable body) {
         GcoreMainThread.runAndWait(() -> {

@@ -153,29 +153,6 @@ public class AlienRotationUtil {
      * @param desired    本 tick 期望朝向（任意圈数）
      * @param lastSent   上一包实际发出去的 yaw（首次为 {@code null} 语义，传 {@link Float#NaN}）
      */
-    /**
-     * 让本 tick 的发送值保持规范角度（{@code (-180, 180]}）。
-     *
-     * <h2>⛔ 撤回：不要为了「贴近上一包」给 yaw 加 ±360</h2>
-     * 之前两版实现都有问题（都有日志实证）：
-     * <ol>
-     *   <li>{@code desired - 360*round(...)} —— 圈数无限累积，漂到 <b>-1623</b></li>
-     *   <li>{@code d ± 360} 只调一格 —— 产出 <b>268.38</b> 这种越界值。
-     *       一旦后续 tick 回归真实角度，就产生 360° 跳变，
-     *       正中 Grim {@code AimModulo360.java:31} 的
-     *       {@code |deltaXRot| > 320} 判据 ⇒ flag + 回弹</li>
-     * </ol>
-     *
-     * <h2>✅ 照抄 AlienV4 的做法</h2>
-     * Alien 的 {@code Sprint.getSprintYaw()} 末行就是：
-     * <pre>
-     *   return MathHelper.wrapDegrees(yaw);
-     * </pre>
-     * 它<b>永远发送规范角度</b>，不做任何「贴近上一包」的补偿。
-     * 既然 Alien 在真实 Grim 服务器上能过，就照抄，不要自作聪明。
-     *
-     * <p>{@code lastSent} 参数保留但不再使用，只为调用点兼容。
-     */
     public static float continuous(float desired, float lastSent) {
         // 与 Alien 完全一致：只折到 (-180, 180]，不做圈数对齐。
         return wrap180(desired);

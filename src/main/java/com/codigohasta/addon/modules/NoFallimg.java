@@ -202,8 +202,6 @@ public class NoFallimg extends Module {
                 flag = false;
             }
 
-            // ===== LazyGrimPlus2: 精细移植自 SlimefunHelper =====
-
             case LazyGrimPlus2 -> {
                 // 状态机忙或冷却中
                 if (step != 0) return;

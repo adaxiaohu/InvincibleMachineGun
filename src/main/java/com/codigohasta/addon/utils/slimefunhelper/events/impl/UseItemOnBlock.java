@@ -7,11 +7,6 @@ import net.minecraft.util.Hand;
 import net.minecraft.util.hit.BlockHitResult;
 import net.minecraft.util.math.BlockPos;
 
-/**
- * Ported from upstream 1.1.7.2 {@code me.matl114.events.impl.UseItemOnBlock}
- * (Lombok accessors written explicitly; {@code placingBlockPos} + {@code handItem} added by
- * upstream in place of IMG's {@code boolean placeBlock}).
- */
 public class UseItemOnBlock implements SequencedAction {
     private BlockHitResult hitResult;
     private ActionResult actionResult;

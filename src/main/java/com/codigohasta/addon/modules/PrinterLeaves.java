@@ -130,7 +130,7 @@ public class PrinterLeaves extends Module {
             .build()
     );
     public PrinterLeaves() {
-        super(AddonTemplate.CATEGORY, "L投影打印", "来自leaveshack的投影打印模块。抄来高版本。rotation似乎有点问题。grim会回弹");
+        super(AddonTemplate.CATEGORY, "L投影打印", "投影打印模块。rotation似乎有点问题。grim会回弹");
     }
     boolean hasSneak = false;
     private Timer shiftTimer = new Timer();

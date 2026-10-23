@@ -1,14 +1,5 @@
 package com.codigohasta.addon.utils.sakura.render;
 
-/**
- * 极简缓动动画（0→1），供面板出入场用。
- *
- * <p> CatLean 的弹出动画（{@code CatAnimation / CatEasing}，legacy 备份里有一套）：
- * 那套支持矩阵缩放绕中心；本项目的分批渲染器不支持逐项矩阵变换，
- * 所以这里用「进度直接驱动尺寸偏移 + alpha」近似同样的观感（见 CooldownsHud）。
- *
- * <p><b>用法</b>：持有实例 → 每帧 {@code update(dt)} 推进 → 读 {@code value()}。
- */
 public final class CatProgress {
 
     /** 当前值 0~1。 */
@@ -72,16 +63,6 @@ public final class CatProgress {
         return value == target;
     }
 
-    /**
-     * OUT_BACK 缓动：带过冲的「弹出」感。
-     *
-     * <p>CatLean 的 {@code fd(_s.OUT_BACK, ...)} 就是这一族
-     * （{@code l1.java:90} 确证）。
-     *
-     * @param overshoot 过冲强度；标准公式取 {@code 1.70158}。
-     *                  用户 2026-10-07 要求「更灵动、有活力」，
-     *                  所以通知用 <b>2.6</b>（过冲峰值约 1.16，比标准更明显）。
-     */
     public static float outBack(float t, float overshoot) {
         float x = Math.max(0f, Math.min(1f, t));
         final float c1 = overshoot;
@@ -90,7 +71,6 @@ public final class CatProgress {
         return 1f + c3 * xm1 * xm1 * xm1 + c1 * xm1 * xm1;
     }
 
-    /** OUT_BACK（标准强度，照 CatLean 默认）。 */
     public static float outBack(float t) {
         return outBack(t, 1.70158f);
     }

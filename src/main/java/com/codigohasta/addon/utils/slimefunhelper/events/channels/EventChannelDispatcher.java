@@ -5,7 +5,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import com.codigohasta.addon.utils.slimefunhelper.events.Event;
 
-/** Ported from upstream 1.1.7.2 {@code me.matl114.events.channels.EventChannelDispatcher}. */
 public class EventChannelDispatcher<T> extends EventChannel<T> {
     public Function<Event<T>, ?> dispatcher;
 

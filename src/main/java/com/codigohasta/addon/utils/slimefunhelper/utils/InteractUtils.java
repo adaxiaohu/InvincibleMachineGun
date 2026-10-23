@@ -119,7 +119,6 @@ public class InteractUtils {
         return actionResult;
     }
 
-    /** Ported from upstream 1.1.7.2 InteractUtils.simulateInteractItem. */
     public static ActionResult simulateInteractItem(Hand hand) {
         ItemStack itemStack = mc.player.getStackInHand(hand);
         if (mc.player.getItemCooldownManager().isCoolingDown(itemStack)) {

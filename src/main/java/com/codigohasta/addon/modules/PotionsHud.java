@@ -42,7 +42,7 @@ public class PotionsHud extends AbstractPanelHud {
     private List<Row> rows = List.of();
 
     public PotionsHud() {
-        super("potions-hud", "药水效果 HUD（模仿 CatLean 的 potions-widget）。", 951, 330, 0.85);
+        super("potions-hud", "药水效果 HUD。", 951, 330, 0.85);
     }
 
     @Override

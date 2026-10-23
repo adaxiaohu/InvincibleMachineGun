@@ -21,50 +21,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-/**
- * ★ IMG 自研的目标位置预判。
- *
- * <h2>要解决的问题</h2>
- * 实测：<b>对手高速飞行时，降龙十八掌 / 如来神掌「锁定不了」；对手慢下来就能打中。</b>
- *
- * <p>根因是<b>客户端位置插值</b>：
- * <pre>
- * PositionInterpolator.DEFAULT_INTERPOLATION_DURATION = 3   （字节码已核，常量池 int 3）
- * PositionInterpolator.tick():  dconst_1 / data.step        ← 每 tick 只走 1/step
- * LivingEntity.tick():2883      getInterpolator().tick()
- * </pre>
- * 客户端每 tick 只把实体的 {@code pos} 往「服务端给的目标位置」挪 1/3，
- * 要 <b>3 个 tick</b> 才追上。于是：
- * <pre>
- *   目标速度          客户端看到的滞后
- *   走路 0.2 格/tick   0.6 格      → 无所谓
- *   冲刺 0.3 格/tick   0.9 格      → 无所谓
- *   鞘翅 2~3 格/tick   6~9 格      → ★ distanceTo 偏大 → 索敌失败 / 落点打偏
- * </pre>
- *
- * <h2>怎么解决</h2>
- * <b>不信插值位置，直接跟踪服务端发来的位置包</b>：
- * <ol>
- *     <li>{@link TrackedPosition} 按包里的 delta 自行推进 —— 包一到就更新，滞后 ≈ 0；</li>
- *     <li>把每次更新存进历史队列（带 tick 号）；</li>
- *     <li>用历史做<b>外推</b>（线性回归 / 指数加权），预测 {@code ticksLater} 刻后的位置。</li>
- * </ol>
- *
- * <p>算法思路参考了 slimefunhelper 的 {@code PredictorImpl} + {@code MathUtils}
- * （{@code linearPrediction} / {@code NVPredictor}），
- * <b>但本类代码是 IMG 自己写的</b>，放在 {@code utils/img} 包内，
- * <b>不引用 slimefunhelper 的任何类</b>。
- *
- * <h2>★ 线程安全</h2>
- * {@link PacketEvent.Receive} 注入在 Netty 线程的 {@code channelRead0}
- * （meteor {@code ClientConnectionMixin}），而模块在 Render thread 读。
- * 所以：外层用 {@link ConcurrentHashMap}，每个 {@link Track} 内部用 {@code synchronized}。
- *
- * <h2>★ 退化行为（重要）</h2>
- * 若某实体<b>还没有任何位置包</b>（刚出现 / 刚进追踪范围），
- * 本类<b>回退到实体当前位置</b>（{@link Entity#getEntityPos()}），
- * 使行为与「没有预判」时完全一致 —— <b>绝不因缺数据而返回 null 导致模块不出手</b>。
- */
 public final class ImgPositionPredict {
 
     /** 全局单例 —— 由 {@code AddonTemplate.onInitialize()} 订阅到事件总线。 */

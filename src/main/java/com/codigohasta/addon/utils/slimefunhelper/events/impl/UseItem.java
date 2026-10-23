@@ -4,10 +4,6 @@ import net.minecraft.item.ItemStack;
 import net.minecraft.util.ActionResult;
 import net.minecraft.util.Hand;
 
-/**
- * Ported from upstream 1.1.7.2 {@code me.matl114.events.impl.UseItem}
- * (Lombok accessors written explicitly; {@code handItem} added by upstream).
- */
 public class UseItem implements SequencedAction {
     ActionResult actionResult;
 

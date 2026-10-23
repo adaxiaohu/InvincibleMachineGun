@@ -19,15 +19,6 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
-/**
- * SVG 图标库：把 {@code assets/invincible_machine_gun/vector/*.svg} 栅格化成 MC 贴图并绘制。
- *
- * <p>管线与 CatLean 的 {@code bj.java} 一致：
- * JSVG {@link SVGLoader} → {@link SVGDocument#render} 到 {@link BufferedImage} →
- * {@link NativeImageBackedTexture} 注册 → 走本项目的 SDF 贴图管线绘制。
- *
- * <p>图标按需加载并缓存；加载失败的图标记入失败表，不再每帧重试。
- */
 public final class SakuraSvgIcons {
     private SakuraSvgIcons() {
     }
@@ -66,26 +57,6 @@ public final class SakuraSvgIcons {
                             net.minecraft.client.texture.NativeImageBackedTexture owned) {
     }
 
-    /**
-     * 绘制一个 SVG 图标。
-     *
-     * <p>图标未就绪时安静跳过（下一帧再试），绝不抛异常。
-     *
-     * <p><b>为什么按显示尺寸栅格化</b>：绘制走的是 {@code rect_textured.fsh}，
-     * 它用 {@code texelFetch} 逐纹素取样，<b>完全忽略纹理过滤</b>（这正是它「像素精确
-     * 不糊」的原因）。所以若固定 64×64 栅格再缩到 10px 显示，会每 6.4 个纹素才取 1 个，
-     * 细笔画（小人的手臂/腿）直接断裂或消失。CatLean 的 {@code bj.java:142} 也是
-     * {@code new BufferedImage(ceil(w), ceil(h))} —— 按目标尺寸栅格化。
-     * 因此这里也按显示尺寸（乘 GUI 缩放）栅格化，并按尺寸分档缓存。
-     *
-     * @param name 图标名（不带 {@code .svg}，如 {@code "player-list-widget"}）
-     * @param x    左上角 X（逻辑像素）
-     * @param y    左上角 Y
-     * @param size 边长（逻辑像素）
-     * @param tint 染色（含 alpha）。<b>用白色</b>才会保留 SVG 自身的颜色；
-     *             传深色会把整张图标乘黑（着色器是 {@code tex.rgb * uColor.rgb}）
-     * @return 是否真的画了
-     */
     public static boolean draw(String name, float x, float y, float size,
                                meteordevelopment.meteorclient.utils.render.color.Color tint) {
         return draw(name, x, y, size, size, tint);
@@ -248,17 +219,8 @@ public final class SakuraSvgIcons {
         return info;
     }
 
-    /**
-     * 把 SVG 栅格化成 {@link NativeImageBackedTexture}。
-     *
-     * <p>与 CatLean {@code bj.java:138-166} 相同的三步：
-     * SVGLoader.load → SVGDocument.render(Graphics2D) → 注册贴图。
-     *
-     * @param px 栅格化边长（像素），由调用方按显示尺寸算好
-     */
     private static IconInfo rasterize(String name, int px) {
         try {
-            // JSVG 2.0 只接受 URL（CatLean 用的旧版能吃 InputStream）
             String path = "/assets/" + PREFIX + "/" + DIR + "/" + name + ".svg";
             java.net.URL url = SakuraSvgIcons.class.getResource(path);
             if (url == null) return null;

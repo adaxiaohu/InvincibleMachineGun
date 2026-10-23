@@ -5,37 +5,6 @@ import net.minecraft.client.sound.PositionedSoundInstance;
 import net.minecraft.sound.SoundEvent;
 import net.minecraft.util.Identifier;
 
-/**
- * 通知音效（移植 CatLean {@code d2} 的音效系统）。
- *
- * <h2>✅ 源码确证：音效只在 ENABLED / DISABLED 时播</h2>
- *
- * <p>CatLean {@code sg.q(...)} 里的 switch（{@code sw.java} 的映射表确证）：
- * <pre>
- *   nArray[ys.DISABLED.ordinal()] = 1;   // case 1 -&gt; d2.O.d()
- *   nArray[ys.ENABLED.ordinal()]  = 2;   // case 2 -&gt; d2.O.s()
- * </pre>
- * 即 <b>只有 ENABLED / DISABLED 两种通知类型有音效</b>
- * （正好对应「模块开/关」→ {@code enable.ogg} / {@code disable.ogg}）。
- *
- * <p>其余检测项的音效由 Notifier 各分支自己播（CatLean 里也是分散调用的）：
- * <pre>
- *   armor-alert   低甲
- *   chat-mention  被提及
- *   found-stash   物资点
- *   lag           服务器无响应
- *   lag-back      回弹
- *   range-in/out  进出视野
- * </pre>
- *
- * <h2>资源来源</h2>
- * <p>{@code assets/invincible_machine_gun/sounds/*.ogg}
- * —— 用户 2026-10-07 确认<b>从 CatLean 提取</b>这批发通知相关的音效。
- *
- * <p>播放方式照项目已有的 {@code TerminatorHudShader.playSound}
- * （{@code SoundEvent.of(id)} + {@code PositionedSoundInstance.ui}），
- * 走客户端 {@code SoundManager}，不需要服务端注册。
- */
 public final class NotifySounds {
 
     private static final String NS = "invincible_machine_gun";
@@ -57,10 +26,6 @@ public final class NotifySounds {
      * 并注册到 {@code sounds.json}。
      */
     public static final Identifier HE_POPTOTEM = Identifier.of(NS, "he_poptotem");
-    /**
-     * CatLean 自带的图腾音 —— 用于【自己】弹图腾
-     * （用户 2026-10-07：自己用 totem-pop，别人用 he_poptotem）。
-     */
     public static final Identifier TOTEM_POP = Identifier.of(NS, "totem_pop");
 
     private NotifySounds() {}
@@ -127,11 +92,6 @@ public final class NotifySounds {
         play(id, 1.0f);
     }
 
-    /**
-     * 按通知类型自动选音效（照 CatLean：只有 ENABLED/DISABLED 有音效）。
-     *
-     * @return 是否播了音
-     */
     public static boolean playForType(ImgNotificationType type, float volume) {
         switch (type) {
             case ENABLED -> { play(ENABLE, volume); return true; }

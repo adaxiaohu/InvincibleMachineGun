@@ -156,14 +156,6 @@ public class StandGuiCommandScreen extends WidgetScreen {
 
     // ═══════════ 键事件 ═══════════
 
-    /**
-     * 键事件。
-     *
-     * <p><b>⚠️ 必须用 yarn 名 {@code keyPressed}/{@code charTyped}</b>：
-     * 本项目编译环境是 yarn 映射（已用 javap 核对 MC 1.21.11 的
-     * {@code Element}/{@code Screen}）。写成 {@code method_25404} 或
-     * {@code class_11908} 都编译不过 —— 前两版连错两轮就是这个原因。
-     */
     @Override
     public boolean keyPressed(net.minecraft.client.input.KeyInput input) {
         int key = input.key();

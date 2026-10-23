@@ -95,7 +95,7 @@ public class VelocityAlien extends Module {
     private boolean reflectionInitialized = false;
 
     public VelocityAlien() {
-        super(AddonTemplate.CATEGORY, "velocity-alien", "抄的alien的模块。没用的功能");
+        super(AddonTemplate.CATEGORY, "velocity-alien", "没用的功能");
         // 在构造时不做反射，延迟到启用或第一次调用时，防止初始化崩溃
     }
 

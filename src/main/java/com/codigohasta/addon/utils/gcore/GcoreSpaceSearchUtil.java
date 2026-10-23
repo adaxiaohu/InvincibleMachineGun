@@ -11,46 +11,13 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 
-/**
- * 「头顶可用空间」搜索 —— 重锤模拟高度的动态计算。
- *
- * <p><b>移植自 {@code slimefunhelper} 的 ＠{@code Attack.processMaceAttack} 依赖链</b>：
- * <pre>
- *   Attack.processMaceAttack
- *     └─ MovTasks.searchFirstNoCollisionSpaceYHeight(origin, min, max, upOrDown)
- *          ├─ mc.player.dimensions.getBoxAt(origin)          // 玩家在该处的碰撞箱
- *          ├─ CollisionUtil.resetY(box, y+tmin, y+tmax)      // 沿 Y 拉伸成搜索柱
- *          ├─ CollisionUtil.getCollisions(...)               // 采集柱内所有碰撞体
- *          └─ MovTasks.searchFirstNoYConflictYHeight(...)    // 求第一个不冲突的高度
- * </pre>
- *
- * <p>这是 slimefunhelper 重锤 TP「动态模拟高度」的真正核心：
- * 它不是死用一个高度，而是先问「从我头顶往上/往下，第一个能不卡住的位置在哪」。
- *
- * <p><b>为什么必须用它</b>：固定高度在室内会撞天花板（服务端判
- * {@code moved wrongly} / {@code clipped into block} 而拉回），在露天又浪费高度。
- * slimefunhelper 的做法是「以设定值为起点，向下找第一个可行高度」。
- */
 public final class GcoreSpaceSearchUtil {
 
     private GcoreSpaceSearchUtil() {
     }
 
-    /** 玩家碰撞箱高度，多给 2E-7 的余量（照抄 slimefunhelper）。 */
     private static final double BOX_EPSILON = 2.0E-7;
 
-    /**
-     * 在 {@code origin} 处沿 Y 方向找「第一个不与任何碰撞体冲突」的高度差。
-     *
-     * <p>逐行对应 {@code MovTasks.searchFirstNoCollisionSpaceYHeight}
-     * （源 157-183 行）＋ {@code searchFirstNoYConflictYHeight}（源 606-668 行）。
-     *
-     * @param origin   搜索起点（一般传 {@code playerPos.add(0, maxMace, 0)}）
-     * @param min      最小高度差（{@code upOrDown=true} 时向下界）
-     * @param max      最大高度差
-     * @param upOrDown {@code true} = 向上搜；{@code false} = 向下搜
-     * @return 相对 {@code origin.y} 的高度差；原方法可能返回越界值（源里标注 fixme），这里照抄
-     */
     public static double searchFirstNoCollisionSpaceYHeight(Vec3d origin, double min, double max,
                                                            boolean upOrDown) {
         MinecraftClient mc = MinecraftClient.getInstance();
@@ -68,7 +35,6 @@ public final class GcoreSpaceSearchUtil {
 
         List<Box> collisionsBB = new ArrayList<>();
         List<VoxelShape> collisionsVoxel = new ArrayList<>();
-        // flags 照抄 slimefunhelper：COLLISION_FLAG_CHECK_BORDER
         CollisionUtil.getCollisions(
             mc.world,
             player,

@@ -3,13 +3,6 @@ package com.codigohasta.addon.utils.slimefunhelper.events;
 import java.util.*;
 import java.util.function.Function;
 
-/**
- * Per-key fan-out of events.
- *
- * <p>Ported from upstream 1.1.7.2 {@code EventChannelDispatcher}: the optional {@code dispatcher}
- * derives the channel key from the event, so producers can call {@link #handleValue(Event)} once
- * instead of resolving the key themselves.
- */
 public class Channels<T> {
     private final Map<Object,Channel<T>> channels=new java.util.concurrent.ConcurrentHashMap<>();
     private final Function<Event<T>,Object> dispatcher;

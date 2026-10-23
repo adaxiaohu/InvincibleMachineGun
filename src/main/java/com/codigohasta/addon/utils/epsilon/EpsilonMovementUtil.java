@@ -5,11 +5,6 @@ import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket;
 
 import java.lang.reflect.Field;
 
-/**
- * 移植自 Epsilon 的 SendPositionEvent / MoveInputEvent 功能。
- * PlayerMoveC2SPacket 在 1.21.11 的 Yarn 映射中所有字段（x/y/z/yaw/pitch/onGround）
- * 都声明在父类 PlayerMoveC2SPacket 中（protected final），子类不自带字段。
- */
 public class EpsilonMovementUtil {
 
     private static final MinecraftClient mc = MinecraftClient.getInstance();

@@ -1,7 +1,6 @@
 //由etianl（Lunge模式）和Kimtaeho（Blink模式）编写
 //Kimtaeho: https://github.com/needitem
 //etianl: https://github.com/etianl
-//来自裤子条纹的spearkill，多谢多谢。我抄来了
 package com.codigohasta.addon.modules;
 
 import meteordevelopment.meteorclient.events.packets.PacketEvent;
@@ -233,7 +232,7 @@ public class SpearKill extends Module {
     private boolean noFallToggled = false;
 
     public SpearKill() {
-        super(AddonTemplate.CATEGORY, "鹰击长空·矛", "增加长矛伤害,Lunge模式，Blink模式。抄袭自裤子条纹");
+        super(AddonTemplate.CATEGORY, "鹰击长空·矛", "增加长矛伤害,Lunge模式，Blink模式。");
     }
 
     @Override

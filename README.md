@@ -2,29 +2,7 @@
 
 A personal addon for the Meteor client that adds various entertainment modules. Most modules are my original ideas, implemented with AI assistance; some third‑party modules have been modified and are included. 
 
-# [English support!!!] The InvincibleMachineGun plugin now supports English translation. When non-Chinese language users are playing the game, the menu will automatically switch to English. Download versions after 1.7.0
-
 用于 Meteor 客户端的个人插件，添加了各种娱乐模块。方便我自己使用，大多数模块是原创想法，运用大量 AI 代码实现（gemini，deepseek），基本没写任何代码哈哈；有很几个模块是别人的，已被修改并包括在内。
-
-看到 b 站上别人有什么好玩的功能我就试着做一个，或者自己想用的功能就做一个，就这样，玩玩就做了 4 个月，有这些模块了。有些是大量搜集各种开源插件，或者反编译别人的 jar 来抄的。模块都是根据个人需求弄得，有什么可修改的尽管改，代码随你用。从 2025 年 11 月 20 几号，玩插件已经玩了 4 个月了学到了很多编程。我已经玩厌了所以把插件开源了。
-
-这个插件我做了两个版本：1.21.4 和 1.21.11 版本。  
-1.21.4 多几个模块，比如 a* 寻路百米刀、着色器（有 bug 不会修）、击杀特效之类的。因为我玩 1.21.11 版本了，所以把插件更新到 1.21.11，这些模块没有移植到 1.21.11，太麻烦，且没啥用。如果有人想移植过来可以试试。
-
-有些功能是没有完成的只是基本，很多空壳。很多功能不能绕过反作弊插件。只能原版服玩玩。如果有真正的开发者感兴趣可以对代码进行修改完善这个插件。  
-很多没用的功能，做出来玩的，和没做完的构想。  
-很多模块都是中文的，方便我自己用。原版 meteor 不支持中文渲染，需要用 meteor 中文插件，或者别的办法显示中文。  
-基本是从 meteor 的那个模板插件开始开发的，有些模板的内容还没改，懒得改了。
-一个演示视频，展示了部分功能https://www.bilibili.com/video/BV1vKw7zFEov/
-
-因为是我自己做来玩的插件，所以仅是根据个人喜好来弄
-不是很会玩github，感兴趣的大神可以给这个项目贡献。
-
-我做这个插件只是好玩而已，像武功小说一样，打造自己的没敌武功。
-一些模块的命名比较戏谑，那正是有意思的地方。
-什么时候觉得这个游戏没聊了，也就不玩了。
-
-以下功能列表是 AI 生成的，仅供参考，具体功能、有啥作用，以源码实际为主。
 
 ---
 
@@ -133,7 +111,7 @@ A personal addon for the Meteor client that adds various entertainment modules. 
 - ItemDespawnTimer - 物品消失计时器
 - CustomFov - 自定义视野
 - KillFX - 击杀特效
-- SonarBypass - Sonar 绕过
+
 
 ### 聊天类模块 (Chat) — 7 个
 - ChatPrefixCustom - 自定义聊天前缀
@@ -185,7 +163,6 @@ A personal addon for the Meteor client that adds various entertainment modules. 
 - GrimCriticals - GrimAC 风格暴击系统
 - TotemSmash - 图腾破坏者，快速摧毁不死图腾
 - TeleportCriticals - 传送暴击，结合瞬移的暴击系统
-- TotemBypass - 图腾绕过，绕过不死图腾保护
 - TpAura - 如来神掌，从天而降的掌法
 - ArmorBreaker - 护甲破坏者，快速破坏敌人护甲
 - SimpleTpAura - 简单传送光环
@@ -270,7 +247,7 @@ A personal addon for the Meteor client that adds various entertainment modules. 
 - MusicPlayer - 音乐播放器，全自动点歌机
 - VanishDetector - 消失检测器，检测玩家消失
 - AdvancedFakePlayer - 高级假人，能受击的假人
-- AntiSignPluginGUI - 反告示牌插件 GUI，绕过告示牌限制
+- AntiSignGUI - 告示牌 GUI，绕过告示牌限制
 - CreativeLavaMountain - 创造模式熔岩山，快速建造熔岩山
 - RTsearch - 实时搜索，实时搜索功能
 - xhEntityList - 实体列表，显示实体信息
@@ -278,22 +255,4 @@ A personal addon for the Meteor client that adds various entertainment modules. 
 - FlightAntiKick - 飞行防踢，防止飞行时被踢出
 - VelocityAlien - 速度外星人，速度控制模块
 
-### 模块功能特点总结
 
-**技术特色**
-- 多版本兼容：大部分模块支持 Minecraft 1.21.4 及更早版本
-- 智能算法：集成 A* 寻路、预测算法等高级功能
-- 反检测机制：内置多种反作弊绕过技术
-- 高度可定制：丰富的设置选项满足不同需求
-
-**性能优化**
-- 高效渲染：优化的 ESP 和叠加层渲染系统
-- 智能缓存：减少不必要的计算和网络请求
-- 多线程支持：部分模块支持多线程处理
-
-**用户体验**
-- 中文界面：大部分模块提供中文界面和描述
-- 直观设置：分组设置界面，易于配置
-- 实时反馈：提供实时状态显示和效果预览
-
-这个模块集合涵盖了 Minecraft 游戏的各个方面，从基础的战斗功能到高级的自动化系统，为玩家提供了全面的游戏增强体验。（AI 生成）

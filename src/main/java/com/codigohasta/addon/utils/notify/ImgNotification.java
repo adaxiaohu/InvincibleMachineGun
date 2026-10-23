@@ -2,30 +2,6 @@ package com.codigohasta.addon.utils.notify;
 
 import net.minecraft.item.ItemStack;
 
-/**
- * 一条通知。
- *
- * <p>对应 CatLean {@code sg} 系统里的 {@code l1}：
- * <pre>
- *   private final String m;    // title
- *   private final String Z;    // content
- *   private final ys u;        // 类型
- *   private final int l;       // 时长（second）
- *   private final ItemStack H; // 图标物品（可空）
- *   private float K;           // ★ 动画进度 0~1
- *   private final fd n;        // ★ 动画驱动
- * </pre>
- *
- * <p><b>动画</b>：CatLean 在 {@code sg.M(...)} 里做
- * <pre>
- *   matrices.translate(x, y);
- *   matrices.scale(anim, anim);      // 绕中心缩放（弹出/收回）
- *   matrices.translate(x, y);
- * </pre>
- * 目标值由「剩余时间」算出 → 入场放大、出场缩回。
- * 本类用项目的 {@link com.codigohasta.addon.utils.sakura.render.CatProgress}
- * 承载同样的语义（缓动 + 进度）。
- */
 public final class ImgNotification {
 
     /** 标题（可空）。 */
@@ -74,7 +50,6 @@ public final class ImgNotification {
         this.durationMs = Math.max(1, seconds) * 1000L;
         this.createdAt = System.currentTimeMillis();
         // 入场时长。
-        //   CatLean 用 fd(_s.OUT_BACK, 时长)（l1.java:90 确证），时长是加密常量。
         //   用户 2026-10-07 要求「更灵动、有活力」且「动画速度要可自定义可调」——
         //   时长由 NotificationsWidget 的设置写进静态字段（见 ANIM_MS）。
         this.anim = new com.codigohasta.addon.utils.sakura.render.CatProgress(ANIM_MS);
@@ -94,20 +69,6 @@ public final class ImgNotification {
      */
     public static volatile float EXIT_MS = 260f;
 
-    /**
-     * 出场动画进度（0~1，1 = 还没开始收；0 = <b>完全缩回中心一个点</b>）。
-     *
-     * <p>照 CatLean：剩余时间不足时开始收回。
-     *
-     * <p>用户 2026-10-07：「没缩到中心成一个点消失」——
-     * 旧实现把出场压在 250ms 内，但 alpha 用的是入场进度，导致
-     * 「面板缩没了、字还留着」。现在：
-     * <ul>
-     *   <li>出场时长由设置 {@link #EXIT_MS} 决定；</li>
-     *   <li>进度线性走到 <b>0</b>（真的成一个点），配合调用方的 IN_BACK 收缩；</li>
-     *   <li>alpha 也由调用方按同一进度淡出，保证「字与面板同时消失」。</li>
-     * </ul>
-     */
     public float exitProgress() {
         long remain = durationMs - ageMs();
         float ex = EXIT_MS <= 0f ? 1f : EXIT_MS;

@@ -1,14 +1,5 @@
 package com.codigohasta.addon.utils.gcore;
 
-/**
- * 毫秒计时器。
- *
- * <p>移植自 {@code dev.godden.core.Utils.ClassUtil.MSTimer}（GCore / LiquidBounce）。
- * 保留原有的三个方法语义与 {@code System.currentTimeMillis()} 实现。
- *
- * <p><b>翻译说明</b>：源类是 Kotlin 的普通 class（有状态），所以按实例类移植，
- * 不走 static 化。方法体与源逐行对应。
- */
 public final class GcoreMSTimer {
 
     /** 上次 {@link #reset()} 或构造的时刻。 */

@@ -22,30 +22,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 
-/**
- * 2D 后处理工具（移植自 Sakura 的 {@code Shader2DUtil}，并扩展了故障风格效果）。
- *
- * <p>提供两个效果，都通过「拷贝主帧缓冲 → 画全屏四边形 → 片元着色器重绘」实现：
- * <ul>
- *     <li>{@link #drawRoundedBlur} —— 圆角矩形背景模糊（Sakura 原有）</li>
- *     <li>{@link #drawGlitch} —— 信号故障 / RGB 色散（新增，用于面板入场出场动画）</li>
- * </ul>
- *
- * <p><b>1.21.4 → 1.21.11 的 API 变化（移植要点）</b>：
- * <ul>
- *     <li>原版用 {@code ShaderProgramKey} + 核心着色器 JSON 加载着色器。1.21.11 已删除
- *         {@code ShaderProgramKey}/{@code ShaderProgramDefinition}，核心着色器不再有 JSON 描述。</li>
- *     <li>原版的 {@code Uniform1f/2f/4f.set(...)} 与 {@code SamplerUniform.set(...)} 也不存在了：
- *         引擎把 uniform 统一改成 std140 UBO，只能经 {@code RenderPass.setUniform} 传递。</li>
- *     <li>因此这里直接走 LWJGL 的 GL20/GL30：自己编译着色器、用
- *         {@code glGetUniformLocation + glUniform*} 设置参数、绘制全屏四边形。
- *         这与本项目既有的 {@code FullscreenShaderModule} 做法一致，并且能逐行保留原版 uniform 语义。</li>
- *     <li>拷贝主帧缓冲改用 {@code CommandEncoder.copyTextureToTexture}（原版是 {@code glBlitFramebuffer}）。</li>
- * </ul>
- */
 public class Shader2DUtil {
-
-
 
     private static final MinecraftClient mc = MinecraftClient.getInstance();
 
@@ -58,12 +35,6 @@ public class Shader2DUtil {
     private static final Identifier BLUR_FS =
         Identifier.of("invincible_machine_gun", "shaders/blur_rect.fsh");
 
-    /**
-     * CatLean 风格的毛玻璃圆角矩形着色器（对应源项目 {@code core/rect/blurred_rect}）。
-     *
-     * <p>与 {@link #BLUR_FS} 的区别见 {@link #drawGlassRect} 的说明：
-     * 这个只采一次已模糊的屏幕，靠 {@code uMix} 控制磨砂程度。
-     */
     private static final Identifier GLASS_VS =
         Identifier.of("invincible_machine_gun", "shaders/glass_rect.vsh");
     private static final Identifier GLASS_FS =
@@ -182,24 +153,6 @@ public class Shader2DUtil {
         }, boundsPx(locX, locY, sizeX, sizeY), blurMargin);
     }
 
-    /**
-     * 绘制**毛玻璃**圆角矩形（CatLean 风格，对应源项目 {@code core/rect/blurred_rect.fsh}）。
-     *
-     * <p>与 {@link #drawRoundedBlur} 的区别：那个在片元里做 81 次径向采样，
-     * 这个只做**一次**采样 —— 前提是调用方已经把屏幕模糊好。
-     * 面板数量多时这是数量级的差距。
-     *
-     * <p>{@code uMix} 是让它「磨砂而不糊成一团」的关键：
-     * {@code 0} 完全透出模糊背景，{@code 1} 完全用主色覆盖。
-     * 源项目的面板取 0.5 左右。
-     *
-     * @param x,y,width,height 逻辑（GUI 缩放）坐标，与其它 2D 绘制一致
-     * @param radius           圆角半径（逻辑像素）
-     * @param color            主色（含 alpha）
-     * @param mix              模糊 ↔ 纯色的混合比例 0~1
-     * @param border           描边宽度（逻辑像素）；{@code <= 0} 不描边
-     * @param borderColor      描边色
-     */
     public static void drawGlassRect(float x, float y, float width, float height, float radius,
                                      meteordevelopment.meteorclient.utils.render.color.Color color,
                                      float mix, float border,
@@ -207,11 +160,6 @@ public class Shader2DUtil {
         drawGlassRect(x, y, width, height, radius, color, mix, border, borderColor, 6f);
     }
 
-    /**
-     * 毛玻璃圆角矩形（可指定模糊半径）。
-     *
-     * @param blurRadius 模糊采样半径（逻辑像素）；越大越糊。6 左右接近源项目观感。
-     */
     public static void drawGlassRect(float x, float y, float width, float height, float radius,
                                      meteordevelopment.meteorclient.utils.render.color.Color color,
                                      float mix, float border,
@@ -364,27 +312,6 @@ public class Shader2DUtil {
         }, boundsPx(locX, locY, width * scale, height * scale), 2f);
     }
 
-    /**
-     * 绘制圆角矩形的**羽化阴影**（在矩形四周形成柔和的投影，突出立体感）。
-     *
-     * <p>与 {@link #drawRoundedRect} 同属「直接叠加的几何」：不需要拷贝场景，
-     * 因此开销很小，可以和背景模糊、面板本体一起逐帧调用。
-     *
-     * <p>羽化由 {@code shadow_rect.fsh} 用 SDF 距离场完成：面板边缘处最强，
-     * 向外 {@code feather} 像素平滑衰减到 0。相比「叠多层半透明圆角」的假阴影
-     * （{@code GuiRenderUtil.drawShadow}），这里不会出现层带，且羽化半径可自由调。
-     *
-     * <p><b>只画面板外侧</b>，面板覆盖的区域留空：面板背景是半透明的，内部若填成
-     * 不透明色会透过去把它压暗；而且背景模糊会采样已画好的画面，阴影进到模糊源里
-     * 会把磨砂边缘一起拉暗。因此调用顺序应为「模糊 → 阴影 → 面板本体」。
-     *
-     * @param x,y,width,height 面板的逻辑（GUI 缩放）坐标，与其它 2D 绘制一致
-     * @param radius           面板圆角半径（逻辑像素）
-     * @param color            阴影颜色（其 alpha 即阴影强度）
-     * @param feather          羽化半径（逻辑像素）；越大越柔
-     * @param offsetX,offsetY  阴影相对面板的偏移（逻辑像素，{@code y} 正方向向下）。
-     *                         都为 0 时四周均匀扩散，即全向光晕
-     */
     public static void drawRoundedShadow(float x, float y, float width, float height, float radius,
                                          meteordevelopment.meteorclient.utils.render.color.Color color,
                                          float feather, float offsetX, float offsetY) {
@@ -662,13 +589,6 @@ public class Shader2DUtil {
     /** 由调用方在每帧开始时推进的帧号。 */
     private static long frameCounter = 0;
 
-    /**
-     * 标记新的一帧开始（由 CatHudRenderer 在 beginFrame 时调用）。
-     *
-     * <p>为什么自己维护帧号而不是用 {@code RenderSystem}：1.21.11 的
-     * {@code RenderSystem} 没有公开的帧计数（已用 javap 确认），
-     * 而用毫秒当帧标识会在同一帧内跨刻度，导致该帧被拷贝两次。
-     */
     public static void beginFrame() {
         frameCounter++;
     }

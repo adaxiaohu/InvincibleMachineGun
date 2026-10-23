@@ -3,11 +3,6 @@ package com.codigohasta.addon.utils.gcore;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Vec3d;
 
-/**
- * 锚数据：锚位置、爆炸中心、对目标的伤害。
- *
- * <p>移植自 {@code dev.godden.core.Utils.ClassUtil.AnchorData}（GCore）。
- */
 public final class GcoreAnchorData {
 
     private final BlockPos anchorPos;

@@ -78,7 +78,6 @@ public final class Listener {
     public static Channel<Vec3d> getPlayerFluidVelocityPoint(){return PlayerFluidVelocityPoint;}
     private static final Channel<Integer> PlayerFallFlyingTick=new Channel<>();
     public static Channel<Integer> getPlayerFallFlyingTick(){return PlayerFallFlyingTick;}
-    /** Ported from upstream 1.1.7.2 Listener: carries a {@code MetadataUpdate} payload. */
     private static final Channels<com.codigohasta.addon.utils.slimefunhelper.events.impl.MetadataUpdate> EntityTrackDataUpdate=
             new Channels<>(e -> e.context.entity().getType());
     public static Channels<com.codigohasta.addon.utils.slimefunhelper.events.impl.MetadataUpdate> getEntityTrackDataUpdate(){return EntityTrackDataUpdate;}
@@ -88,16 +87,8 @@ public final class Listener {
     public static EntityChannels getEntityRemoveListener(){return EntityRemoveListener;}
     private static final Channel<World> WorldSwitchPoint=new Channel<>();
     public static Channel<World> getWorldSwitchPoint(){return WorldSwitchPoint;}
-    /**
-     * Ported from upstream 1.1.7.2 Listener: fired on respawn and on game join, carrying the
-     * player. {@code ElytraExtra.onWorldSwitch} listens here (upstream signature).
-     */
     private static final Channel<ClientPlayerEntity> playerRespawnPoint=new Channel<>();
     public static Channel<ClientPlayerEntity> getPlayerRespawnPoint(){return playerRespawnPoint;}
-    /**
-     * Ported from upstream 1.1.7.2 Listener: fired at the head of {@code PlayerEntity.travel}.
-     * {@code ElytraOptimizeUtils.onPreElytraMovement} flushes the deferred snap-rotation packet here.
-     */
     private static final Channel<Vec3d> playerTravelingTick=new Channel<>();
     public static Channel<Vec3d> getPlayerTravelingTick(){return playerTravelingTick;}
     private static final Channel<ClientPlayerEntity> GameJoinPoint=new Channel<>();

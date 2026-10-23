@@ -22,7 +22,7 @@ import com.codigohasta.addon.mixin.InventoryAccessor;
 
 public class ScaffoldPlus extends Module {
     public ScaffoldPlus() {
-        super(AddonTemplate.CATEGORY, "L搭路", "同样是来自leaveshack的自动搭路，早些时候抄的。现在接上了rotation。grim能搭但是反作弊标记一堆。");
+        super(AddonTemplate.CATEGORY, "L搭路", "自动搭路。现在接上了rotation。grim能搭但是会被标记。");
     }
     private final SettingGroup sgGeneral = this.settings.getDefaultGroup();
     private final SettingGroup sgRender = settings.createGroup("Render");

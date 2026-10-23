@@ -538,7 +538,8 @@ public class SakuraTargetHud extends Module {
         /** 从头像喷出的粒子（屏幕空间，坐标为面板内的相对偏移）。 */
         final List<HurtParticle> particles = new ArrayList<>();
 
-        /** 名称滚动偏移（逻辑像素，正数表示已向左滚出的距离）。 */        float marqueeOffset;
+        /** 名称滚动偏移（逻辑像素，正数表示已向左滚出的距离）。 */
+        float marqueeOffset;
         /** 滚动到两端后的停顿计时（秒）。 */
         float marqueePause;
         /** 滚动方向：+1 向左（偏移增大），-1 向右（偏移减小）。来回滚动用。 */
@@ -593,7 +594,7 @@ public class SakuraTargetHud extends Module {
     private final org.joml.Vector3d espPos = new org.joml.Vector3d();
 
     public SakuraTargetHud() {
-        super(AddonTemplate.IMG_HUD_CATEGORY, "sakura-target-hud", "目标显示（移植自 Sakura）：圆角面板 + 旋转透视标记。");
+        super(AddonTemplate.IMG_HUD_CATEGORY, "sakura-target-hud", "目标显示：圆角面板 + 旋转透视标记。");
     }
 
     @Override

@@ -97,7 +97,7 @@ public class AdvancedFakePlayer extends Module {
     private final List<CustomFakePlayer> fakePlayers = new ArrayList<>();
 
     public AdvancedFakePlayer() {
-        super(AddonTemplate.CATEGORY, "假人", "能受击的假人。抄的原版meteor假人。效果很差。没用的功能没做完");
+        super(AddonTemplate.CATEGORY, "假人", "能受击的假人。效果很差。没用的功能，没做完");
     }
 
     @Override

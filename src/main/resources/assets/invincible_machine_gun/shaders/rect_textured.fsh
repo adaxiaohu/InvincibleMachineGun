@@ -2,7 +2,6 @@
 
 // 贴图 SDF 圆角矩形 —— 用于头像（皮肤 / 生物贴图）的圆角裁剪。
 //
-// 移植自 CatLean 的 core/rect/textured_rect.fsh 思路，但这里做了两处关键调整：
 //
 //  1. **采样方式用 texelFetch 而不是 texture()**。MC 的皮肤贴图默认是 LINEAR + mipmap，
 //     采样时会被插值糊掉（正是「头像模糊」的成因）。texelFetch 直接取单个纹素，

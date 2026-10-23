@@ -23,56 +23,6 @@ import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.Map;
 
-/**
- * 基于 STB 的动态字形图集文字渲染器，用于替代 NanoVG 的文字绘制。
- *
- * <p><b>为什么要有这个类：</b>NanoVG 自己维护一套 GL 状态，在 1.21.11 的
- * {@code GlStateManager} 缓存化状态机下必须靠 {@code GlStateSnapshot} 来回校正，
- * 而它的文字 API 又不支持动态字形缓存。这里改成与 Meteor 的
- * {@code CustomTextRenderer} 完全一致的路径：把字形光栅化进一张 {@code RED8} 图集，
- * 再用 {@link MeshBuilder} + {@link MeteorRenderPipelines#UI_TEXT} 一次性提交。
- * 这样它和 Meteor 自身的 HUD 文字、以及 {@code Render2D} 的图形处于同一条渲染管线，
- * 不再需要任何 GL 状态快照。</p>
- *
- * <p><b>坐标系（重要）：</b>对外所有方法（{@link #draw}、{@link #drawCentered}、
- * {@link #getWidth}、{@link #getHeight}）的 {@code x}/{@code y}/{@code size}
- * 一律是<b>逻辑（GUI 缩放）坐标</b>，即与 {@code mc.getWindow().getScaledWidth()}、
- * 面板坐标、以及 NanoVG 之前的坐标同一套。</p>
- *
- * <p>但 {@code Render2DEvent} 是在 {@code Utils.unscaledProjection()} 下派发的
- * （见 Meteor 的 {@code InGameHudMixin}），{@code UI_TEXT} 管线用的 {@code MeshData}
- * 正是这份投影，也就是<b>物理帧缓冲像素</b>空间。所以本类在写顶点前会把逻辑值
- * 统一乘上 {@code mc.getWindow().getScaleFactor()}：</p>
- * <ul>
- *     <li>顶点坐标：{@code pos = 逻辑值 * scaleFactor}</li>
- *     <li>字号：{@code size} 逻辑像素 → 实际光栅化高度 {@code round(size * scaleFactor)} 物理像素，
- *         这样在高 GUI 缩放下字形依然是按物理像素对齐的，不会糊。</li>
- * </ul>
- * <p>调用方因此可以直接把面板坐标原样传进来，无需任何换算。</p>
- *
- * <p><b>y 语义：</b>{@code (x, y)} 是这一行文字的<b>左上角</b>（不是基线）。
- * 内部会先按字体 ascent 推出基线 {@code baselineY = y + ascent * scale}，
- * 再让每个字形相对基线摆放。这与 NanoVG 的 {@code NVG_ALIGN_TOP} 观感一致。</p>
- *
- * <p><b>字体集（重要）：</b>字体路径、字形图集、度量缓存全部按
- * {@link CatFontSet} 隔离 —— 每个字体集一个内部状态实例，各持一张图集纹理与
- * 各自的缓存。静态方法默认走 {@link #DEFAULT_FONT_SET}（即 {@link CatFontSet#SAKURA}），
- * 所以 {@code SakuraTargetHud} 的调用完全不用改、观感也不变；CatHud 则通过
- * {@link #begin(CatFontSet)} 显式切到 {@link CatFontSet#CATLEAN}。</p>
- *
- * <p><b>中英混排：</b>拉丁字符用字体集的主字体；该字体没有的字形
- * （典型是中文）回退到回退字体。判定方式是
- * {@code stbtt_FindGlyphIndex} 返回 0 即视为该字体不含此字形。</p>
- *
- * <p><b>动态字形：</b>只在实际画到某个码点时才用
- * {@code stbtt_GetCodepointBitmap} + {@code stbtt_GetCodepointHMetrics} 光栅化并追加进图集，
- * 绝不预先打包 CJK 回退字体的全部字形（那会吃掉巨量内存/显存）。图集写满后
- * 在下一帧 {@link #begin()} 时整张重建（清空缓存重新按需光栅化），
- * 重建放在帧边界是为了避免同一帧内已写进 mesh 的 UV 被覆盖而串图。</p>
- *
- * <p><b>线程/GL 安全：</b>纹理创建与上传都只在渲染线程做，且懒加载 + 缓存；
- * 非渲染线程调用会直接静默降级为空操作。</p>
- */
 public final class SakuraTextRenderer {
     /**
      * 默认字体集。

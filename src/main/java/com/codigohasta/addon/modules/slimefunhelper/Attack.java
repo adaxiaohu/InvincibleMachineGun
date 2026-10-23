@@ -56,7 +56,6 @@ import org.jetbrains.annotations.Nullable;
 public class Attack extends BaseModule {
     public static Attack INSTANCE;
     public final ModulePath attack = makePath(Configs.COMBAT_CONFIG, "att-bot");
-    /** Ported from upstream 1.1.7.2 Attack.ghostHand. */
     public final EnumRef<GhostHandMode> ghostHand = builder(attack.add("ghost-hand-mode"), GhostHandMode.class)
             .defaultValue(GhostHandMode.INV_SWAP)
             .build();

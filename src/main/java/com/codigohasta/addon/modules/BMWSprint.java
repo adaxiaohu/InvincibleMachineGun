@@ -90,7 +90,7 @@ public class BMWSprint extends Module {
 
     public BMWSprint() {
         super(AddonTemplate.CATEGORY, "强制疾跑2",
-            "BMWClient-nextgen 抄的 Sprint。§lOmnirotational§r：任意方向疾跑+自动旋转；"
+            "§lOmnirotational§r：任意方向疾跑+自动旋转；"
             + "鞘翅飞行时烟花沿 WASD 方向加速无法grim");
         INSTANCE = this;
     }

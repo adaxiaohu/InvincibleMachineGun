@@ -1,20 +1,5 @@
 package com.codigohasta.addon.utils.notify;
 
-/**
- * 通知输出方式（对应 CatLean 的 {@code cm} 枚举）。
- *
- * <p>✅ evidence 确证的常量（{@code su.catlean.cm}）：
- * <pre>
- *   cm[] cmArray = new cm[]{ OFF, CHAT, NOTIFICATION, BOTH };
- * </pre>
- *
- * <p>用户 2026-10-07 截图里的三态控件（{@code Off / Chat / Both}）
- * 就是这一套 —— 另有独立的 {@code Notification} 开关，
- * 在源码里对应 {@code NOTIFICATION} 这个值。
- *
- * <p>本项目用 Meteor 的 {@code EnumSetting} 承载
- * （用户确认：「先用 EnumSetting」，外观与 CatLean 的三按钮不同但功能等价）。
- */
 public enum ChatMode {
     /** 不提示。 */
     OFF("关闭"),

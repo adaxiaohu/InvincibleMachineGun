@@ -84,7 +84,7 @@ public class AntiLag extends Module {
     private boolean isRateLimited = false;
 
     public AntiLag() {
-        super(AddonTemplate.CATEGORY, "Anti-Lag", "防拉回，抄袭Gcore。效果不明");
+        super(AddonTemplate.CATEGORY, "Anti-Lag", "防拉回。效果不明");
     }
 
     @Override

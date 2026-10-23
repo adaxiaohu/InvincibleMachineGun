@@ -50,7 +50,6 @@ import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Box;
 import net.minecraft.util.math.Vec3d;
 
-
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -70,7 +69,6 @@ public class TpAura extends Module {
     private final Setting<AttackMode> attackMode = sgTiming.add(new EnumSetting.Builder<AttackMode>().name("攻击模式").defaultValue(AttackMode.Smart).build());
     private final Setting<Double> cooldownThreshold = sgTiming.add(new DoubleSetting.Builder().name("蓄力阈值").description("1").defaultValue(1.0).min(0.1).sliderMax(1.0).visible(() -> attackMode.get() == AttackMode.Smart).build());
     private final Setting<Integer> attackDelay = sgTiming.add(new IntSetting.Builder().name("额外延迟(Tick)").defaultValue(0).min(0).build());
-
 
     private final Setting<Integer> burstMinGapMs = sgTiming.add(new IntSetting.Builder()
         .name("连发最小间隔(ms)")
@@ -99,7 +97,6 @@ public class TpAura extends Module {
     private final Setting<Double> maxRange = sgTP.add(new DoubleSetting.Builder().name("最大范围").description("索敌与瞬移的最大距离。\n（旧版本这个值同时被当作模拟高度用，现已拆开，见下方「模拟高度」。）").defaultValue(99.0).min(1).sliderMax(999999).build());
     private final Setting<Boolean> goUp = sgTP.add(new BoolSetting.Builder().name("V-Clip").defaultValue(true).visible(() -> mode.get() == Mode.Paper).build());
 
-
     private final Setting<Boolean> separateLiftColumn = sgTP.add(new BoolSetting.Builder()
         .name("分离抬升柱")
         .description("把「抬升」放到附近一根头顶有空间的柱子上，没用")
@@ -123,7 +120,6 @@ public class TpAura extends Module {
         .build());
 
     private double lastDiagClientY = Double.NaN;
-
 
     private final Setting<Boolean> maxPower = sgTP.add(new BoolSetting.Builder()
         .name("最大威力-如来神掌 (仅Paper/Spigot)")
@@ -149,7 +145,6 @@ public class TpAura extends Module {
             + "关闭就直接使用「模拟高度」的固定值。")
         .defaultValue(true)
         .build());
-
 
     public enum OverBudgetMode {
         LowerHeight("降低高度继续", "把伪造高度降到本 tick 装得下的最大值"),
@@ -181,7 +176,6 @@ public class TpAura extends Module {
         .sliderMax(20)
         .max(999999999)
         .build());
-
 
     private final Setting<Boolean> usePredict = sgTP.add(new BoolSetting.Builder()
         .name("目标预判")
@@ -238,7 +232,6 @@ public class TpAura extends Module {
     // ⇒ 第 k 个包最多请求 10k 格；k > 20 时阈值塌回 100，任何大位移都被拒。
     //
     //
-    // 服务端 onPlayerMove 的判定（Paper 反编译源码 ServerGamePacketListenerImpl.java:1490-1537）：
     //     i = receivedMovePacketCount - knownMovePacketCount;   // 本 tick 已收包数
     //     if (i > max(allowedPlayerTicks, 5)) i = 1;            // ★ 超限 → i 归 1
     //     if (!hasRot && !(d7 > 0)) allowedPlayerTicks = 20;    // 无位移包 → 重置额度
@@ -399,7 +392,6 @@ public class TpAura extends Module {
         .defaultValue(false)
         .build());
 
-
     private static final String MODULE_NAME = "TpAura";
 
     private final List<Entity> targets = new ArrayList<>();
@@ -538,7 +530,6 @@ public class TpAura extends Module {
         pendingResumeFrom = null;
         pendingFailCount = 0;
     }
-
 
     private boolean continuePendingMoves() {
         if (pendingForward.isEmpty() && pendingBack.isEmpty() && !pendingNeedAttack) {
@@ -1237,11 +1228,9 @@ public class TpAura extends Module {
         return ctx;
     }
 
-
     private Vec3d findApexNear(Vec3d from, Vec3d to, double wantReach) {
         Map<BlockPos, BlockState> buf = GcoreBlockUtil.getBufferMap();
         double step = Math.max(1.0, liftColumnRadius.get());
-
 
         Vec3d direct = GcoreTpUtil.findVClipVecToMove(
             from, to, step, false, GcoreTpOption.TpVClipFindType.ALL, buf);
@@ -1274,7 +1263,6 @@ public class TpAura extends Module {
         ((IPlayerMoveC2SPacket) packet).meteor$setTag(1337);
         mc.player.networkHandler.sendPacket(packet);
     }
-
 
     private void applyFallProtection(Vec3d at) {
         if (mc.player == null) {
@@ -1340,7 +1328,6 @@ public class TpAura extends Module {
         }
         return null;
     }
-
 
     private Vec3d targetPosFor(Entity entity) {
         if (!usePredict.get()) {

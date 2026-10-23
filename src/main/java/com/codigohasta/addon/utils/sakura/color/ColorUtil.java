@@ -2,12 +2,6 @@ package com.codigohasta.addon.utils.sakura.color;
 
 import java.awt.Color;
 
-/**
- * 颜色工具（移植自 Sakura 的 {@code dev.sakura.client.utils.color.ColorUtil}）。
- *
- * <p>TargetHud 只用到 {@link #interpolateColor(Color, Color, float)}，但这里保留原类的完整实现，
- * 便于后续移植其它 Sakura 模块时复用同一份工具。
- */
 public class ColorUtil {
     public static Color applyOpacity(Color color, float opacity) {
         opacity = Math.min(1, Math.max(0, opacity));

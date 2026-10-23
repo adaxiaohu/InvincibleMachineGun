@@ -13,9 +13,7 @@ import java.util.Set;
 /**
  * TP 模块的目标选择配置。
  *
- * <p>移植自 {@code dev.godden.core.Utils.ClassUtil.TpSelectTargetsConfigurable}（GCore）。
- *
- * <p><b>默认值与范围逐一照抄源</b>（源构造器 66-72 行）：
+ * <p>默认值与范围：
  * <pre>
  * Priority          = Distance
  * Range             = 500.0   (0.1 ~ 500)
@@ -26,8 +24,7 @@ import java.util.Set;
  * TargetFriend      = false
  * </pre>
  *
- * <p><b>框架适配</b>：源继承 LiquidBounce 的 {@code Configurable}，
- * 这里接收 Meteor {@link SettingGroup}（与 {@link GcoreTpOption} 一致）。
+ * <p><b>框架适配</b>：这里接收 Meteor {@link SettingGroup}（与 {@link GcoreTpOption} 一致）。
  */
 public final class GcoreTpSelectTargetsConfig {
 
@@ -63,21 +60,21 @@ public final class GcoreTpSelectTargetsConfig {
     /**
      * 自定义默认值的构造。
      *
-     * <p>源的 {@code SelectTargetsConfigurable} 与 {@code TpSelectTargetsConfigurable}
-     * 是**两个类**，差别只在默认值：
+     * <p>两套默认值：
      * <pre>
      *                  Range         TargetMob  TargetAnimal
      * SelectTargets    8.0 (≤20)     true       true
      * TpSelectTargets  500.0 (≤500)  false      false
      * </pre>
      * 为免复制一整个类，这里用参数化的默认值来表达差异。
-     * 默认构造保持 {@code TpSelectTargets} 的原值，因此既有模块行为不变。
+     * 默认构造保持 {@code TpSelectTargets} 的值，因此既有模块行为不变。
      *
      * @param rangeDefault 搜索半径默认值
      * @param rangeMax     搜索半径上限
      * @param mobDefault   目标怪物 默认值
      * @param animalDefault 目标动物 默认值
-     */    public GcoreTpSelectTargetsConfig(SettingGroup group, double rangeDefault, double rangeMax,
+     */
+     public GcoreTpSelectTargetsConfig(SettingGroup group, double rangeDefault, double rangeMax,
                                       boolean mobDefault, boolean animalDefault) {
         this.priority = group.add(new EnumSetting.Builder<GcoreTargetUtil.Priority>()
             .name("优先级")

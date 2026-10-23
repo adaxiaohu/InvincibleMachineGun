@@ -207,18 +207,6 @@ public final class StandGuiTree {
         return StandGuiEntry.setting(s, s.title, suffixOf(s), path, m, fieldNameOf(m, s));
     }
 
-    /**
-     * 取 Setting 在模块类里的 <b>Java 字段名</b>（英文），作为命令框的命令名。
-     *
-     * <p>逻辑照抄项目已有的 {@code JsonEnglishTranslationManager.findFieldName}：
-     * 沿 {@code getSuperclass()} 上溯、逐个 {@code getDeclaredFields()} 比对引用相等。
-     * <b>为什么用引用相等而不是 equals</b>：{@code Setting} 没重写 equals，
-     * 但用 {@code ==} 语义更明确，也不会被将来重写 equals 破坏。
-     *
-     * <p><b>public</b>：命令框的补全表也要用它（{@code StandGuiCommands.allCommands}）。
-     *
-     * @return 字段名；找不到返回 {@code ""}（helper 类里注册的设置会走这条路）
-     */
     public static String fieldNameOf(Module module, Object value) {
         if (module == null || value == null) return "";
         for (Class<?> t = module.getClass(); t != null && t != Module.class; t = t.getSuperclass()) {

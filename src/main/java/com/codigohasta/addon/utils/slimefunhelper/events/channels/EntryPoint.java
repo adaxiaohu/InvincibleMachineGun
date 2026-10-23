@@ -5,12 +5,6 @@ import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 
-/**
- * Ported from upstream 1.1.7.2 {@code me.matl114.events.channels.EntryPoint}.
- *
- * <p>Lombok's {@code @AllArgsConstructor} is expanded into an explicit constructor because IMG
- * does not use Lombok.
- */
 public abstract class EntryPoint<W> {
     protected static class H<T> implements Comparable<H<T>>, Predicate<T> {
         int priority;

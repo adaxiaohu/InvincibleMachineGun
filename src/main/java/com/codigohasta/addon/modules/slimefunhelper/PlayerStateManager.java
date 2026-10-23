@@ -141,7 +141,6 @@ public class PlayerStateManager extends BaseModule {
     public Map<ItemStackSample, Integer> inventorySummary;
     public Map<ItemStackSample, Integer> inventoryTotalSummary;
     public int glidingTicks;
-    /** Ported from upstream 1.1.7.2 PlayerStateManager. */
     public int lastActiveTicks;
     public int lastSelectedSlot = 0;
     boolean isGrimResyncPacket = false;
@@ -587,17 +586,14 @@ public class PlayerStateManager extends BaseModule {
     }
 
 
-    /** Ported from upstream 1.1.7.2 PlayerStateManager.onInteract. */
     public void onInteract(Event<PlayerInteractItemC2SPacket> event) {
         updateAFK();
     }
 
-    /** Ported from upstream 1.1.7.2 PlayerStateManager.onInteractBlock. */
     public void onInteractBlock(Event<PlayerInteractBlockC2SPacket> event) {
         updateAFK();
     }
 
-    /** Ported from upstream 1.1.7.2 PlayerStateManager.onPlayerDamage. */
     public void onPlayerDamage(Event<EntityDamageS2CPacket> damage) {
         if (checkNull()) return;
         if (mc.player != null
@@ -607,7 +603,6 @@ public class PlayerStateManager extends BaseModule {
         }
     }
 
-    /** Ported from upstream 1.1.7.2 PlayerStateManager.onSelectedSlot. */
     public void onSelectedSlot(Event<UpdateSelectedSlotC2SPacket> event) {
         if (event.isCancelled()) {
             return;
@@ -796,7 +791,6 @@ registerServiceListener(Listener.getPacketPostHandlePoint().getChannel(EntityVel
 registerServiceListener(Listener.getPacketPostHandlePoint().getChannel(ExplosionS2CPacket.class),this::onPostPlayerExplosion,Integer.MAX_VALUE);
 registerServiceListener(Listener.getPacketPostHandlePoint().getChannel(PlayerPositionLookS2CPacket.class),this::onPostPlayerPositionLook,Integer.MAX_VALUE);
 registerServiceListener(Listener.getPacketPoint().getChannel(EntityDamageS2CPacket.class),this::onEntityAttackEvent,Integer.MAX_VALUE);
-        // Ported from upstream 1.1.7.2 PlayerStateManager.registerAll.
         registerServiceListener(Listener.getPacketPoint().getChannel(EntityDamageS2CPacket.class),this::onPlayerDamage);
         registerServiceListener(Listener.getPacketPoint().getChannel(UpdateSelectedSlotC2SPacket.class),this::onSelectedSlot,Integer.MAX_VALUE);
         registerServiceListener(Listener.getPacketPoint().getChannel(PlayerInteractBlockC2SPacket.class),this::onInteractBlock);
@@ -873,7 +867,6 @@ registerServiceListener(Listener.getPacketPoint().getChannel(CloseHandledScreenC
         if (eventRespawn.context.flag() < 3 && mc.player.getHealth() <= 0) {
             onDeath(mc.player);
         }
-        // Ported from upstream 1.1.7.2 ClientPlayNetworkHandlerEvents.onPlayerSwitchDimension.
         Listener.getPlayerRespawnPoint().fire(mc.player);
     }
 

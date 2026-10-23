@@ -18,15 +18,6 @@ import net.minecraft.network.packet.c2s.play.*;
 import io.netty.channel.ChannelFutureListener;
 import com.codigohasta.addon.utils.slimefunhelper.accessors.access.ClientConnectionAccess;
 
-/**
- * Ordered packet queues and per-packet completion callbacks.
- *
- * <p>Ported from upstream 1.1.7.2 {@code me.matl114.events.PacketManager}: the inbound/outbound
- * queues are now {@link EventChannel}s fired both when a packet arrives and when the queue is
- * flushed, so listeners such as {@code ElytraExtra.onFireworkRemoval} can cancel a packet and
- * re-queue it. IMG's original {@code Channels}-based accessors are kept as aliases so the
- * existing callers (BackTrack / Blink / ElytraJump) keep working.
- */
 public final class PacketManager {
     public static void schedulePostSendPacket(Packet<?> post, Packet<?> packet) {
         if (packet == null) return;

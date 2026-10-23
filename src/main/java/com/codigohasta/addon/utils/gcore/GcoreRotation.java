@@ -3,16 +3,6 @@ package com.codigohasta.addon.utils.gcore;
 import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.Vec3d;
 
-/**
- * 视角朝向（yaw / pitch），替代 LiquidBounce 的 {@code utils.aiming.Rotation}。
- *
- * <p>GCore 的 {@code MathUtil.getStraightVec(Vec3d, Rotation, double)} 用到它。
- * 源类来自 LiquidBounce，字段与 {@code getRotationVec()} 的算法与 MC 原版
- * {@code Entity.getRotationVec(float)} 完全一致 —— 这里按 MC 原版公式重写，
- * 保证与源行为等价。
- *
- * <p>TP 锚当前不调用这个方法，但移植进来保持闭包完整（将来弓/水晶模块会用）。
- */
 public final class GcoreRotation {
 
     public final float yaw;

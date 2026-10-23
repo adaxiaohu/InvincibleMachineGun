@@ -11,13 +11,6 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 
-/**
- * Ported from upstream 1.1.7.2 {@code me.matl114.mixins.access.PendingUpdateManagerMixin}.
- *
- * <p>Required by {@code SequencedActionManager.getBeforeBreakPredictionState}: the interface
- * method has no other implementation, so calling it without this mixin throws
- * {@code AbstractMethodError}.
- */
 @Mixin(PendingUpdateManager.class)
 public abstract class PendingUpdateManagerMixin implements PendingUpdateManagerAccess {
 

@@ -11,54 +11,11 @@ import net.minecraft.util.math.Vec3d;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * 陷阱放置工具 —— 移植自 {@code dev.godden.core.Utils.TrapUtil}（GCore）。
- *
- * <p><b>只移植「GWebAura 用到的 3 个方法」</b>，其余方法
- * （{@code getTrapPosFromList} / {@code getGTrapPosFromList} /
- * {@code getEntitySurroundPos}）**只有 {@code ModuleGTrap} 才用**，
- * 本模块不需要，故不移植 —— 避免引入死代码。
- *
- * <h2>三个方法各自干什么</h2>
- * <ol>
- *     <li>{@link #getBoxColliePosList} —— 把一个 AABB 覆盖到的**所有方块坐标**列出来
- *         （从 floor(min) 到 floor(max) 的三重循环）。</li>
- *     <li>{@link #getPlaceDataFromPosList} —— <b>核心</b>。给定「想放的格子」，
- *         为每个格子算<b>从哪个面放</b>：
- *         <ul>
- *             <li>{@code MC1_14} 版本：直接「对着格子向下怼」（{@code (pos, DOWN, pos)}）。</li>
- *             <li>其它版本：在该格子 ±{@code scanBorder} 邻域里找一个**空气且够得着**的
- *                 邻格，再从它的反方向放回目标格。</li>
- *         </ul>
- *         注意「够得着」= 眼到方块中心 {@code ≤ 6}（硬编码 {@code 36.0}）**且**
- *         手到方块中心 {@code < placeRange²}。</li>
- *     <li>{@link #getTpVecFromPlaceDataList} —— 在放置点周围 ±{@code scanBorder} 里
- *         找一个**站位** {@code tpVec}：自身不卡碰撞，且站位到**每个**放置点都够得着、
- *         且站位 AABB 不与任何放置点的目标格相交。找到就返回（**按 x→y→z 顺序取第一个**）。</li>
- * </ol>
- *
- * <h2>与源的差异（如实记录）</h2>
- * <ul>
- *     <li>源是 Kotlin {@code object}，这里改为 {@code final class} + 静态方法
- *         （与项目其它 {@code Gcore*} 工具类一致）。</li>
- *     <li>源的 {@code EntriesMappings.entries$0}（Kotlin 枚举条目缓存）
- *         直接用 {@code Direction.values()} 代替，语义相同。</li>
- *     <li>{@code CollectionsKt.minByOrThrow} 用显式循环代替 —— 源里对空集合会抛
- *         {@code NoSuchElementException}，这里在两处调用前都已保证非空
- *         （见下方注释），所以不会出现行为差异。</li>
- * </ul>
- */
 public final class GcoreTrapUtil {
 
     private GcoreTrapUtil() {
     }
 
-    /**
-     * 把 AABB 覆盖到的所有方块坐标列出来。
-     *
-     * <p>对应源 {@code TrapUtil.getBoxColliePosList}。
-     * 边界用 {@code floor}：所以贴边的方块也算在内。
-     */
     public static List<BlockPos> getBoxColliePosList(Box box) {
         List<BlockPos> list = new ArrayList<>();
         int maxX = (int) Math.floor(box.maxX);
@@ -83,13 +40,13 @@ public final class GcoreTrapUtil {
      *
      * <p>对应源 {@code TrapUtil.getPlaceDataFromPosList}。
      *
-     * @param version       放置版本。{@code MC1_14} 走「向下怼」捷径。
-     * @param wantPlacePos  想要放成的格子（目标格）。
-     * @param placedPosList 已经放了 / 已经占用的格子，参与邻域去重。
-     * @param placeVec      放置者（玩家）脚部坐标。
-     * @param placerEyeY    放置者眼高（1.62 站立 / 1.27 潜行）。
-     * @param scanBorder    邻域半径。
-     * @param placeRange    手长上限（方块中心到手心的距离上限）。
+     * @param version       
+     * @param wantPlacePos  
+     * @param placedPosList
+     * @param placeVec     
+     * @param placerEyeY   
+     * @param scanBorder    
+     * @param placeRange   
      */
     public static List<GcorePlaceData> getPlaceDataFromPosList(
             GcoreEnumType.BlockPlaceVersion version,
@@ -137,20 +94,6 @@ public final class GcoreTrapUtil {
                 for (int y = pos.getY() - scanBorder; y <= pos.getY() + scanBorder; y++) {
                     for (int z = pos.getZ() - scanBorder; z <= pos.getZ() + scanBorder; z++) {
                         BlockPos curPos = new BlockPos(x, y, z);
-
-                        // ★ 条件**逐字照抄源**，并已用 javap 复核字节码分支目标：
-                        //     415: isAir(curPos)      → 假则跳到 touchCheck
-                        //     425: contains(curPos)   → 假则「跳过 add」
-                        //     441: touchCheck(...)    → 假则「跳过 add」
-                        //     447: closetPosList.add(curPos)
-                        //   即 `if ((isAir && !contains) || !touchCheck) continue;`
-                        //
-                        //   语义（反直觉但正确）：收下的是
-                        //     「**非空气**（或已在列表里）且**够得着**」的格子。
-                        //   因为 closetPosList 的元素随后被当作**用来点击的参照方块**
-                        //   —— 放方块必须对着一个实心面点击，所以参照物必须是实心的。
-                        //   ⚠ 源码里写的是 `isAir(...) && !contains(...)`，
-                        //     两者都有「非」的直觉容易被读反，故此处保留源运算符顺序。
                         if ((mc.world.isAir(curPos) && !closetPosList.contains(curPos))
                             || !touchCheck(placeVec, placerEyeVec, placeRangeSq, curPos)) {
                             continue;
@@ -160,7 +103,6 @@ public final class GcoreTrapUtil {
                 }
             }
 
-            // 源用 minByOrThrow；此处已保证「closetPosList 至少含 placedPosList 的内容」，
             // 但为稳妥仍判空（源会在空时抛异常，我们不抛，行为更安全）。
             if (closetPosList.isEmpty()) {
                 continue;
@@ -215,16 +157,6 @@ public final class GcoreTrapUtil {
         return placeDataList;
     }
 
-    /**
-     * 找一个能站、且够得着**所有**放置点的站位。
-     *
-     * <p>对应源 {@code TrapUtil.getTpVecFromPlaceDataList}。
-     *
-     * <p>以**第一个放置点**为中心，在 ±{@code scanBorder} 里从 (x,y,z) 顺序扫，
-     * 返回第一个满足条件的 {@code (x+0.5, y, z+0.5)}。
-     *
-     * @return 站位；找不到返回 {@code null}。
-     */
     public static Vec3d getTpVecFromPlaceDataList(List<GcorePlaceData> placeDataList,
                                                   int scanBorder, double placeRange) {
         if (placeDataList.isEmpty()) {
@@ -257,7 +189,6 @@ public final class GcoreTrapUtil {
                             //    语义：站位够得着该放置点、且**站位身体不与该目标格重叠**
                             //    （否则等于站在「马上要放方块的那格里」）→ 这一项通过，继续看下一项。
                             //
-                            //    字节码依据（javap，偏移 270/337/340）：
                             //      270: ifeq 340   touchCheck 为假 → 走到 340 置 flag=false
                             //      337: ifeq 346   intersects 为**假** → 跳过置位（即 continue）
                             //      340: flag = false
@@ -279,12 +210,6 @@ public final class GcoreTrapUtil {
         return null;
     }
 
-    /**
-     * 「眼到方块中心 ≤ 6 且 手到方块中心 < placeRange²」。
-     *
-     * <p>对应源 {@code getPlaceDataFromPosList$touchCheck}。
-     * {@code 36.0} 是源里**硬编码**的 6² （服务端交互距离），不是参数。
-     */
     static boolean touchCheck(Vec3d placeVec, Vec3d placerEyeVec, double placeRangeSq, BlockPos pos) {
         double disToPosCenter = placeVec.squaredDistanceTo(
             pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5);
@@ -408,20 +333,6 @@ public final class GcoreTrapUtil {
         return trapPosList;
     }
 
-    /**
-     * 对应源 {@code getGTrapPosFromList$searchColliedPos}。
-     *
-     * <p>从 {@code pos} 向六个方向扩张：碰到「不压活体实体」的格子时，
-     * 还要求它**不可替换**（说明是实心方块，可以当作扩张的锚点），且不卡碰撞；
-     * 否则（压着活体实体）无条件收下。
-     *
-     * <p><b>★ 一处「冗余重复」的处理</b>：源里 {@code collidesWithAnyBlock}
-     * 被**连着调用了两次**（参数完全相同，中间没有副作用）。我用 {@code javap}
-     * 复核过字节码，偏移 {@code 208} 与 {@code 278} 确实是两次独立调用，
-     * 反编译源码（447/450 行）也一致 —— 所以是**编译产物里真实存在的冗余**。
-     * 由于同一个纯函数、同样参数、之间无副作用，两次调用结果必然相同，
-     * 故此处**只保留一次**。行为等价，仅少一次无谓的世界查询。
-     */
     private static void searchColliedPos(List<BlockPos> newColliedList, List<BlockPos> loadedPos,
                                          List<Entity> entities, BlockPos pos) {
         for (Direction facing : Direction.values()) {

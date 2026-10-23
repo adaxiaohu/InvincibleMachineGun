@@ -43,7 +43,7 @@ public class CooldownsHud extends AbstractPanelHud {
     private List<Row> rows = List.of();
 
     public CooldownsHud() {
-        super("cooldowns-hud", "物品冷却 HUD（模仿 CatLean 的 cooldowns-widget）。", 20, 300, 1.0);
+        super("cooldowns-hud", "物品冷却 HUD。", 20, 300, 1.0);
     }
 
     @Override

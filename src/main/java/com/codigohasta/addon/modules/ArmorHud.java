@@ -43,7 +43,7 @@ public class ArmorHud extends AbstractPanelHud {
         .defaultValue(new SettingColor(220, 120, 169, 255)).build());
     private final Setting<Boolean> breathe = sgArmor.add(new BoolSetting.Builder()
         .name("呼吸效果")
-        .description("照 CatLean 的观感，让耐久条随时间轻微明暗呼吸。"
+        .description("让耐久条随时间轻微明暗呼吸。"
             + "（源码是「两个主题色循环插值」；这里改做在亮度上，"
             + "以免盖掉「绿=好、红=差」的耐久语义。）")
         .defaultValue(true).build());
@@ -67,7 +67,7 @@ public class ArmorHud extends AbstractPanelHud {
         .defaultValue(true).build());
 
     public ArmorHud() {
-        super("armor-hud", "装备耐久 HUD（模仿 CatLean 的 armor-widget）。", 582, 483, 0.8);
+        super("armor-hud", "装备耐久 HUD。", 582, 483, 0.8);
     }
 
     @Override

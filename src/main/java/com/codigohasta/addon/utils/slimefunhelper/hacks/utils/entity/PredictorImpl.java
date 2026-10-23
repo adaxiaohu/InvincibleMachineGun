@@ -14,20 +14,6 @@ import net.minecraft.network.packet.s2c.play.EntityS2CPacket;
 import net.minecraft.network.packet.s2c.play.PositionFlag;
 import net.minecraft.util.math.Vec3d;
 
-/**
- * Ported from upstream 1.1.7.2 {@code me.matl114.hacks.utils.entity.PredictorImpl}.
- *
- * <p>Upstream keeps a {@link TrackedPosition} that is advanced by the deltas carried in the
- * entity position packets and exposes it via {@link #getCurrentPos()}. IMG previously recorded
- * {@code owner.getEntityPos()} for every packet, i.e. the client entity's position after the
- * packet was handled. Tracking the base position plus deltas is what upstream's
- * {@code AbstractBotBehaviour.getCurrentSyncedPos()} reads, so the mace chase now sees the same
- * value upstream does.
- *
- * <p>IMG wires these handlers from its own packet-post-handle channels and constructs the
- * predictor with its owner, so the entry points below keep IMG's signatures and unwrap the
- * {@link Event} wrapper; the tracking logic itself is upstream's.
- */
 public class PredictorImpl implements Predictor {
     private static final MinecraftClient mc = MinecraftClient.getInstance();
     private int ownerId;

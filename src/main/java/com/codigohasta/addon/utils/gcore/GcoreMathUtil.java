@@ -2,16 +2,6 @@ package com.codigohasta.addon.utils.gcore;
 
 import net.minecraft.util.math.Vec3d;
 
-/**
- * 数学工具。
- *
- * <p>移植自 {@code dev.godden.core.Utils.MathUtil}（GCore）。
- * 源是 Kotlin `object`（单例），Java 里改为**静态方法**。
- *
- * <p>TP 锚实际只用到 {@link #squaredDistance}。其余方法一并移植以保持闭包完整
- * （其中 {@code getStraightVec(Vec3d, Rotation, double)} 依赖 LiquidBounce 的
- * {@code Rotation}，见 {@link GcoreRotation} 的处理说明）。
- */
 public final class GcoreMathUtil {
 
     private GcoreMathUtil() {
@@ -26,11 +16,6 @@ public final class GcoreMathUtil {
         return d * d + e * e + f * f;
     }
 
-    /**
-     * 区间内随机取一个整数。
-     *
-     * <p>源用 {@code Math.random()}，保留同样实现（不是 MC 的随机源）。
-     */
     public static int getRandomIntFromRange(GcoreIntRange intRange) {
         return Math.min(intRange.getStart(), intRange.getStep())
             + (int) Math.floor(Math.abs(intRange.getStep() - intRange.getStart() + 1) * Math.random());

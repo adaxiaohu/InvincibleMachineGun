@@ -236,7 +236,7 @@ public class XTpaura extends Module {
     private long lastAttackTime = 0;
 
     public XTpaura() {
-        super(AddonTemplate.CATEGORY, "百米刀", " “我允许你先走99米。”。,娱乐功能，抄袭了gcore，裤子条纹得来的");
+        super(AddonTemplate.CATEGORY, "百米刀", " “我允许你先走99米。”。,娱乐功能");
     }
 
     @EventHandler

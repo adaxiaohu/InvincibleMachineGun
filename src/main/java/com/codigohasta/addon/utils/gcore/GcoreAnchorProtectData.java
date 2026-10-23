@@ -2,14 +2,6 @@ package com.codigohasta.addon.utils.gcore;
 
 import net.minecraft.util.math.BlockPos;
 
-/**
- * 保护方块数据：放在哪、怎么放、自己会吃多少伤害。
- *
- * <p>移植自 {@code dev.godden.core.Utils.ClassUtil.AnchorProtectData}（GCore）。
- *
- * <p>「保护方块」是放在锚旁边用来挡爆炸的方块（黑曜石/萤石），
- * 目的是让自己少挨炸。
- */
 public final class GcoreAnchorProtectData {
 
     private final BlockPos protectPos;

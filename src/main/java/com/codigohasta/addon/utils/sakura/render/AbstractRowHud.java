@@ -14,64 +14,6 @@ import meteordevelopment.meteorclient.utils.render.color.Color;
 import meteordevelopment.meteorclient.utils.render.color.SettingColor;
 import meteordevelopment.orbit.EventHandler;
 
-/**
- * 「单行 HUD 小组件」的公共基类（FPS / 延迟 / 坐标 / TPS / 速度 等）。
- *
- * <h2>几何来源 —— ✅ 两条独立证据链互证</h2>
- *
- * <p>这些小组件在 CatLean 里都调用同一个绘制方法 <b>{@code gf.X()}</b>。
- * 数值有两个来源，结论完全一致（推导脚本 {@code docs/gcore/diag/catlean-row-geometry.py}）：
- * <ol>
- *   <li><b>实测</b>：{@code javap -c -cp catlean-fat.jar su.catlean.gf} 中 {@code X} 方法的
- *       {@code ldc} float 常量：19.0 / 13.0 / 3.0 / 10.0×2 / 16.0 / 20.0 / 13.0</li>
- *   <li><b>交叉验证</b>：{@code backup/cathud-legacy-20260929/CatHudElement.java} 的
- *       {@code row()}（早前会话从同一份字节码推导，注释了出处 {@code gf.javap.txt}）</li>
- * </ol>
- *
- * <table border="1">
- *   <caption>gf.X 的几何（源码原值）</caption>
- *   <tr><th>项</th><th>源码值</th><th>字节码来源</th></tr>
- *   <tr><td>面板高</td><td>13</td><td>{@code ldc 13.0f}</td></tr>
- *   <tr><td>面板宽</td><td>文字宽 + 19</td><td>{@code ldc 19.0f}</td></tr>
- *   <tr><td>图标</td><td>10×10 @ (x+2, y+0)</td><td>{@code fconst_2} / {@code ldc 10.0f} / {@code fconst_0}</td></tr>
- *   <tr><td>文字</td><td>@ (x+16, y+1)</td><td>{@code ldc 16.0f} / {@code fconst_1}</td></tr>
- *   <tr><td>竖线</td><td>y = +3</td><td>{@code ldc 3.0f}</td></tr>
- * </table>
- *
- * <p><b>⚠️ 不要误用 {@code gf.q()} 那一组</b>（高 16 / 宽 +24 / 图标 y+1.5 / 文字 x+18,y+2）
- * —— 那是<b>标题行 / 可缩放行</b>用的。本类第一版抄错了这一组。
- *
- * <h2>垂直与水平对齐 —— 按用户要求，偏离源码</h2>
- *
- * <p><b>源码里三者是不对齐的</b>：图标 y+0(中心 5.0)、文字 y+1(中心 5.5)、竖线 y+3(中心 7.25)，
- * 面板中心 6.5 —— 三个中心互不重合。用户 2026-10-06 明确要求「图标、分割线、字要水平对齐，
- * 然后整体在水平对齐面板」，因此本类改为：
- * <ul>
- *   <li><b>垂直</b>：三者一律 {@code (面板高 − 元素高) / 2}，中心都落在面板中线上；</li>
- *   <li><b>水平</b>：把「图标…文字」当成一整组，在面板内<b>左右留白相等</b>。</li>
- * </ul>
- * 这是<b>有意的取舍</b>：源码原值记录在上表，若要回到源码观感，改回固定偏移即可。
- *
- * <p><b>竖线 x 是推断值</b>：{@code gf.X()} 里竖线 x 是一个 <b>DES 加密的浮点常量</b>，
- * 要读出它得实现整套 indy 解密（本项目 {@code .tmp-decrypt/} 转储已被清理）。
- * 但它<b>必须落在</b>图标右缘(12) 与文字左缘(16) 之间 —— 这是确证的；取中点 {@link #DIVIDER_X}=14。
- *
- * <h2>★ 为什么几何/设置可以放在基类里</h2>
- *
- * <p>两条前提都已验证，缺一不可：
- * <ol>
- *   <li><b>事件会被调用</b>：Orbit 的 {@code EventBus.getListeners()} 会递归
- *       {@code klass.getSuperclass()}，所以基类的 {@code @EventHandler} 生效。
- *       项目先例：{@code modules/FullscreenShaderModule.java}。</li>
- *   <li><b>翻译能找到字段</b>：{@code JsonEnglishTranslationManager.findFieldName} 从
- *       {@code module.getClass()} 沿 {@code getSuperclass()} 上溯到 {@code Module.class}，
- *       所以基类声明的 Setting <b>也能被反射定位</b>；JSON 键 =「子类模块名 + 字段名」。</li>
- * </ol>
- *
- * <p><b>⚠️ 本类必须放 {@code utils/} 而非 {@code modules/}</b>：
- * {@code check_i18n.lua} 会把 {@code modules/} 下<b>每个 .java</b> 当模块、要求它有 JSON 条目；
- * {@code utils/} 只遍历、不强制。</p>
- */
 public abstract class AbstractRowHud extends Module {
 
     // ═══════════ 几何常量（✅ gf.X()，详见类注释）═══════════
@@ -89,9 +31,7 @@ public abstract class AbstractRowHud extends Module {
 
     /** 竖线 x 偏移（⚠️ 推断值：居中于图标右缘 12 与文字左缘 16 之间）。 */
     protected static final float DIVIDER_X = 14f;
-    /** 竖线宽（照 {@code PlayerListHud} 的 0.2，源项目未解出）。 */
     protected static final float DIVIDER_W = 0.2f;
-    /** 竖线高（照 {@code PlayerListHud}，源项目未解出）。 */
     protected static final float DIVIDER_H = 8.5f;
 
     // ═══════════ 公共设置 ═══════════
@@ -134,7 +74,7 @@ public abstract class AbstractRowHud extends Module {
         .visible(showDivider::get).build());
     private final Setting<Boolean> panelBorder = sgLook.add(new BoolSetting.Builder()
         .name("面板描边")
-        .description("在面板边缘画一圈细描边。CatLean 的面板是「填充 + 描边」两层"
+        .description("在面板边缘画一圈细描边。面板是「填充 + 描边」两层"
             + "（见其 rect.fsh 的 uBorderWidth/uBorderColor），描边让面板在深色背景上不糊边。")
         .defaultValue(true).build());
 
@@ -257,7 +197,6 @@ public abstract class AbstractRowHud extends Module {
                 new java.awt.Color(bg.r, bg.g, bg.b, bg.a),
                 blurStrength.get().floatValue(), 0.9f, true);
         }
-        // 描边（照 CatLean 的「填充 + 描边」两层；其 rect.fsh 与本项目的逐行一致）
         Color borderCol = panelBorder.get() ? derivedBorderColor(pc) : null;
         float bw = panelBorder.get() ? BORDER_WIDTH * scale : 0f;
         Shader2DUtil.drawRoundedRect(x, y, panelW, panelH, radius, bg, bw, borderCol);

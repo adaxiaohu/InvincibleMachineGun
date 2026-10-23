@@ -17,40 +17,6 @@ import java.util.Map;
 import java.util.TreeSet;
 import java.util.function.BiPredicate;
 
-/**
- * 「服务端等价」移动判定引擎（步骤 ①）。
- *
- * <p><b>解决什么问题</b>：源 GCore 的 {@link GcoreBlockUtil#checkCanMove} 只做
- * **L 形走廊的包围盒近似**判定 —— 把「起点→终点的位移」拆成「先纯 X、再纯 Z」
- * 两个包围盒，且**两个盒子的 Y 范围都取自起点**。这与服务端真正执行的
- * {@code player.move(MoverType.PLAYER, delta)} 三维扫掠不是一回事。
- *
- * <p>结果：客户端认为「包围盒不碰撞 → 可走」，服务端扫掠后说「你被挡住了」，
- * 于是 {@code movedWrongly} → {@code internalTeleport(该包之前的位置)} + s08 回拉。
- * 实测日志已证实：s08 的 {@code serverPos} **精确等于** GCore 自己发出的
- * {@code backVClip}（= {@code toVec + 1.8}，半空），见档案 4.8 / 4.11。
- *
- * <p><b>实现方式（方案 X）</b>：碰撞采集**交给** {@link CollisionUtil}
- * —— 它是从 Paper 的碰撞优化代码移植来的（19000+ 行），也正是本项目里
- * sfIMG {@code MovTasks} 那条**已被实战验证可用**的路径所用的同一个实现。
- * 本类只负责「把 {@code extraPosMap} 虚拟方块接进去」这一件事。
- *
- * <p><b>★ 三个关键设计选择</b>：
- * <ol>
- *     <li><b>完全不改动实体</b>。有效版 {@code MovTasks.simulateMovement} 靠临时
- *         {@code entity.setPosition(from)} 再还原，因此**只能在主线程**跑；
- *         而 TP 锚跑在虚拟线程上。本类改为**显式传入 {@link Box}**、
- *         只调纯函数 {@code performCollisions} 与只读的采集函数 → **线程安全**。</li>
- *     <li><b>支持虚拟方块</b>。{@link CollisionUtil} 的 {@code predicate} 是**纯过滤**
- *         （只能跳过、不能替换）。源的 {@code extraPosMap} 是**替换**语义。
- *         两者可以精确对接：用 {@code predicate} **排除**虚拟方块坐标上的世界方块，
- *         再把虚拟方块自己的形状**追加**进结果 —— 合起来就是「替换」。</li>
- *     <li><b>采集「方块 + hard-colliding 实体」</b>。服务端 {@code player.move()}
- *         同样会被这类实体挡住，而 TP 落点常常就在**目标实体**身上；
- *         故走 {@code getCollisions}（= 方块 | 实体），与有效版
- *         {@code MovTasks.collectBoxInvolvingInMovements} 同款入口。</li>
- * </ol>
- */
 public final class GcoreServerEquivMove {
 
     private GcoreServerEquivMove() {
@@ -190,39 +156,6 @@ public final class GcoreServerEquivMove {
 
     // ─────────────────── 服务端判据 ───────────────────
 
-    /**
-     * 服务端的「moved wrongly」阈值平方
-     * （{@code spigot.yml: moved-wrongly-threshold: 0.0625}，即 0.25 格）。
-     *
-     * <p>服务端代码（{@code ServerGamePacketListenerImpl#handleMovePlayer}）：
-     * <pre>
-     * this.player.move(MoverType.PLAYER, new Vec3d(d3, d4, d5));  // 真实扫掠
-     * d3 = d - this.player.getX();
-     * d4 = d1 - this.player.getY();
-     * if (d4 &gt; -0.5 || d4 &lt; 0.5) d4 = 0.0;                        // ★ 恒真 → Y 永远归零
-     * d5 = d2 - this.player.getZ();
-     * d7 = d3*d3 + d4*d4 + d5*d5;
-     * if (d7 &gt; 0.0625) { movedWrongly = true; }
-     * </pre>
-     *
-     * <p><b>★★ 关于那个 Y 特判（已用字节码核实）</b>：
-     * {@code if (d4 > -0.5 || d4 < 0.5)} 里的 {@code ||} 让它成为**恒真式**
-     * —— 任何实数都满足「&gt; -0.5 或 &lt; 0.5」。字节码证实
-     * （{@code .tmp-verify/H.txt} 偏移 976–995）：
-     * <pre>
-     * 976: dload 34 / 978: ldc2_w -0.5d / 981: dcmpl / 982: ifgt 994   // d4 > -0.5 → 归零
-     * 985: dload 34 / 987: ldc2_w  0.5d / 990: dcmpg / 991: ifge 997   // d4 >= 0.5 → 跳过
-     * 994: dconst_0 / 995: dstore 34                                  // d4 = 0.0
-     * </pre>
-     * ⇒ **竖直偏差恒被归零**，{@code d7} 只统计**水平**距离。
-     *
-     * <p>两个推论：
-     * <ol>
-     *     <li>解释了有效版 {@code MovTasks.validMovementAsServer} 为何只比 x/z —— 它是对的。</li>
-     *     <li>VClip 的**竖直**抬升本身不会被 {@code movedWrongly} 拦；
-     *         被拦的是抬升之后的**水平段**（扫掠在水平方向被墙/地面挡住）。</li>
-     * </ol>
-     */
     public static final double MOVED_WRONGLY_THRESHOLD = 0.0625;
 
     // ─────────────────── 公开 API ───────────────────
@@ -237,7 +170,7 @@ public final class GcoreServerEquivMove {
                                           GcorePlayerUtil.PlayerState state) {
         Entity player = MinecraftClient.getInstance().player;
         if (player == null) {
-            return true; // 没玩家就无从判定；与源「不可判定时宁可放行」的保守取向一致
+            return true;
         }
         return canMoveAsServer(fromVec, toVec, extraPosMap, state,
             player.getStepHeight(), player.isOnGround());
@@ -289,47 +222,6 @@ public final class GcoreServerEquivMove {
         return accepted;
     }
 
-    /**
-     * 服务端 {@code hasNewCollision} 的等价实现 —— **第二条拒绝路径**。
-     *
-     * <p><b>为什么必须有它</b>：服务端玩家分支有两条**并列**的拒绝路径
-     * （反编译 {@code ServerGamePacketListenerImpl} line 1641-1652）：
-     * <pre>
-     * boolean movedWrongly = ...;                    // 第一条：只比水平
-     * boolean allowMovement = noPhysics || sleeping || !movedWrongly;
-     * this.player.absSnapTo(d, d1, d2, f, f1);       // 先把玩家**放到目标点**
-     * if (!noPhysics && !sleeping && allowMovement) {
-     *     AABB newBox = this.player.getBoundingBox();        // 目标点的碰撞箱
-     *     if (didCollide || !boundingBox.equals(newBox)) {
-     *         allowMovement = !this.hasNewCollision(level, player, boundingBox, newBox);
-     *     }
-     * }
-     * </pre>
-     * 而 {@code hasNewCollision} 是：
-     * <pre>
-     * CollisionUtil.getCollisions(level, entity, newBox, voxels, aabbs, 6, null, null);
-     * for (AABB box : aabbs)      if (!voxelShapeIntersect(box, oldBox))       return true;
-     * for (VoxelShape v : voxels) if (!voxelShapeIntersectNoEmpty(v, oldBox))  return true;
-     * return false;
-     * </pre>
-     *
-     * <p><b>语义</b>：把玩家瞬移到目标点后，采集**目标点 AABB 内**的所有碰撞体；
-     * 只要**任何一个**碰撞体与「起点 AABB」**不相交**，就说明玩家
-     * 「钻进了一个原本没碰到的方块里」→ {@code CLIPPED_INTO_BLOCK} → 拒绝。
-     *
-     * <p><b>★ 这条路径是三维的</b>，与 {@code movedWrongly}「忽略 Y」**完全无关**。
-     * 这解释了先前观测到的全部现象：竖直穿墙 5.8 格时水平虽毫无阻挡，
-     * 但终点落进了原本没碰到的方块 → 被拒。我先前只实现了第一条判据，
-     * 于是把服务端拒绝的段落**全部放行**（实测 9/14 条 s08 都是这种情况）。
-     *
-     * <p><b>flags 用 6</b>（{@code COLLIDE_WITH_UNLOADED_CHUNKS|CHECK_BORDER}）
-     * —— 照抄服务端原样。未加载区块会被当作**实心**，这对远端 TP 至关重要。
-     *
-     * @param oldBox 起点碰撞箱
-     * @param requestedMovement 该包**请求**的位移
-     *        （服务端在 {@code absSnapTo(d,d1,d2)} 之后取 {@code getBoundingBox()}，
-     *         即目标点 = 起点 + 请求位移，**不是**扫掠受限后的位移）
-     */
     private static boolean hasNewCollision(Entity entity, Box oldBox, Vec3d requestedMovement,
                                            Map<BlockPos, BlockState> extraPosMap) {
         Box newBox = oldBox.offset(requestedMovement);
@@ -373,16 +265,6 @@ public final class GcoreServerEquivMove {
         return hitIdx >= 0;
     }
 
-    /**
-     * 「该位置能不能站人」（源的 {@code checkNoPosCollie} 的服务端等价版）。
-     *
-     * <p>语义与源一致：该 AABB **不与任何方块碰撞** 才算可站。
-     * 但碰撞来源换成 {@link CollisionUtil}（Paper 同源），并支持虚拟方块。
-     *
-     * <p><b>为什么也要接新引擎</b>：{@code findVClipVecToMove} 用它判定
-     * 「候选抬升点本身卡不卡方块」。若这里误判（用源的 L 近似），
-     * 会选到一个**本身就非法**的抬升点 —— 之后无论怎么算都白搭。
-     */
     public static boolean noPosCollisionAsServer(Vec3d vec,
                                                  Map<BlockPos, BlockState> extraPosMap,
                                                  GcorePlayerUtil.PlayerState state) {
@@ -408,19 +290,6 @@ public final class GcoreServerEquivMove {
         return movement.lengthSquared() > 1.0;
     }
 
-    /**
-     * 服务端判据：模拟后的位移与服务端「请求的位移」差多少（**只比水平分量**）。
-     *
-     * <p>严格对应服务端（见 {@link #MOVED_WRONGLY_THRESHOLD} 的字节码说明）：
-     * <pre>
-     * d4 = 0.0;                    // ★ 竖直分量恒被归零
-     * movedWrongly = (d3*d3 + d5*d5) &gt; 0.0625;
-     * </pre>
-     * 也与有效版 {@code MovTasks.validMovementAsServer} 的写法一致：
-     * {@code s2(expect.x - sim.x) + s2(expect.z - sim.z) < 0.0625}。
-     *
-     * <p>创造模式直接放行 —— 服务端对创造模式玩家同样跳过该检查。
-     */
     public static boolean acceptedAsServer(Vec3d expect, Vec3d sim) {
         var interactionManager = MinecraftClient.getInstance().interactionManager;
         if (interactionManager != null
@@ -432,27 +301,6 @@ public final class GcoreServerEquivMove {
         return dx * dx + dz * dz < MOVED_WRONGLY_THRESHOLD;
     }
 
-    /**
-     * 真实扫掠：把一个 AABB 沿 {@code movement} 移动，返回**实际能走到的位移**。
-     *
-     * <p><b>逐行复刻服务端 {@code net.minecraft.world.entity.Entity#collide(Vec3)}</b>
-     * （反编译 {@code luminol-1.21.11.jar}，第 1619–1668 行）。
-     * <b>不修改任何实体</b>：只读 world 方块与传入的 {@code box}。
-     *
-     * <p><b>★ 为什么不再复用 {@code MovTasks.collideWithTrustedList}</b>：
-     * 它把台阶抬升写成「无条件试 {@code stepHeight}」：
-     * <pre>
-     * performCollisions(new Vec3(movement.x, stepHeight, movement.z), box, ...)
-     * </pre>
-     * 而服务端必须先由 {@link #calculateStepHeights} 从**实际方块 Y 坐标**
-     * 枚举**存在的**候选台阶。二者在「墙边俯冲」时结果相反 ——
-     * 实测（见档案 4.19）：`MovTasks` 版报 dxz2=0.0000「畅通」，
-     * 服务端判 dxz2≈3.26「被挡」，导致服务端 `movedWrongly` 回拉。
-     * 隔离实验：光加服务端门槛仍是 1/5，换成候选枚举枚举后 5/5 复现。
-     *
-     * <p>{@code MovTasks} 那样写对它的原用途（`Attack.java` 寻路，只求"可达"）
-     * 未必有错；但**精确预测服务端是否回拉**时必须照抄服务端。
-     */
     public static Vec3d sweptMove(Entity entity, Box box, Vec3d movement,
                                   Map<BlockPos, BlockState> extraPosMap,
                                   double stepHeight, boolean onGround) {
@@ -535,17 +383,6 @@ public final class GcoreServerEquivMove {
         return collided;
     }
 
-    /**
-     * 逐行复刻服务端 {@code Entity.calculateStepHeights}
-     * （反编译 {@code luminol-1.21.11.jar}，第 667–700 行）。
-     *
-     * <p>**只枚举「实际存在」的台阶高度**：从命中的碰撞体
-     * （VoxelShape 的 Y 坐标 / AABB 的 minY 与 maxY）相对 {@code box.minY} 的偏移，
-     * 取 {@code 0 ≤ step ≤ stepHeight} 且 {@code step != collidedY} 的值。
-     *
-     * <p>这是与 {@code MovTasks} 的关键差异：后者无条件整格抬 {@code stepHeight}，
-     * 会「爬过」本不该翻越的墙。
-     */
     private static double[] calculateStepHeights(Box box, List<VoxelShape> voxels, List<Box> aabbs,
                                                  double stepHeight, double collidedY) {
         TreeSet<Double> candidates = new TreeSet<>();
@@ -589,32 +426,6 @@ public final class GcoreServerEquivMove {
 
     // ─────────────────── 内部 ───────────────────
 
-    /**
-     * 采集 {@code aabb} 范围内的碰撞体。
-     *
-     * <p><b>① 真实世界方块 + 实体</b>：直接委托 {@link CollisionUtil#getCollisions}
-     * —— 与有效版 {@code MovTasks.collectBoxInvolvingInMovements} 同源（Paper 优化代码）。
-     * 它自带 ±1 格的边界扩展、用 section palette 迭代（比逐格 {@code getBlockState} 快得多）、
-     * 并用 **entity-aware 的形状上下文**（{@code LazyEntityCollisionContext}）
-     * 取代我先前误用的 {@code ShapeContext.absent()}。
-     *
-     * <p><b>② 虚拟方块（{@code extraPosMap}）</b>：源的语义是**替换**。
-     * 做法：
-     * <ul>
-     *     <li>先用 {@code predicate} **排除**虚拟方块坐标上的世界方块
-     *         （predicate 返回 false → 该方块被跳过）；</li>
-     *     <li>再把虚拟方块自身的碰撞形状**追加**进结果。</li>
-     * </ul>
-     * 两者合起来等价于「用虚拟方块顶替世界方块」。
-     * 注意 predicate 只用于**排除**，虚拟方块坐标必定命中（{@code containsKey}），
-     * 所以不会把不该跳的方块跳掉。
-     *
-     * <p><b>★ 采集「方块 + 实体」</b>：改用有效版同款入口
-     * {@link CollisionUtil#getCollisions}（= 方块 | hard-colliding 实体），
-     * 取代先前的纯方块版本。理由：服务端 {@code player.move()}
-     * 同样会被 hard-colliding 实体挡住，而 TP 落点常常就在**目标实体**身上；
-     * 先前排除实体等于对这条阻挡来源完全失明。
-     */
     private static void collectCollisions(Entity entity, Box aabb,
                                           Map<BlockPos, BlockState> extraPosMap,
                                           List<VoxelShape> intoVoxel, List<Box> intoAabb) {
@@ -661,7 +472,6 @@ public final class GcoreServerEquivMove {
             return;
         }
 
-        // ② 追加虚拟方块（源的「即将放上去的方块」）
         ShapeContext context = ShapeContext.of(entity);
         BlockPos.Mutable pos = new BlockPos.Mutable();
 

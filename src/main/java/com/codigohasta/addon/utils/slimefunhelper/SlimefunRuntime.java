@@ -300,7 +300,6 @@ public final class SlimefunRuntime {
             Listener.getPlayerInitConfiguration().fire(player);
             Listener.getGameJoinPoint().fire(player);
             Listener.getWorldSwitchPoint().fire(mc.world);
-            // Ported from upstream 1.1.7.2 ClientPlayNetworkHandlerEvents: respawn is also a
             // game-join entry point for the player-carrying respawn channel.
             Listener.getPlayerRespawnPoint().fire(player);
         }
@@ -402,7 +401,6 @@ public final class SlimefunRuntime {
     public static boolean beforeTravel(ClientPlayerEntity player, Event<Vec3d> input) {
         if (!inTick) return true;
 
-        // Ported from upstream 1.1.7.2 PlayerEntityEvents.onPlayerTravel: the travel channel
         // fires before the legal-movement pre-travel tick.
         Listener.getPlayerTravelingTick().dispatch(input);
 

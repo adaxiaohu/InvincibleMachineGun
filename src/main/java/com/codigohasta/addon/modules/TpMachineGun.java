@@ -134,7 +134,7 @@ public class TpMachineGun extends Module {
     private final List<Vec3d> renderPath = new ArrayList<>();
 
     public TpMachineGun() {
-        super(AddonTemplate.CATEGORY, "tp-machine-gun", "试验模块，娱乐功能，本来设想是弩机关枪加上tp的，但是没弄成。抄袭了gcore，裤子条纹");
+        super(AddonTemplate.CATEGORY, "tp-machine-gun", "试验模块，娱乐功能，本来设想是弩机关枪加上tp的，但是没弄成。");
     }
 
     @Override

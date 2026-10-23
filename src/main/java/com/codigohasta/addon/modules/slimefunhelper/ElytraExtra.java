@@ -201,7 +201,6 @@ public class ElytraExtra extends BaseModule implements LegalMovementManager.Move
             .defaultValue(true)
             .build();
 
-    /** Ported from upstream 1.1.7.2 ElytraExtra.antiKick. */
     public final FlagRef antiKick = builder(armorFlyPath.add("anti-kick"), Boolean.class)
             .defaultValue(true)
             .build();
@@ -215,7 +214,6 @@ public class ElytraExtra extends BaseModule implements LegalMovementManager.Move
             .validator(Configs.INT_NONNEGATIVE)
             .build();
 
-    /** Ported from upstream 1.1.7.2 ElytraExtra: the vanilla firework delay multiplier. */
     public final DoubleRef fireworkMaxTicks = doubleBuilder(
                     customFireworksPath.add("firework-max-delay-multiply-vanilla"))
             .defaultValue(20.0D)
@@ -265,13 +263,6 @@ public class ElytraExtra extends BaseModule implements LegalMovementManager.Move
             .show(this.autoRescale::get)
             .build();
 
-    /**
-     * Optional speed clamps applied after the axis limit shrinks the motion.
-     *
-     * <p>Ported from upstream 1.1.7.2, where {@code applyAxisLimit2/3_0} end with
-     * {@code clampedMotion = applySpeedLimit(clampedMotion)}. Both default to absent, so
-     * {@link #applySpeedLimit} is a no-op until the user enables them.
-     */
     public final NBTRef<OptionalPrimitive<Double>> fireworkSpeedLimitUp = builder(
                     customFireworksPath.add("firework-speed-limit-up"), OptionalPrimitive.DOUBLE_TYPE)
             .defaultValue(new OptionalPrimitive<>(false, NBTTypes.DOUBLE_TYPE, 5.0D))
@@ -284,12 +275,6 @@ public class ElytraExtra extends BaseModule implements LegalMovementManager.Move
             .show(this.autoRescale::get)
             .build();
 
-    /**
-     * Clamps the motion to the configured up/down speed limit.
-     *
-     * <p>Ported from upstream 1.1.7.2 {@code ElytraExtra.applySpeedLimit}. Returns the vector
-     * unchanged while both limits are absent (the default).
-     */
     public Vec3d applySpeedLimit(Vec3d vec3d) {
         OptionalPrimitive<Double> speedLimit = vec3d.y > 0 ? fireworkSpeedLimitUp.get() : fireworkSpeedLimitDown.get();
         if (speedLimit.isPresent() && vec3d.length() > speedLimit.getValue()) {
@@ -311,7 +296,6 @@ public class ElytraExtra extends BaseModule implements LegalMovementManager.Move
     public final FlagRef rocketBoost =
             flagBuilder(customFireworksPath.add("firework-boost-enable")).build();
 
-    /** Ported from upstream 1.1.7.2 ElytraExtra: gates baritone-driven rocket boost. */
     public final FlagRef baritoneUseRocketBoost =
             flagBuilder(customFireworksPath.add("baritone-use-rocket-boost")).build();
 
@@ -347,7 +331,6 @@ public class ElytraExtra extends BaseModule implements LegalMovementManager.Move
     public final FlagRef noEnoughFireworksNotify =
             flagBuilder(customFireworksPath.add("log-no-fireworks")).build();
 
-    // Ported from upstream 1.1.7.2 ElytraExtra: the fireworks-lag-delay feature driven by
     // onFireworkRemoval. Both default to inactive, so applyFireworkDelay is a no-op until used.
     public final FlagRef fireworksLagDelay =
             flagBuilder(customFireworksPath.add("fireworks-lag-delay")).build();
@@ -368,7 +351,6 @@ public class ElytraExtra extends BaseModule implements LegalMovementManager.Move
             .validator(value -> value.getValue() >= 0)
             .build();
 
-    // Ported from upstream 1.1.7.2: the firework-removal delay lock state.
     Object currentDelayingLock = null;
     Long lastStartDelayOrReleaseMs = 0L;
 
@@ -403,7 +385,6 @@ public class ElytraExtra extends BaseModule implements LegalMovementManager.Move
         registerListener(
                 Listener.getPacketPoint().getChannel(TeleportConfirmC2SPacket.class), this::onAcceptTeleportation);
         registerListener(Listener.getPostGameTick(), this::onArmorStateTick);
-        // Ported from upstream 1.1.7.2 ElytraExtra.registerAll.
         registerListener(PacketManager.getPacketQueueInEvent(), this::onFireworkRemoval);
         registerListener(PacketManager.getPacketQueueInEvent(), this::onArmorGlideDelay);
         registerListener(PacketManager.getQueueShutdownEvent(), this::onPacketQueueFlush);
@@ -489,13 +470,11 @@ public class ElytraExtra extends BaseModule implements LegalMovementManager.Move
 
     // elytra unbreakable?
 
-    // Ported from upstream 1.1.7.2 ElytraExtra: the boolean pending model that replaced
     // IMG's counter (`nextTimeDelaySwitchElytraUnbreakable`).
     private boolean pendingElytraUnbreakableTransaction = false;
     private boolean pendingHandleElytraUnbreakableTransaction = false;
     public int elytraUnbreakableTransactionSlot = -1;
 
-    /** Ported from upstream 1.1.7.2 ElytraExtra.isCurrentArmorGlidingEnable. */
     public boolean isCurrentArmorGlidingEnable() {
         return armorFly.get() && armorGlideTransactionSlot != -1;
     }
@@ -617,7 +596,6 @@ public class ElytraExtra extends BaseModule implements LegalMovementManager.Move
         return stack.getDamage() < stack.getMaxDamage() - 1;
     }
 
-    /** Ported from upstream 1.1.7.2 ElytraExtra: gates the reset_fallfly block. */
     private boolean delayResetFallFlyingFlag = false;
 
     // may cause fake gliding !!! must be careful
@@ -749,31 +727,11 @@ public class ElytraExtra extends BaseModule implements LegalMovementManager.Move
                 && nextPacketResetFallFlying.stream().anyMatch(s -> s > Tasks.getTick());
     }
 
-    /**
-     * Queues a reset of the client's fall-flying flag {@code effectiveTicks} from now.
-     *
-     * <p>Ported from upstream 1.1.7.2 {@code ElytraExtra.requestManualResetFallFlying}. The
-     * queued tick makes {@link #hasPendingFallFlyingReset()} true, which is what keeps the
-     * server from seeing us as grounded after an armour swap.
-     */
     public boolean requestManualResetFallFlying(int effectiveTicks) {
         nextPacketResetFallFlying.add(Tasks.getTick() + effectiveTicks);
         return true;
     }
 
-    /**
-     * Swaps one chest-slot item in and arms a fall-flying reset, so a following mace attack still
-     * counts as a smash.
-     *
-     * <p>Ported from upstream 1.1.7.2 {@code ElytraExtra.requestManualArmorSwapAndResetFallFlying}
-     * (the "鞘翅追人: 重锤切甲修复" / mace-fix feature). A mace smash requires the server to
-     * consider us gliding at the moment of impact, but swapping armour makes the server reset the
-     * fall-flying flag. Doing the swap EARLY and arming the reset here means the attack lands
-     * while we are still gliding, instead of being repaired after the packet has already gone out
-     * (which is what {@link #handleMaceAttack} does for the older path).
-     *
-     * @return true when a swap was performed and a reset queued
-     */
     public boolean requestManualArmorSwapAndResetFallFlying(int effectiveTicks) {
         if (checkNull() || !mc.player.isGliding() || isCurrentArmorGliding() || hasPendingFallFlyingReset()) {
             return false;
@@ -791,7 +749,6 @@ public class ElytraExtra extends BaseModule implements LegalMovementManager.Move
         return item.isEmpty() || (!isValidElytra(item) && mc.player.canEquip(item, EquipmentSlot.CHEST));
     }
 
-    /** Ported from upstream 1.1.7.2 {@code ElytraExtra.findEmptySlotForElytra}. */
     public int findEmptySlotForElytra() {
         if (ClientPlayerAccess.of(mc.player).getServerScreenHandler() == mc.player.playerScreenHandler) {
             Predicate<ItemStack> canUnbreakablePredicate = this::canStopFallFlying;
@@ -872,7 +829,6 @@ public class ElytraExtra extends BaseModule implements LegalMovementManager.Move
         return PRIORITY_COMMON;
     }
 
-    /** Ported from upstream 1.1.7.2 ElytraExtra. */
     public static boolean isValidElytra(ItemStack item) {
         return VItem.getInstance().canGlide(item)
                 && mc.player.canEquip(item, EquipmentSlot.CHEST)
@@ -918,7 +874,6 @@ public class ElytraExtra extends BaseModule implements LegalMovementManager.Move
     // do not catch flushing packets
     boolean flushing = false;
 
-    /** Ported from upstream 1.1.7.2 ElytraExtra.shouldBlockFireworkAction. */
     private boolean shouldBlockFireworkAction() {
         return isCurrentArmorGliding()
                 || (pendingElytraUnbreakableTransaction && elytraUnbreakableTransactionSlot != -1)
@@ -1178,18 +1133,11 @@ public class ElytraExtra extends BaseModule implements LegalMovementManager.Move
         armorGlideTransactionAbort = false;
     }
 
-    // Ported from upstream 1.1.7.2 ElytraExtra (onArmorGlideDelay state).
     boolean currentDelayingArmorGlide;
     Integer lastTransactionRecv = Integer.MIN_VALUE;
     volatile Integer currentDelayingLastTransaction = null;
     boolean acceptFireworkRemovalDuringDelay = false;
 
-    /**
-     * Ported from upstream 1.1.7.2 ElytraExtra. Records which slot must be swapped back to on
-     * the next transaction, and (while a transaction is open) makes that the armour-glide slot.
-     * IMG previously assigned {@code autoSwitchTransactionSlot} directly and never updated
-     * {@code armorGlideTransactionSlot}, so the chest piece was never put back.
-     */
     private void broadcastSwapBackSlot(int swapBack) {
         if (autoSwitch.get() && mc.player.isGliding()) {
             autoSwitchTransactionSlot = swapBack;
@@ -1748,7 +1696,6 @@ public class ElytraExtra extends BaseModule implements LegalMovementManager.Move
         }
     }
 
-    /** Ported from upstream 1.1.7.2 ElytraExtra.onFireworkRemovePacketPeek. */
     public void onFireworkRemovePacketPeek(Event<net.minecraft.network.packet.s2c.play.EntitiesDestroyS2CPacket> eventRemoval) {
         if (checkNull()) return;
         new HashSet<>(this.recordedWorldFireworkRockets)
@@ -1792,7 +1739,6 @@ public class ElytraExtra extends BaseModule implements LegalMovementManager.Move
         return destroyS2C != null;
     }
 
-    /** Ported from upstream 1.1.7.2 ElytraExtra.onFireworkRemoval. */
     public void onFireworkRemoval(Event<com.codigohasta.addon.utils.slimefunhelper.events.packets.PacketStorage> eventRemoval) {
         if (eventRemoval.isCancelled()) return;
         if (PacketManager.isAsyncOrNotTransactionS2CPacket(eventRemoval.context.packetType())) {
@@ -1830,13 +1776,11 @@ public class ElytraExtra extends BaseModule implements LegalMovementManager.Move
         }
     }
 
-    /** Ported from upstream 1.1.7.2 ElytraExtra.onPacketQueueFlush. */
     public void onPacketQueueFlush(Event<Void> event) {
         currentDelayingLock = null;
         lastStartDelayOrReleaseMs = 0L;
     }
 
-    /** Ported from upstream 1.1.7.2 ElytraExtra.onPacketPing. */
     public void onPacketPing(Event<net.minecraft.network.packet.s2c.common.CommonPingS2CPacket> event) {
         if (checkNull()) return;
         if (event.isCancelled()) return;
@@ -1847,7 +1791,6 @@ public class ElytraExtra extends BaseModule implements LegalMovementManager.Move
         }
     }
 
-    /** Ported from upstream 1.1.7.2 ElytraExtra.onPacketPong. */
     public void onPacketPong(Event<net.minecraft.network.packet.c2s.common.CommonPongC2SPacket> event) {
         if (checkNull()) return;
         if (event.isCancelled()) return;
@@ -1861,7 +1804,6 @@ public class ElytraExtra extends BaseModule implements LegalMovementManager.Move
         }
     }
 
-    /** Ported from upstream 1.1.7.2 ElytraExtra.onArmorGlideDelay. */
     public void onArmorGlideDelay(Event<com.codigohasta.addon.utils.slimefunhelper.events.packets.PacketStorage> event) {
         if (PacketManager.isAsyncOrNotTransactionS2CPacket(event.context.packetType())) {
             return;
@@ -2530,7 +2472,6 @@ public class ElytraExtra extends BaseModule implements LegalMovementManager.Move
     }
 
 
-    /** Ported from upstream 1.1.7.2 ElytraExtra.switchElytra. */
     public boolean switchElytra() {
         if (checkNull()) return false;
         if (hasGlidingItem()) {
@@ -2565,14 +2506,12 @@ public class ElytraExtra extends BaseModule implements LegalMovementManager.Move
         return false;
     }
 
-    /** Ported from upstream 1.1.7.2 ElytraExtra.sendFirework. */
     private void sendFirework(Hand hand, float lastYaw, float lastPitch) {
         var packet = new PlayerInteractItemC2SPacket(hand, NetworkUtils.generateNextSequence(), lastYaw, lastPitch);
         com.codigohasta.addon.utils.slimefunhelper.utils.InteractUtils.simulateInteractItem(hand);
         mc.getNetworkHandler().sendPacket(packet);
     }
 
-    /** Ported from upstream 1.1.7.2 ElytraExtra.onPreInputEvents. */
     public void onPreInputEvents(Event<Void> event) {
         if (checkNull()) {
             return;
@@ -2586,7 +2525,6 @@ public class ElytraExtra extends BaseModule implements LegalMovementManager.Move
         }
     }
 
-    /** Ported from upstream 1.1.7.2 ElytraExtra.applyAxisLimit4. */
     public Vec3d applyAxisLimit4(Vec3d currentMotion, float pitch, float yaw) {
         if (!autoRescale.get()) {
             setOverridingFireworkVelocity(null);
@@ -2595,7 +2533,6 @@ public class ElytraExtra extends BaseModule implements LegalMovementManager.Move
         return ElytraOptimizeUtils.applyAxisLimit4(currentMotion, pitch, yaw, autoRescaleAmount.get());
     }
 
-    /** Ported from upstream 1.1.7.2 ElytraExtra.applyAxisLimit5. */
     public Vec3d applyAxisLimit5(Vec3d currentMotion, float pitch, float yaw) {
         if (!autoRescale.get()) {
             setOverridingFireworkVelocity(null);

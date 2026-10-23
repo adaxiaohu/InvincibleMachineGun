@@ -13,12 +13,6 @@ public abstract class BaseModule extends meteordevelopment.meteorclient.systems.
     private final List<KeyBindRef> keys=new ArrayList<>();
     public BaseModule(String name){super(AddonTemplate.SF_CATEGORY,"sf-"+name.replaceAll("([a-z])([A-Z])","$1-$2").toLowerCase(Locale.ROOT),"SlimefunHelper "+name);com.codigohasta.addon.utils.slimefunhelper.SfTranslations.bindModule(this,name);}
     public static ModulePath makePath(String config,String path){return new ModulePath(path);}
-    /** Ported from upstream 1.1.7.2 BaseModule: migrates a saved config value to a new path.
-     *
-     * <p>IMG's {@link ModulePath} is a plain record without a config handle, and every path
-     * that upstream renames to is ALREADY the path IMG uses (verified: 65/70 identical path
-     * strings), so the rename is recorded for parity but performs no data move.
-     */
     protected static java.util.Map<ModulePath, ModulePath> portPaths = new java.util.concurrent.ConcurrentHashMap<>();
 
     public static void portConfigs(ModulePath oldPath, ModulePath newPath) {
@@ -51,7 +45,6 @@ public abstract class BaseModule extends meteordevelopment.meteorclient.systems.
     public void log(String text){info(text);}
     public <T> void registerListener(Channel<T> point,Consumer<Event<T>> listener){registerListener(point,listener,0);}
     public <T> void registerListener(Channel<T> point,Consumer<Event<T>> listener,int priority){point.add(e->{if(isActive()&&!checkNull())listener.accept(e);},priority);}
-    /** Ported from upstream 1.1.7.2 BaseModule: registers on an {@code EventChannel}/{@code ListenerPoint}. */
     public <W> void registerListener(com.codigohasta.addon.utils.slimefunhelper.events.channels.ListenerPoint<W> point,Consumer<W> listener){
         point.registerHandler(w -> {if(isActive()&&!checkNull())listener.accept(w);});
     }

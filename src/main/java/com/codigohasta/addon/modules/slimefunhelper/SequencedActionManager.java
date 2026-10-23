@@ -27,10 +27,6 @@ import net.minecraft.util.ActionResult;
 import net.minecraft.util.Hand;
 import net.minecraft.util.math.BlockPos;
 
-/**
- * Ported from upstream 1.1.7.2 {@code me.matl114.hacks.modules.interact.SequencedActionManager}
- * (Lombok accessors written explicitly).
- */
 public class SequencedActionManager extends BaseModule {
     public static SequencedActionManager INSTANCE;
 

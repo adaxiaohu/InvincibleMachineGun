@@ -98,7 +98,6 @@ public class AutoLibrarian extends Module implements AbstractGameEventListener {
     );
     private final Setting<Integer> maxPrice = sgTarget.add(new IntSetting.Builder().name("最高可接受价格").description("单本书超过多少绿宝石就不买").min(1).sliderMax(64).defaultValue(30).build());
 
-    // 村民机制 (移植自 VillagerTrader)
     private final Setting<Integer> checkCooldown = sgVillager.add(new IntSetting.Builder().name("缺货冷却(秒)").description("村民缺货后，等待多久再次找他").min(10).sliderMax(120).defaultValue(30).build());
     private final Setting<Integer> maxExhaustions = sgVillager.add(new IntSetting.Builder().name("每日交易上限").description("一个村民每天最多被买空几次(原版通常为3次)").min(1).sliderMax(4).defaultValue(3).build());
     private final Setting<Integer> workEndTick = sgVillager.add(new IntSetting.Builder().name("下班时间(Tick)").description("村民停止工作的时间").min(8000).sliderMax(12000).defaultValue(9000).build());

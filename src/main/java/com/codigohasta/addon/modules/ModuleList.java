@@ -89,7 +89,7 @@ public class ModuleList extends Module {
     private final Map<Module, ModuleEntry> moduleEntries = new HashMap<>();
 
     public ModuleList() {
-        super(AddonTemplate.CATEGORY, "module-list-plus", "屏幕显示模块列表，抄袭leavehack的功能");
+        super(AddonTemplate.CATEGORY, "module-list-plus", "屏幕显示模块列表");
     }
 
     @EventHandler

@@ -165,7 +165,6 @@ public class InvExtra extends BaseModule {
         return Runnables.doNothing();
     }
 
-    /** Ported from upstream 1.1.7.2 InvExtra.swapItemToHand. */
     public Runnable swapItemToHand(int hand, boolean offhand,
             com.codigohasta.addon.utils.slimefunhelper.hacks.utils.enums.GhostHandMode mode) {
         if (offhand) {
@@ -180,7 +179,6 @@ public class InvExtra extends BaseModule {
         };
     }
 
-    /** Ported from upstream 1.1.7.2 InvExtra.swapInventoryHotBar. */
     private Runnable swapInventoryHotBar(int hand) {
         if (hand < 0 || hand >= 9) return null;
         int selected = InventoryUtils.getSelectedSlot();

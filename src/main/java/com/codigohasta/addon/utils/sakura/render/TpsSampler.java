@@ -3,27 +3,6 @@ package com.codigohasta.addon.utils.sakura.render;
 import java.util.ArrayDeque;
 import java.util.Deque;
 
-/**
- * 服务端 TPS 采样器（全局单例）。
- *
- * <p>✅ 照 CatLean {@code nf} 的算法（字节码确证）：
- * <pre>
- *   private static final ArrayDeque w;      // 样本队列
- *   nf.w(long) -&gt; w.size() &lt; N             // 「样本不足」判定
- *   nf.g(long) -&gt; ... f10 = 1000.0f / max((float)s, 1.0f);
- * </pre>
- * 即：记录<b>相邻 tick 的间隔（毫秒）</b>，TPS = {@code 1000 / 平均间隔}。
- *
- * <p>而 {@code nf.a(l, n)} 是：
- * <pre>
- *   new BigDecimal(20.0 * g(...)).setScale(2, HALF_UP)
- * </pre>
- * 即「20 × 达成比例」—— 与 {@code 1000/间隔} 等价（20 tick/s 满速时两者都 = 20）。
- *
- * <p><b>为什么要单独的类</b>：TpsWidget 的「平均值」需要跨 tick 的历史样本，
- * 而 Meteor 没有现成的 TPS 工具（已确认）。放在 utils/ 里，
- * 且由 {@link com.codigohasta.addon.modules.TpsHud} 驱动采样。
- */
 public final class TpsSampler {
 
     public static final TpsSampler INSTANCE = new TpsSampler();
@@ -120,7 +99,6 @@ public final class TpsSampler {
         return averageTps;
     }
 
-    /** 样本是否足够（照源码 {@code nf.w}）。 */
     public synchronized boolean hasEnoughSamples() {
         return intervals.size() >= Math.min(5, WINDOW);
     }

@@ -4,20 +4,6 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 
-/**
- * 延迟/优先级任务队列。
- *
- * <p>移植自 {@code dev.godden.core.Manager.TaskQueueManager}（GCore）。
- *
- * <p><b>关于源实现的一个细节</b>：{@code handler()} 的末尾是
- * <pre>
- * this.taskList.clear();
- * this.taskList.removeAll(list);
- * </pre>
- * 先 {@code clear()} 再 {@code removeAll(list)} —— 后者对空列表是空操作。
- * 这看着像 bug（意图大概是「移除已执行的」），但**行为上等价于清空全部任务**。
- * 移植时**保持原样**（只在注释里指出），因为改了就与源码不一致了。
- */
 public final class GcoreTaskQueueManager {
 
     private final List<Task> taskList = new ArrayList<>();
@@ -40,7 +26,6 @@ public final class GcoreTaskQueueManager {
             it.run();
         }
 
-        // ★ 源就是这个顺序（先 clear 再 removeAll），保留以免行为偏差
         this.taskList.clear();
         this.taskList.removeAll(ready);
     }

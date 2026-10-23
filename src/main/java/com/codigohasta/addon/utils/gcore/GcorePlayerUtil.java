@@ -4,31 +4,11 @@ import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.util.math.Box;
 import net.minecraft.util.math.Vec3d;
 
-/**
- * 玩家状态与碰撞箱工具。
- *
- * <p>移植自 {@code dev.godden.core.Utils.PlayerUtil}（GCore）。
- *
- * <p><b>关键点</b>：{@link PlayerState#getBBox} 里的 {@code Box} 构造**先传 max 再传 min**
- * （如 {@code new Box(x+0.3, y+1.8, z+0.3, x-0.3, y, z-0.3)}）。
- * 这不是笔误 —— MC 的 {@code Box} 构造器内部用 {@code Math.min/max} 归一化
- * （已 javap 核实），所以两种传法等价。**保持原样以便与源码逐行对应。**
- */
 public final class GcorePlayerUtil {
 
     private GcorePlayerUtil() {
     }
 
-    /**
-     * 玩家姿态：决定碰撞箱高度与眼高。
-     *
-     * <p>三种状态的尺寸与眼高与源一致：
-     * <ul>
-     *     <li>{@code Normal} —— 高 1.8，眼高 1.62（站立）</li>
-     *     <li>{@code Sneak}  —— 高 1.5，眼高 1.27（潜行）</li>
-     *     <li>{@code Creep}  —— 高 0.6，眼高 0.40（爬行 / 游泳 / 鞘翅）</li>
-     * </ul>
-     */
     public enum PlayerState {
         Normal,
         Sneak,

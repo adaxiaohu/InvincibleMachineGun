@@ -5,17 +5,6 @@ import meteordevelopment.meteorclient.settings.EnumSetting;
 import meteordevelopment.meteorclient.settings.Setting;
 import meteordevelopment.meteorclient.settings.SettingGroup;
 
-/**
- * 切物品策略。
- *
- * <p>移植自 {@code dev.godden.core.Utils.ClassUtil.SwapItemOption}（GCore）。
- *
- * <p><b>默认值照抄源</b>：
- * <pre>
- * SlotMode = SwapInv
- * Print    = true
- * </pre>
- */
 public final class GcoreSwapItemOption {
 
     private final Setting<GcoreEnumType.ItemMode> slotMode;

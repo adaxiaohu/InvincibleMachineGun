@@ -1,19 +1,16 @@
 #version 150
 
-// CatLean 风格的「毛玻璃」圆角矩形（对应源项目 core/rect/blurred_rect.fsh）。
 //
 // 与同目录 blur_rect.fsh 的区别（**这是两者观感差异的根源**）：
 //   * blur_rect.fsh     —— 16 方向 × 5 半径 = 81 次径向采样，且无 uMix
 //   * 本文件（glass_rect）—— 12 抽头旋转采样 + uMix，取样数降到 1/7
 //
-// 关于「为什么不用源项目的多级 Kawase」：源项目走的是「先把整屏逐级降采样再升采样」
 // 的离屏渲染链（每级 5~8 抽头），需要额外的 FBO/纹理管理与多次 render target 切换。
 // 本项目的 2D 绘制是「直接叠加到主帧缓冲」的模型（见 Shader2DUtil 的设计说明），
 // 引入多 pass 离屏链会与它冲突。改用**单 pass 12 抽头**：
 // 抽头数远低于 blur_rect 的 81，观感接近 Kawase，且不改变现有渲染模型。
 //
 // uMix 是让面板「磨砂而不糊成一团」的关键：
-//   0 = 完全透出模糊背景，1 = 完全用主色覆盖。源项目面板取 0.5 左右。
 
 uniform sampler2D InputSampler;
 uniform vec2 InputResolution;
@@ -65,7 +62,6 @@ void main() {
 
     float dist = roundedBoxSDF(p, halfSize, radius);
 
-    // 与源项目一致的抗锯齿写法：smoothstep(-1,1) 而不是 (0,1)，
     // 边缘多半个像素的过渡，看起来更柔和。
     float smoothedAlpha = 1.0 - smoothstep(-1.0, 1.0, dist);
     if (smoothedAlpha <= 0.001) discard;
@@ -73,7 +69,6 @@ void main() {
     vec2 uv = gl_FragCoord.xy / InputResolution;
     vec4 texColor = blurSample(uv, 1.0 / InputResolution);
 
-    // uMix 混合：源项目原文 mix(texColor * uColor, uColor, uMix)
     vec4 mixedColor = mix(texColor * uColor, uColor, clamp(uMix, 0.0, 1.0));
     mixedColor.a *= smoothedAlpha;
 

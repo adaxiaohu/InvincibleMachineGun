@@ -11,7 +11,7 @@ public class FpsHud extends AbstractRowHud {
     private float displayFps;
 
     public FpsHud() {
-        super("fps-hud", "帧率 HUD（模仿 CatLean 的 fps-widget）。", 815, 455, 0.9);
+        super("fps-hud", "帧率 HUD。", 815, 455, 0.9);
     }
 
     @Override

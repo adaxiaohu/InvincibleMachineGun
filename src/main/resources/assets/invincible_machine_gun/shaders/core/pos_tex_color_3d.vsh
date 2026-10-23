@@ -1,6 +1,5 @@
 #version 330 core
 
-// 世界空间带贴图四边形（移植自 Sakura TargetHud 的 3D 透视绘制）。
 //
 // 1.21.11 说明：Meteor 只提供 UI_TEXTURED（2D 位置）管线，没有「世界空间 + 贴图」管线。
 // 这里仿照 Meteor 自己的 pos_tex_color.vert，但把位置改成 3 分量，从而可以在 3D 事件里
