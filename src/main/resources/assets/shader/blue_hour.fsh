@@ -150,15 +150,28 @@ float valueNoise(vec3 p) {
     return mix(mix(x00, x10, f.y), mix(x01, x11, f.y), f.z);
 }
 
-float fbm(vec3 p) {
+// 3 层 fbm，同时输出中频细节。
+// 性能说明（相对原实现 -40%）：
+//   原实现 = fbm(4层) + 额外 1 次 valueNoise(detail) = 5 次 valueNoise = 40 次 hash31/步
+//   这里   = 3 次 valueNoise                                  = 24 次 hash31/步
+// 视觉代价：第 4 层(最高频、振幅仅 0.55*0.48^3≈0.061)的极细边缘会略软，
+// 在 Medium 质量下本来就看不清，属于可接受取舍。
+void fbmWithDetail(vec3 p, out float shape, out float detail) {
     float sum = 0.0;
     float amplitude = 0.55;
-    for (int i = 0; i < 4; i++) {
-        sum += valueNoise(p) * amplitude;
+    detail = 0.0;
+    for (int i = 0; i < 3; i++) {
+        float n = valueNoise(p);
+        sum += n * amplitude;
+        // 第 3 层(索引2)频率约 0.041/单位(周期24)，最接近原 detail 的
+        // 0.037/单位(周期27)。取第 2 层会偏粗(周期49)，云会显得太平。
+        if (i == 2) detail = n;
         p = p * 2.03 + vec3(7.1, 13.7, 3.4);
         amplitude *= 0.48;
     }
-    return sum;
+    // 补回被砍掉的第 4 层平均贡献，避免整体密度偏薄
+    sum += 0.061 * 0.5;
+    shape = sum;
 }
 
 float fbm3(vec3 p) {
@@ -175,8 +188,11 @@ float fbm3(vec3 p) {
 float cloudDensity(vec3 worldPos, float bottom, float top) {
     vec3 drift = vec3(U_GameTime * U_CloudSpeed, 0.0, U_GameTime * U_CloudSpeed * 0.42);
     vec3 samplePos = worldPos * vec3(0.010, 0.028, 0.010) + drift;
-    float shape = fbm(samplePos);
-    float detail = valueNoise(samplePos * 3.7 + 4.2) * 0.16;
+    // 一次 fbm 同时给出形状和中频细节，省掉原来额外那次 valueNoise
+    float shape;
+    float detailNoise;
+    fbmWithDetail(samplePos, shape, detailNoise);
+    float detail = detailNoise * 0.16;
     float threshold = mix(0.74, 0.39, U_CloudCoverage);
     float density = smoothstep(threshold, threshold + 0.19, shape + detail);
     float height01 = clamp((worldPos.y - bottom) / max(top - bottom, 1.0), 0.0, 1.0);
@@ -211,6 +227,11 @@ vec4 renderClouds(vec3 rayDirection) {
         float distanceAlongRay = startDistance + (float(i) + 0.35) * stepLength + jitter * 0.28;
         vec3 worldPos = U_CameraPosition + rayDirection * distanceAlongRay;
         float density = cloudDensity(worldPos, bottom, top);
+
+        // density≈0 的步对结果毫无贡献：sampleAlpha=0 时
+        // accumulated += (1-alpha)*color*0 = 0，alpha += (1-alpha)*0 = 0。
+        // 直接跳过可省掉下面每次的 hash31 + 调色 + 累加。
+        if (density < 0.002) continue;
 
         float cellShade = hash31(floor(worldPos * vec3(0.035, 0.055, 0.035)));
         float facetedShade = floor((cellShade * 0.55 + density * 0.75) * 4.0) / 4.0;

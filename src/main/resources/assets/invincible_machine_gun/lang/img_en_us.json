@@ -6953,9 +6953,21 @@
         "general": "General"
       },
       "settings": {
-        "gridSpeed": {
-          "title": "Grid Speed",
-          "description": "Sets how quickly the green numeric grid moves along the world Z axis."
+        "surfaceDensity": {
+          "title": "Surface Density",
+          "description": "Columns per block on block and entity surfaces; higher is finer and denser."
+        },
+        "surfaceSpeed": {
+          "title": "Surface Speed",
+          "description": "Sets how fast the characters flow across block and entity surfaces."
+        },
+        "rainSpeed": {
+          "title": "Rain Speed",
+          "description": "Sets how fast the falling sky characters flow downward."
+        },
+        "rainDensity": {
+          "title": "Rain Density",
+          "description": "Sets the number of character columns in the sky; higher is finer and denser."
         },
         "sunSpeed": {
           "title": "Sun Speed",
@@ -6972,6 +6984,18 @@
         "scanDuration": {
           "title": "Scan Duration",
           "description": "Sets the number of seconds between reveal-animation cycles."
+        },
+        "colorGrade": {
+          "title": "Green Grade",
+          "description": "How strongly the whole image is pushed toward the Matrix green monochrome look; 0 disables it."
+        },
+        "surfaceFade": {
+          "title": "Distance Fade",
+          "description": "How strongly surface characters fade out with distance; 0 disables fading."
+        },
+        "entityBoost": {
+          "title": "Entity Brightness",
+          "description": "Extra brightness for characters on entities; 1 matches blocks."
         }
       }
     },
