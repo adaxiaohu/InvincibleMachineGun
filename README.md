@@ -2,6 +2,7 @@
 
 A personal addon for the Meteor client that adds various entertainment modules. some third‑party modules have been modified and are included. 
 
+# 没敌机关枪
 用于 Meteor 客户端的个人插件，添加了各种娱乐模块。方便我自己使用，有很几个模块是别人的，已被修改并包括在内。
 
 ---
